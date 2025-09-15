@@ -144,30 +144,86 @@ class MLBBettingTool:
 
     def fetch_odds_data(self):
         """Fetch odds data using your existing logic"""
-        espn_games = self.get_todays_games_from_espn()
-        if not espn_games:
-            return pd.DataFrame()
-        
-        # Get all odds games for mapping
-        odds_url = "https://api.the-odds-api.com/v4/sports/baseball_mlb/events"
-        params = {
-            'apiKey': self.odds_api_key,
-            'regions': 'us',
-            'markets': 'h2h',
-            'oddsFormat': 'american'
-        }
-        
         try:
+            espn_games = self.get_todays_games_from_espn()
+            if not espn_games:
+                st.warning("No games found from ESPN today")
+                return pd.DataFrame()
+            
+            st.info(f"Found {len(espn_games)} games from ESPN")
+            
+            # Get all odds games for mapping
+            odds_url = "https://api.the-odds-api.com/v4/sports/baseball_mlb/events"
+            params = {
+                'apiKey': self.odds_api_key,
+                'regions': 'us',
+                'markets': 'h2h',
+                'oddsFormat': 'american'
+            }
+            
             response = requests.get(odds_url, params=params, timeout=15)
+            if response.status_code != 200:
+                st.error(f"Odds API error: {response.status_code}")
+                return pd.DataFrame()
+                
             odds_games = response.json()
-        except:
+            if not odds_games:
+                st.warning("No odds games returned from API")
+                return pd.DataFrame()
+            
+            st.info(f"Found {len(odds_games)} odds games")
+            
+            # Map ESPN to Odds API games
+            matched_games = self.map_espn_to_odds_api(espn_games, odds_games)
+            if not matched_games:
+                st.warning("No games could be matched between ESPN and Odds API")
+                return pd.DataFrame()
+            
+            st.info(f"Matched {len(matched_games)} games")
+            
+            # Fetch player props for matched games
+            all_odds = []
+            for i, game in enumerate(matched_games[:3]):  # Limit to first 3 games for testing
+                game_id = game['id']
+                st.info(f"Fetching props for game {i+1}/{len(matched_games[:3])}: {game['away_team']} @ {game['home_team']}")
+                
+                for market in self.MARKETS[:2]:  # Limit to first 2 markets for testing
+                    props_data = self.get_player_props(game_id, market)
+                    if props_data and props_data.get('bookmakers'):
+                        for bookmaker in props_data['bookmakers']:
+                            if bookmaker['key'] in self.BOOKS:
+                                for market_data in bookmaker.get('markets', []):
+                                    for outcome in market_data.get('outcomes', []):
+                                        player_name = outcome.get('description', outcome.get('name', ''))
+                                        selection = outcome.get('name', '')
+                                        point = outcome.get('point', 0)
+                                        odds = outcome.get('price', 0)
+                                        
+                                        if (player_name and 
+                                            player_name not in ['Over', 'Under'] and
+                                            selection in ['Over', 'Under'] and
+                                            point and odds):
+                                            
+                                            all_odds.append({
+                                                'Name': player_name.strip(),
+                                                'Market': market,
+                                                'Line': f"{selection} {point}",
+                                                'Odds': f"{odds:+d}",
+                                                'Book': bookmaker['title'],
+                                                'Game': f"{game['away_team']} @ {game['home_team']}", 
+                                                'Game_ID': game_id
+                                            })
+                    
+                    time.sleep(0.2)  # Rate limiting
+                
+                time.sleep(0.5)  # Rate limiting between games
+            
+            st.success(f"Collected {len(all_odds)} total player props")
+            return pd.DataFrame(all_odds)
+            
+        except Exception as e:
+            st.error(f"Error in fetch_odds_data: {e}")
             return pd.DataFrame()
-        
-        # Map games and fetch props (simplified for demo)
-        all_odds = []
-        # This is a simplified version - you'd implement the full mapping logic here
-        
-        return pd.DataFrame(all_odds)
 
     def find_matches_and_calculate_ev(self, splash_df, odds_df):
         """Find matches and calculate EV opportunities"""
@@ -271,7 +327,102 @@ class MLBBettingTool:
         else:
             return pd.DataFrame()
 
-    def run_full_analysis(self):
+    def map_espn_to_odds_api(self, espn_games, odds_games):
+        """Map ESPN games to Odds API game IDs"""
+        team_mapping = {
+            'Arizona Diamondbacks': ['Arizona Diamondbacks', 'Diamondbacks'],
+            'Atlanta Braves': ['Atlanta Braves', 'Braves'],
+            'Baltimore Orioles': ['Baltimore Orioles', 'Orioles'],
+            'Boston Red Sox': ['Boston Red Sox', 'Red Sox'],
+            'Chicago Cubs': ['Chicago Cubs', 'Cubs'],
+            'Chicago White Sox': ['Chicago White Sox', 'White Sox'],
+            'Cincinnati Reds': ['Cincinnati Reds', 'Reds'],
+            'Cleveland Guardians': ['Cleveland Guardians', 'Guardians'],
+            'Colorado Rockies': ['Colorado Rockies', 'Rockies'],
+            'Detroit Tigers': ['Detroit Tigers', 'Tigers'],
+            'Houston Astros': ['Houston Astros', 'Astros'],
+            'Kansas City Royals': ['Kansas City Royals', 'Royals'],
+            'Los Angeles Angels': ['Los Angeles Angels', 'LA Angels', 'Angels'],
+            'Los Angeles Dodgers': ['Los Angeles Dodgers', 'LA Dodgers', 'Dodgers'],
+            'Miami Marlins': ['Miami Marlins', 'Marlins'],
+            'Milwaukee Brewers': ['Milwaukee Brewers', 'Brewers'],
+            'Minnesota Twins': ['Minnesota Twins', 'Twins'],
+            'New York Mets': ['New York Mets', 'NY Mets', 'Mets'],
+            'New York Yankees': ['New York Yankees', 'NY Yankees', 'Yankees'],
+            'Oakland Athletics': ['Oakland Athletics', 'Oakland A\'s', 'Athletics', 'A\'s'],
+            'Philadelphia Phillies': ['Philadelphia Phillies', 'Phillies'],
+            'Pittsburgh Pirates': ['Pittsburgh Pirates', 'Pirates'],
+            'San Diego Padres': ['San Diego Padres', 'Padres'],
+            'San Francisco Giants': ['San Francisco Giants', 'SF Giants', 'Giants'],
+            'Seattle Mariners': ['Seattle Mariners', 'Mariners'],
+            'St. Louis Cardinals': ['St. Louis Cardinals', 'St Louis Cardinals', 'Cardinals'],
+            'Tampa Bay Rays': ['Tampa Bay Rays', 'Rays'],
+            'Texas Rangers': ['Texas Rangers', 'Rangers'],
+            'Toronto Blue Jays': ['Toronto Blue Jays', 'Blue Jays'],
+            'Washington Nationals': ['Washington Nationals', 'Nationals']
+        }
+
+        def normalize_team_name(name):
+            return name.lower().strip().replace('.', '').replace('\'', '')
+
+        def find_team_match(name1, name2):
+            norm1 = normalize_team_name(name1)
+            norm2 = normalize_team_name(name2)
+
+            if norm1 == norm2:
+                return True
+
+            for canonical, variations in team_mapping.items():
+                canonical_norm = normalize_team_name(canonical)
+                all_norms = {normalize_team_name(v) for v in variations} | {canonical_norm}
+
+                if norm1 in all_norms and norm2 in all_norms:
+                    return True
+
+            return False
+
+        matched_games = []
+        for espn_game in espn_games:
+            espn_home = espn_game['home_team']
+            espn_away = espn_game['away_team']
+
+            for odds_game in odds_games:
+                odds_home = odds_game.get('home_team', '')
+                odds_away = odds_game.get('away_team', '')
+
+                if (find_team_match(espn_home, odds_home) and
+                    find_team_match(espn_away, odds_away)):
+
+                    matched_game = {
+                        'id': odds_game['id'],
+                        'home_team': odds_game['home_team'],
+                        'away_team': odds_game['away_team'],
+                        'commence_time': odds_game.get('commence_time'),
+                        'espn_info': espn_game
+                    }
+                    matched_games.append(matched_game)
+                    break
+
+        return matched_games
+
+    def get_player_props(self, game_id, market):
+        """Get player props for a specific game and market"""
+        endpoint = f"https://api.the-odds-api.com/v4/sports/baseball_mlb/events/{game_id}/odds"
+        params = {
+            'apiKey': self.odds_api_key,
+            'regions': 'us',
+            'markets': market,
+            'oddsFormat': 'american'
+        }
+        
+        try:
+            response = requests.get(endpoint, params=params, timeout=15)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return None
+        except Exception:
+            return None
         """Run the complete analysis pipeline"""
         try:
             # Step 1: Fetch Splash data

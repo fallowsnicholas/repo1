@@ -440,6 +440,39 @@ class MLBBettingTool:
             st.error(f"Error in analysis: {e}")
             return pd.DataFrame()
 
+    def run_full_analysis(self):
+        """Run the complete analysis pipeline"""
+        try:
+            # Step 1: Fetch Splash data
+            st.info("Step 1: Fetching Splash Sports data...")
+            splash_df = self.fetch_splash_data()
+            if splash_df is None or splash_df.empty:
+                st.error("No Splash Sports data retrieved")
+                return pd.DataFrame()
+            st.success(f"Splash data: {len(splash_df)} records")
+            
+            # Step 2: Fetch Odds data  
+            st.info("Step 2: Fetching Odds API data...")
+            odds_df = self.fetch_odds_data()
+            if odds_df is None or odds_df.empty:
+                st.error("No Odds API data retrieved")
+                return pd.DataFrame()
+            st.success(f"Odds data: {len(odds_df)} records")
+            
+            # Step 3: Find matches and calculate EV
+            st.info("Step 3: Finding matches and calculating EV...")
+            opportunities = self.find_matches_and_calculate_ev(splash_df, odds_df)
+            if opportunities is None:
+                opportunities = pd.DataFrame()
+            
+            return opportunities
+            
+        except Exception as e:
+            st.error(f"Error in analysis: {e}")
+            import traceback
+            st.error(f"Full traceback: {traceback.format_exc()}")
+            return pd.DataFrame()
+
 # Streamlit UI
 st.title("⚾ MLB EV Betting Opportunities")
 st.markdown("Find profitable betting opportunities by comparing Splash Sports and sportsbook odds")

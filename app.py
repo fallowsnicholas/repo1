@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS inspired by Honda's clean design
+# Custom CSS with sport tabs and market filters
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -30,12 +30,13 @@ st.markdown("""
     footer {visibility: hidden;}
     .stDeployButton {display:none;}
     
-    /* Header Navigation */
+    /* Header with Sport Tabs */
     .nav-header {
         background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
         padding: 1rem 2rem;
         margin: -1rem -1rem 2rem -1rem;
         color: white;
+        position: relative;
     }
     
     .nav-brand {
@@ -49,20 +50,61 @@ st.markdown("""
         font-size: 1rem;
         font-weight: 400;
         opacity: 0.8;
-        margin-bottom: 0;
+        margin-bottom: 1rem;
     }
     
-    /* Navigation Tabs */
-    .nav-tabs {
+    /* Sport Tabs in bottom left of header */
+    .sport-tabs {
         display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    
+    .sport-tab {
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.875rem;
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .sport-tab.active {
+        color: white;
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.4);
+    }
+    
+    .sport-tab:hover {
+        color: white;
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.3);
+    }
+    
+    .sport-tab.disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+    
+    /* Market Filter Tabs */
+    .market-tabs {
+        display: flex;
+        flex-wrap: wrap;
         background: white;
         border-bottom: 1px solid #e0e0e0;
         margin: 0 -1rem 2rem -1rem;
         padding: 0 2rem;
+        gap: 0.5rem;
+        align-items: center;
     }
     
-    .nav-tab {
-        padding: 1rem 2rem;
+    .market-tab {
+        padding: 1rem 1.5rem;
         font-weight: 500;
         color: #666;
         cursor: pointer;
@@ -71,36 +113,120 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.5px;
         font-size: 0.875rem;
+        white-space: nowrap;
     }
     
-    .nav-tab.active {
+    .market-tab.active {
         color: #333;
         border-bottom-color: #e31e24;
     }
     
-    .nav-tab:hover {
+    .market-tab:hover {
         color: #333;
         background: #f8f8f8;
     }
     
-    /* Metrics Section */
-    .metrics-container {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 1.5rem;
-        margin-bottom: 2rem;
+    /* Special buttons */
+    .special-button {
+        padding: 0.75rem 1.5rem;
+        font-weight: 500;
+        color: white;
+        cursor: pointer;
+        border: none;
+        border-radius: 4px;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.875rem;
+        margin-left: auto;
     }
     
-    .metric-card {
+    .filters-button {
+        background: #6b7280;
+    }
+    
+    .filters-button:hover {
+        background: #4b5563;
+    }
+    
+    .stats-button {
+        background: #3b82f6;
+        margin-left: 0.5rem;
+    }
+    
+    .stats-button:hover {
+        background: #2563eb;
+    }
+    
+    /* Popup Modal Styles */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+    
+    .modal-content {
         background: white;
-        padding: 1.5rem;
+        padding: 2rem;
         border-radius: 8px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-        border: 1px solid #f0f0f0;
-        text-align: center;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        max-width: 500px;
+        width: 90%;
+        max-height: 80%;
+        overflow-y: auto;
     }
     
-    .metric-label {
+    .modal-header {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #666;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-close:hover {
+        color: #333;
+    }
+    
+    /* Stats Modal Styles */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .stat-item {
+        text-align: center;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+    }
+    
+    .stat-label {
         font-size: 0.875rem;
         color: #666;
         font-weight: 500;
@@ -109,47 +235,11 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
     
-    .metric-value {
-        font-size: 2rem;
+    .stat-value {
+        font-size: 1.5rem;
         font-weight: 700;
         color: #333;
         margin: 0;
-    }
-    
-    /* Filters Section */
-    .filters-container {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-        border: 1px solid #f0f0f0;
-        margin-bottom: 2rem;
-    }
-    
-    .filters-header {
-        font-size: 1.125rem;
-        font-weight: 600;
-        color: #333;
-        margin-bottom: 1rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .refresh-button {
-        background: #e31e24;
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 4px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-    
-    .refresh-button:hover {
-        background: #c41e24;
-        transform: translateY(-1px);
     }
     
     /* Opportunity Cards */
@@ -236,21 +326,6 @@ st.markdown("""
     .status-green { background-color: #28a745; }
     .status-red { background-color: #dc3545; }
     
-    /* Content Sections */
-    .content-section {
-        display: none;
-        animation: fadeIn 0.3s ease;
-    }
-    
-    .content-section.active {
-        display: block;
-    }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
     /* No data state */
     .no-data-container {
         text-align: center;
@@ -271,17 +346,21 @@ st.markdown("""
     
     /* Responsive */
     @media (max-width: 768px) {
-        .nav-tabs {
+        .market-tabs {
             flex-wrap: wrap;
         }
         
-        .metrics-container {
-            grid-template-columns: repeat(2, 1fr);
+        .sport-tabs {
+            flex-wrap: wrap;
         }
         
         .opportunity-header {
             flex-direction: column;
             gap: 1rem;
+        }
+        
+        .stats-grid {
+            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -294,14 +373,19 @@ def init_session_state():
         st.session_state.last_refresh = None
     if 'opportunities' not in st.session_state:
         st.session_state.opportunities = pd.DataFrame()
-    if 'active_tab' not in st.session_state:
-        st.session_state.active_tab = 'opportunities'
+    if 'active_sport' not in st.session_state:
+        st.session_state.active_sport = 'MLB'
+    if 'active_market' not in st.session_state:
+        st.session_state.active_market = 'All Markets'
     if 'ev_calculator' not in st.session_state:
         st.session_state.ev_calculator = None
+    if 'show_filters_modal' not in st.session_state:
+        st.session_state.show_filters_modal = False
+    if 'show_stats_modal' not in st.session_state:
+        st.session_state.show_stats_modal = False
     if 'filters' not in st.session_state:
         st.session_state.filters = {
             'min_ev': 1.0,
-            'market_filter': 'All Markets',
             'min_books': 3
         }
 
@@ -311,124 +395,116 @@ def check_environment():
     return google_creds is not None
 
 def render_header():
-    """Render the main header section"""
-    st.markdown("""
+    """Render the main header section with sport tabs"""
+    st.markdown(f"""
     <div class="nav-header">
-        <div class="nav-brand">MLB EV Betting Tool</div>
+        <div class="nav-brand">EV Betting Tool</div>
         <div class="nav-subtitle">Find profitable betting opportunities by comparing Splash Sports and sportsbook odds</div>
+        <div class="sport-tabs">
+            <div class="sport-tab {'active' if st.session_state.active_sport == 'MLB' else ''}" onclick="setSport('MLB')">MLB</div>
+            <div class="sport-tab disabled" title="Coming Soon">NFL</div>
+            <div class="sport-tab disabled" title="Coming Soon">WNBA</div>
+            <div class="sport-tab disabled" title="Coming Soon">NCAAF</div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-def render_navigation():
-    """Render navigation tabs"""
-    tabs = [
-        ('opportunities', 'Opportunities'),
-        ('analytics', 'Analytics'),
-        ('charts', 'Charts')
+def render_market_tabs():
+    """Render market filter tabs with Filters and Stats buttons"""
+    # Available markets for MLB
+    available_markets = [
+        ('All Markets', 'All Markets'),
+        ('Strikeouts', 'pitcher_strikeouts'),
+        ('Hits Allowed', 'pitcher_hits_allowed'), 
+        ('Outs', 'pitcher_outs'),
+        ('Earned Runs', 'pitcher_earned_runs'),
+        ('Total Bases', 'batter_total_bases'),
+        ('Hits', 'batter_hits'),
+        ('Runs', 'batter_runs_scored'),
+        ('RBIs', 'batter_rbis'),
+        ('Singles', 'batter_singles')
     ]
     
-    nav_html = '<div class="nav-tabs">'
-    for tab_key, tab_name in tabs:
-        active_class = 'active' if st.session_state.active_tab == tab_key else ''
-        nav_html += f'<div class="nav-tab {active_class}" onclick="setActiveTab(\'{tab_key}\')">{tab_name}</div>'
-    nav_html += '</div>'
+    # Create columns for market tabs and buttons
+    cols = st.columns(len(available_markets) + 2)  # +2 for Filters and Stats buttons
     
-    st.markdown(nav_html, unsafe_allow_html=True)
+    # Market filter tabs
+    for i, (display_name, market_key) in enumerate(available_markets):
+        with cols[i]:
+            if st.button(display_name, key=f"market_{market_key}", use_container_width=True):
+                st.session_state.active_market = market_key
+                st.rerun()
     
-    # JavaScript for tab switching
-    st.markdown("""
-    <script>
-    function setActiveTab(tabName) {
-        // This would need to be handled via Streamlit components in a real implementation
-        console.log('Switch to tab:', tabName);
-    }
-    </script>
-    """, unsafe_allow_html=True)
+    # Filters button
+    with cols[-2]:
+        if st.button("FILTERS", key="filters_btn", use_container_width=True, type="secondary"):
+            st.session_state.show_filters_modal = True
+            st.rerun()
+    
+    # Stats button  
+    with cols[-1]:
+        if st.button("STATS", key="stats_btn", use_container_width=True, type="primary"):
+            st.session_state.show_stats_modal = True
+            st.rerun()
 
-def render_tab_buttons():
-    """Render tab buttons using Streamlit columns"""
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("OPPORTUNITIES", key="tab_opportunities", use_container_width=True):
-            st.session_state.active_tab = 'opportunities'
-    
-    with col2:
-        if st.button("ANALYTICS", key="tab_analytics", use_container_width=True):
-            st.session_state.active_tab = 'analytics'
-    
-    with col3:
-        if st.button("CHARTS", key="tab_charts", use_container_width=True):
-            st.session_state.active_tab = 'charts'
+def render_filters_modal():
+    """Render the filters popup modal"""
+    if st.session_state.show_filters_modal:
+        with st.container():
+            st.markdown("### Filters")
+            
+            # Filter controls
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                min_ev = st.slider("Minimum EV %", 0.0, 20.0, st.session_state.filters['min_ev'], 0.1)
+                st.session_state.filters['min_ev'] = min_ev
+            
+            with col2:
+                min_books = st.slider("Minimum Books", 1, 10, st.session_state.filters['min_books'])
+                st.session_state.filters['min_books'] = min_books
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("Apply Filters", type="primary"):
+                    st.session_state.show_filters_modal = False
+                    st.rerun()
+            with col2:
+                if st.button("Reset"):
+                    st.session_state.filters = {'min_ev': 1.0, 'min_books': 3}
+                    st.rerun()
+            with col3:
+                if st.button("Close"):
+                    st.session_state.show_filters_modal = False
+                    st.rerun()
 
-def render_metrics(opportunities_df):
-    """Render key metrics"""
-    last_update = st.session_state.last_refresh.strftime("%H:%M:%S") if st.session_state.last_refresh else "Never"
-    total_opps = len(opportunities_df)
-    avg_ev = opportunities_df['Splash_EV_Percentage'].mean() if not opportunities_df.empty else 0
-    best_ev = opportunities_df['Splash_EV_Percentage'].max() if not opportunities_df.empty else 0
-    
-    st.markdown(f"""
-    <div class="metrics-container">
-        <div class="metric-card">
-            <div class="metric-label">Last Updated</div>
-            <div class="metric-value">{last_update}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Opportunities</div>
-            <div class="metric-value">{total_opps}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Average EV</div>
-            <div class="metric-value">{avg_ev:.2%}</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Best EV</div>
-            <div class="metric-value">{best_ev:.2%}</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-def render_filters():
-    """Render filters section"""
-    st.markdown('<div class="filters-container">', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        st.markdown('<div class="filters-header">Filters & Settings</div>', unsafe_allow_html=True)
-    
-    with col2:
-        refresh_clicked = st.button("Refresh Data", key="refresh_main", type="primary")
-    
-    # Filter controls
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        min_ev = st.slider("Minimum EV %", 0.0, 20.0, st.session_state.filters['min_ev'], 0.1)
-        st.session_state.filters['min_ev'] = min_ev
-    
-    with col2:
-        available_markets = [
-            'pitcher_strikeouts', 'pitcher_hits_allowed', 'pitcher_outs',
-            'pitcher_earned_runs', 'batter_total_bases', 'batter_hits',
-            'batter_runs_scored', 'batter_rbis', 'batter_singles'
-        ]
-        market_filter = st.selectbox("Market Filter", ["All Markets"] + available_markets, 
-                                   index=0 if st.session_state.filters['market_filter'] == 'All Markets' else 
-                                   available_markets.index(st.session_state.filters['market_filter']) + 1)
-        st.session_state.filters['market_filter'] = market_filter
-    
-    with col3:
-        min_books = st.slider("Minimum Books", 1, 10, st.session_state.filters['min_books'])
-        st.session_state.filters['min_books'] = min_books
-    
-    with col4:
-        auto_refresh = st.checkbox("Auto-refresh (5 min)")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    return refresh_clicked, auto_refresh
+def render_stats_modal():
+    """Render the stats popup modal"""
+    if st.session_state.show_stats_modal:
+        with st.container():
+            st.markdown("### Statistics")
+            
+            # Calculate stats
+            opportunities_df = st.session_state.opportunities
+            last_update = st.session_state.last_refresh.strftime("%H:%M:%S") if st.session_state.last_refresh else "Never"
+            total_opps = len(opportunities_df)
+            avg_ev = opportunities_df['Splash_EV_Percentage'].mean() if not opportunities_df.empty else 0
+            best_ev = opportunities_df['Splash_EV_Percentage'].max() if not opportunities_df.empty else 0
+            
+            # Display stats in grid
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.metric("Last Updated", last_update)
+                st.metric("Average EV", f"{avg_ev:.2%}")
+            
+            with col2:
+                st.metric("Opportunities", total_opps)
+                st.metric("Best EV", f"{best_ev:.2%}")
+            
+            if st.button("Close Stats", type="primary"):
+                st.session_state.show_stats_modal = False
+                st.rerun()
 
 def render_opportunity_card(row):
     """Render an individual opportunity card"""
@@ -459,8 +535,16 @@ def render_opportunity_card(row):
     </div>
     """
 
-def render_opportunities_tab(filtered_df):
-    """Render the opportunities tab content"""
+def render_opportunities(filtered_df):
+    """Render opportunities with refresh button"""
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.markdown("### Current Opportunities")
+    
+    with col2:
+        refresh_clicked = st.button("🔄 Refresh Data", key="refresh_main", type="primary")
+    
     if filtered_df.empty:
         st.markdown("""
         <div class="no-data-container">
@@ -468,85 +552,18 @@ def render_opportunities_tab(filtered_df):
             <div class="no-data-text">Try adjusting your filters or refresh the data to find betting opportunities.</div>
         </div>
         """, unsafe_allow_html=True)
-        return
+        return refresh_clicked
     
-    st.markdown(f"### {len(filtered_df)} Opportunities Found")
+    st.markdown(f"**{len(filtered_df)} opportunities found**")
     
     # Display top opportunities
-    for idx, row in filtered_df.head(10).iterrows():
+    for idx, row in filtered_df.head(20).iterrows():
         st.markdown(render_opportunity_card(row), unsafe_allow_html=True)
     
-    if len(filtered_df) > 10:
-        st.info(f"Showing top 10 of {len(filtered_df)} opportunities. Adjust filters to see more.")
-
-def render_analytics_tab(filtered_df):
-    """Render the analytics tab content"""
-    if filtered_df.empty:
-        st.markdown("""
-        <div class="no-data-container">
-            <div class="no-data-title">No Data for Analysis</div>
-            <div class="no-data-text">Refresh data to view analytics.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        return
+    if len(filtered_df) > 20:
+        st.info(f"Showing top 20 of {len(filtered_df)} opportunities. Adjust filters to see more.")
     
-    st.markdown("### Detailed Analytics")
-    
-    # Full data table
-    st.dataframe(
-        filtered_df.style.format({
-            'True_Prob': '{:.1%}',
-            'Splash_EV_Percentage': '{:.2%}',
-            'Splash_EV_Dollars_Per_100': '${:.2f}',
-        }),
-        use_container_width=True,
-        height=400
-    )
-    
-    # Summary statistics
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**Market Breakdown**")
-        market_summary = filtered_df.groupby('Market').agg({
-            'Splash_EV_Percentage': ['count', 'mean']
-        }).round(3)
-        market_summary.columns = ['Count', 'Avg EV']
-        st.dataframe(market_summary)
-    
-    with col2:
-        st.markdown("**Top Sportsbooks**")
-        book_summary = filtered_df.groupby('Best_Sportsbook').size().sort_values(ascending=False)
-        st.dataframe(book_summary.head(10))
-
-def render_charts_tab(filtered_df):
-    """Render the charts tab content"""
-    if filtered_df.empty:
-        st.markdown("""
-        <div class="no-data-container">
-            <div class="no-data-title">No Data for Charts</div>
-            <div class="no-data-text">Refresh data to view charts.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        return
-    
-    st.markdown("### Data Visualizations")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**EV Distribution**")
-        st.bar_chart(filtered_df['Splash_EV_Percentage'])
-    
-    with col2:
-        st.markdown("**Market Distribution**")
-        market_counts = filtered_df['Market'].value_counts()
-        st.bar_chart(market_counts)
-    
-    # Additional charts
-    st.markdown("**EV by Market**")
-    market_ev = filtered_df.groupby('Market')['Splash_EV_Percentage'].mean().sort_values(ascending=False)
-    st.bar_chart(market_ev)
+    return refresh_clicked
 
 def render_status_indicator():
     """Render the status indicator at bottom left"""
@@ -572,8 +589,8 @@ def apply_filters(df):
     # Apply filters
     filtered_df = filtered_df[filtered_df['Splash_EV_Percentage'] >= (st.session_state.filters['min_ev']/100)]
     
-    if st.session_state.filters['market_filter'] != "All Markets":
-        filtered_df = filtered_df[filtered_df['Market'] == st.session_state.filters['market_filter']]
+    if st.session_state.active_market != "All Markets":
+        filtered_df = filtered_df[filtered_df['Market'] == st.session_state.active_market]
     
     filtered_df = filtered_df[filtered_df['Num_Books_Used'] >= st.session_state.filters['min_books']]
     
@@ -599,19 +616,23 @@ def main():
     
     # Render UI components
     render_header()
-    render_tab_buttons()
-    render_metrics(st.session_state.opportunities)
-    refresh_clicked, auto_refresh = render_filters()
+    render_market_tabs()
+    
+    # Handle modals
+    if st.session_state.show_filters_modal:
+        render_filters_modal()
+        return
+    
+    if st.session_state.show_stats_modal:
+        render_stats_modal()
+        return
+    
+    # Apply filters and render opportunities
+    filtered_df = apply_filters(st.session_state.opportunities)
+    refresh_clicked = render_opportunities(filtered_df)
     
     # Data refresh logic
-    should_refresh = (
-        refresh_clicked or 
-        (auto_refresh and 
-         (st.session_state.last_refresh is None or 
-          (datetime.now() - st.session_state.last_refresh).seconds > 300))
-    )
-    
-    if should_refresh:
+    if refresh_clicked:
         with st.spinner("Fetching and analyzing latest data..."):
             try:
                 opportunities = st.session_state.ev_calculator.run_full_analysis()
@@ -620,6 +641,7 @@ def main():
                 
                 if not opportunities.empty:
                     st.success(f"Found {len(opportunities)} opportunities!")
+                    time.sleep(1)  # Brief pause to show success message
                     st.rerun()
                 else:
                     st.warning("No opportunities found in current data")
@@ -627,24 +649,8 @@ def main():
             except Exception as e:
                 st.error(f"Error during data fetch: {e}")
     
-    # Apply filters and render active tab
-    filtered_df = apply_filters(st.session_state.opportunities)
-    
-    if st.session_state.active_tab == 'opportunities':
-        render_opportunities_tab(filtered_df)
-    elif st.session_state.active_tab == 'analytics':
-        render_analytics_tab(filtered_df)
-    elif st.session_state.active_tab == 'charts':
-        render_charts_tab(filtered_df)
-    
     # Render status indicator
     render_status_indicator()
-    
-    # Auto-refresh logic
-    if auto_refresh and st.session_state.last_refresh:
-        time_since_refresh = (datetime.now() - st.session_state.last_refresh).seconds
-        if time_since_refresh >= 300:
-            st.rerun()
 
 if __name__ == "__main__":
     main()

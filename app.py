@@ -440,31 +440,57 @@ class MLBBettingTool:
             st.error(f"Error in analysis: {e}")
             return pd.DataFrame()
 
-    def run_full_analysis(self):
-        """Run the complete analysis pipeline"""
+    def trigger_data_refresh(self):
+        """Trigger GitHub Actions workflow to refresh data"""
+        # This would trigger the GitHub Actions workflow
+        # For now, we'll just read from Google Sheets
+        return self.read_data_from_sheets()
+
+    def read_data_from_sheets(self):
+        """Read data from Google Sheets instead of APIs"""
         try:
-            # Step 1: Fetch Splash data
-            st.info("Step 1: Fetching Splash Sports data...")
-            splash_df = self.fetch_splash_data()
-            if splash_df is None or splash_df.empty:
-                st.error("No Splash Sports data retrieved")
-                return pd.DataFrame()
-            st.success(f"Splash data: {len(splash_df)} records")
+            # Setup Google Sheets connection
+            scopes = [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
+            ]
             
-            # Step 2: Fetch Odds data  
-            st.info("Step 2: Fetching Odds API data...")
-            odds_df = self.fetch_odds_data()
-            if odds_df is None or odds_df.empty:
-                st.error("No Odds API data retrieved")
-                return pd.DataFrame()
-            st.success(f"Odds data: {len(odds_df)} records")
+            credentials = Credentials.from_service_account_info(
+                self.google_creds, scopes=scopes)
+            client = gspread.authorize(credentials)
             
-            # Step 3: Find matches and calculate EV
-            st.info("Step 3: Finding matches and calculating EV...")
+            # Read Splash data
+            st.info("Reading Splash data from Google Sheets...")
+            spreadsheet = client.open("MLB_Splash_Data")
+            splash_worksheet = spreadsheet.worksheet("SPLASH_MLB")
+            splash_data = splash_worksheet.get_all_records()
+            splash_df = pd.DataFrame(splash_data)
+            st.success(f"Loaded {len(splash_df)} Splash records")
+            
+            # Read Odds data
+            st.info("Reading Odds data from Google Sheets...")
+            odds_worksheet = spreadsheet.worksheet("ODDS_API")
+            odds_data = odds_worksheet.get_all_records()
+            odds_df = pd.DataFrame(odds_data)
+            st.success(f"Loaded {len(odds_df)} Odds records")
+            
+            if splash_df.empty or odds_df.empty:
+                st.warning("One or both datasets are empty. Try refreshing the data first.")
+                return pd.DataFrame()
+            
+            # Find matches and calculate EV
             opportunities = self.find_matches_and_calculate_ev(splash_df, odds_df)
-            if opportunities is None:
-                opportunities = pd.DataFrame()
+            return opportunities
             
+        except Exception as e:
+            st.error(f"Error reading from Google Sheets: {e}")
+            return pd.DataFrame()
+
+    def run_full_analysis(self):
+        """Run the complete analysis pipeline using Google Sheets data"""
+        try:
+            st.info("Loading data from Google Sheets...")
+            opportunities = self.read_data_from_sheets()
             return opportunities
             
         except Exception as e:
@@ -494,7 +520,12 @@ with st.sidebar:
     ])
     
     st.header("🔄 Actions")
-    refresh_button = st.button("🔄 Refresh Data", type="primary")
+    refresh_button = st.button("🔄 Refresh Data from Sheets", type="primary")
+    
+    # Future enhancement: Add button to trigger GitHub Actions
+    st.markdown("*Note: Data is updated via GitHub Actions workflow*")
+    st.markdown("*Click refresh to load latest data from Google Sheets*")
+    
     auto_refresh = st.checkbox("Auto-refresh (5 min)")
 
 # Main content

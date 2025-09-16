@@ -99,12 +99,12 @@ st.markdown("""
         border-bottom: 1px solid #e0e0e0;
         margin: 0 -1rem 2rem -1rem;
         padding: 0 2rem;
-        gap: 0.5rem;
+        gap: 2rem;
         align-items: center;
     }
     
     .market-tab {
-        padding: 1rem 1.5rem;
+        padding: 1rem 0;
         font-weight: 500;
         color: #666;
         cursor: pointer;
@@ -114,6 +114,10 @@ st.markdown("""
         letter-spacing: 0.5px;
         font-size: 0.875rem;
         white-space: nowrap;
+        background: none;
+        border-left: none;
+        border-right: none;
+        border-top: none;
     }
     
     .market-tab.active {
@@ -123,92 +127,115 @@ st.markdown("""
     
     .market-tab:hover {
         color: #333;
-        background: #f8f8f8;
     }
     
     /* Special buttons */
-    .special-button {
-        padding: 0.75rem 1.5rem;
+    .special-tab {
+        padding: 1rem 0;
         font-weight: 500;
-        color: white;
+        color: #666;
         cursor: pointer;
-        border: none;
-        border-radius: 4px;
+        border-bottom: 3px solid transparent;
         transition: all 0.3s ease;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         font-size: 0.875rem;
         margin-left: auto;
+        background: none;
+        border-left: none;
+        border-right: none;
+        border-top: none;
+        position: relative;
     }
     
-    .filters-button {
-        background: #6b7280;
+    .special-tab:hover {
+        color: #333;
     }
     
-    .filters-button:hover {
-        background: #4b5563;
+    .filters-tab {
+        color: #6b7280;
     }
     
-    .stats-button {
-        background: #3b82f6;
-        margin-left: 0.5rem;
+    .filters-tab:hover {
+        color: #4b5563;
     }
     
-    .stats-button:hover {
-        background: #2563eb;
+    .stats-tab {
+        color: #3b82f6;
+        margin-left: 2rem;
     }
     
-    /* Popup Modal Styles */
-    .modal-overlay {
+    .stats-tab:hover {
+        color: #2563eb;
+    }
+    
+    /* Refresh Button in Header */
+    .refresh-button-header {
+        position: absolute;
+        bottom: 1rem;
+        right: 2rem;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.9);
+        cursor: pointer;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.75rem;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+    }
+    
+    .refresh-button-header:hover {
+        color: white;
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.5);
+        transform: translateY(-1px);
+    }
+    
+    /* Dropdown/Popup Styles */
+    .popup-overlay {
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        background-color: transparent;
+        z-index: 999;
+    }
+    
+    .popup-content {
+        position: absolute;
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        border: 1px solid #e5e7eb;
+        min-width: 300px;
         z-index: 1000;
     }
     
-    .modal-content {
-        background: white;
-        padding: 2rem;
-        border-radius: 8px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        max-width: 500px;
-        width: 90%;
-        max-height: 80%;
-        overflow-y: auto;
+    .filters-popup {
+        top: 100%;
+        right: 12rem;
+        margin-top: 0.5rem;
     }
     
-    .modal-header {
-        font-size: 1.25rem;
+    .stats-popup {
+        top: 100%;
+        right: 2rem;
+        margin-top: 0.5rem;
+    }
+    
+    .popup-header {
+        font-size: 1rem;
         font-weight: 600;
         color: #333;
-        margin-bottom: 1.5rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .modal-close {
-        background: none;
-        border: none;
-        font-size: 1.5rem;
-        cursor: pointer;
-        color: #666;
-        padding: 0;
-        width: 30px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    .modal-close:hover {
-        color: #333;
+        margin-bottom: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
     
     /* Stats Modal Styles */
@@ -395,7 +422,7 @@ def check_environment():
     return google_creds is not None
 
 def render_header():
-    """Render the main header section with sport tabs"""
+    """Render the main header section with sport tabs and refresh button"""
     st.markdown(f"""
     <div class="nav-header">
         <div class="nav-brand">EV Betting Tool</div>
@@ -406,8 +433,25 @@ def render_header():
             <div class="sport-tab disabled" title="Coming Soon">WNBA</div>
             <div class="sport-tab disabled" title="Coming Soon">NCAAF</div>
         </div>
+        <div class="refresh-button-header" onclick="refreshData()">🔄 Refresh</div>
     </div>
     """, unsafe_allow_html=True)
+
+def get_market_display_name(market_key):
+    """Convert market key to display name"""
+    market_mapping = {
+        'All Markets': 'All Markets',
+        'pitcher_strikeouts': 'Strikeouts',
+        'pitcher_hits_allowed': 'Hits Allowed',
+        'pitcher_outs': 'Outs',
+        'pitcher_earned_runs': 'Earned Runs',
+        'batter_total_bases': 'Total Bases',
+        'batter_hits': 'Hits',
+        'batter_runs_scored': 'Runs',
+        'batter_rbis': 'RBIs',
+        'batter_singles': 'Singles'
+    }
+    return market_mapping.get(market_key, market_key)
 
 def render_market_tabs():
     """Render market filter tabs with Filters and Stats buttons"""
@@ -425,64 +469,81 @@ def render_market_tabs():
         ('Singles', 'batter_singles')
     ]
     
-    # Create columns for market tabs and buttons
-    cols = st.columns(len(available_markets) + 2)  # +2 for Filters and Stats buttons
+    # Create columns for market tabs and special buttons
+    cols = st.columns(len(available_markets) + 2)
     
-    # Market filter tabs
+    # Market filter tabs (no button styling)
     for i, (display_name, market_key) in enumerate(available_markets):
         with cols[i]:
-            if st.button(display_name, key=f"market_{market_key}", use_container_width=True):
+            # Use markdown button to remove styling
+            button_class = "market-tab active" if st.session_state.active_market == market_key else "market-tab"
+            if st.button(display_name, key=f"market_{market_key}", 
+                        help=f"Filter by {display_name}",
+                        use_container_width=True):
                 st.session_state.active_market = market_key
                 st.rerun()
     
     # Filters button
     with cols[-2]:
-        if st.button("FILTERS", key="filters_btn", use_container_width=True, type="secondary"):
+        if st.button("FILTERS", key="filters_btn", 
+                    help="Adjust minimum EV and book count",
+                    use_container_width=True):
             st.session_state.show_filters_modal = True
             st.rerun()
     
     # Stats button  
     with cols[-1]:
-        if st.button("STATS", key="stats_btn", use_container_width=True, type="primary"):
+        if st.button("STATS", key="stats_btn",
+                    help="View performance statistics", 
+                    use_container_width=True):
             st.session_state.show_stats_modal = True
             st.rerun()
 
-def render_filters_modal():
-    """Render the filters popup modal"""
+@st.fragment
+def render_filters_popup():
+    """Render the filters popup"""
     if st.session_state.show_filters_modal:
+        # Overlay to catch clicks outside
+        if st.button("", key="filters_overlay", 
+                    help="Click to close filters",
+                    use_container_width=True):
+            st.session_state.show_filters_modal = False
+            st.rerun()
+        
         with st.container():
-            st.markdown("### Filters")
+            st.markdown("**FILTERS**")
             
-            # Filter controls
+            # Filter controls in a more compact layout
+            min_ev = st.slider("Minimum EV %", 0.0, 20.0, st.session_state.filters['min_ev'], 0.1, key="filter_ev")
+            min_books = st.slider("Minimum Books", 1, 10, st.session_state.filters['min_books'], key="filter_books")
+            
+            # Update session state
+            st.session_state.filters['min_ev'] = min_ev
+            st.session_state.filters['min_books'] = min_books
+            
             col1, col2 = st.columns(2)
-            
             with col1:
-                min_ev = st.slider("Minimum EV %", 0.0, 20.0, st.session_state.filters['min_ev'], 0.1)
-                st.session_state.filters['min_ev'] = min_ev
-            
-            with col2:
-                min_books = st.slider("Minimum Books", 1, 10, st.session_state.filters['min_books'])
-                st.session_state.filters['min_books'] = min_books
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button("Apply Filters", type="primary"):
+                if st.button("Apply", key="apply_filters", type="primary", use_container_width=True):
                     st.session_state.show_filters_modal = False
                     st.rerun()
             with col2:
-                if st.button("Reset"):
+                if st.button("Reset", key="reset_filters", use_container_width=True):
                     st.session_state.filters = {'min_ev': 1.0, 'min_books': 3}
                     st.rerun()
-            with col3:
-                if st.button("Close"):
-                    st.session_state.show_filters_modal = False
-                    st.rerun()
 
-def render_stats_modal():
-    """Render the stats popup modal"""
+@st.fragment  
+def render_stats_popup():
+    """Render the stats popup"""
     if st.session_state.show_stats_modal:
+        # Overlay to catch clicks outside
+        if st.button("", key="stats_overlay",
+                    help="Click to close stats", 
+                    use_container_width=True):
+            st.session_state.show_stats_modal = False
+            st.rerun()
+        
         with st.container():
-            st.markdown("### Statistics")
+            st.markdown("**STATISTICS**")
             
             # Calculate stats
             opportunities_df = st.session_state.opportunities
@@ -491,18 +552,16 @@ def render_stats_modal():
             avg_ev = opportunities_df['Splash_EV_Percentage'].mean() if not opportunities_df.empty else 0
             best_ev = opportunities_df['Splash_EV_Percentage'].max() if not opportunities_df.empty else 0
             
-            # Display stats in grid
+            # Display stats
             col1, col2 = st.columns(2)
-            
             with col1:
                 st.metric("Last Updated", last_update)
                 st.metric("Average EV", f"{avg_ev:.2%}")
-            
             with col2:
-                st.metric("Opportunities", total_opps)
+                st.metric("Opportunities", total_opps)  
                 st.metric("Best EV", f"{best_ev:.2%}")
             
-            if st.button("Close Stats", type="primary"):
+            if st.button("Close", key="close_stats", type="primary", use_container_width=True):
                 st.session_state.show_stats_modal = False
                 st.rerun()
 
@@ -535,15 +594,41 @@ def render_opportunity_card(row):
     </div>
     """
 
+def render_opportunity_card(row):
+    """Render an individual opportunity card"""
+    ev_pct = row['Splash_EV_Percentage']
+    
+    # Determine EV class
+    if ev_pct >= 0.05:
+        ev_class = "ev-high"
+    elif ev_pct >= 0.02:
+        ev_class = "ev-medium"
+    else:
+        ev_class = "ev-low"
+    
+    # Get display name for market
+    market_display = get_market_display_name(row['Market'])
+    
+    return f"""
+    <div class="opportunity-card">
+        <div class="opportunity-header">
+            <div>
+                <div class="player-name">{row['Player']}</div>
+                <div class="market-info">{market_display} - {row['Bet_Type'].title()} {row['Line']}</div>
+                <div class="book-info">Best Book: {row['Best_Sportsbook']} ({row['Best_Odds']:+d})</div>
+            </div>
+            <div style="text-align: right;">
+                <div class="ev-value {ev_class}">{ev_pct:.2%}</div>
+                <div class="ev-details">${row['Splash_EV_Dollars_Per_100']:.2f}/100</div>
+                <div class="book-info">{row['Num_Books_Used']} books</div>
+            </div>
+        </div>
+    </div>
+    """
+
 def render_opportunities(filtered_df):
-    """Render opportunities with refresh button"""
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        st.markdown("### Current Opportunities")
-    
-    with col2:
-        refresh_clicked = st.button("🔄 Refresh Data", key="refresh_main", type="primary")
+    """Render opportunities"""
+    st.markdown("### Current Opportunities")
     
     if filtered_df.empty:
         st.markdown("""
@@ -552,7 +637,7 @@ def render_opportunities(filtered_df):
             <div class="no-data-text">Try adjusting your filters or refresh the data to find betting opportunities.</div>
         </div>
         """, unsafe_allow_html=True)
-        return refresh_clicked
+        return
     
     st.markdown(f"**{len(filtered_df)} opportunities found**")
     
@@ -562,8 +647,6 @@ def render_opportunities(filtered_df):
     
     if len(filtered_df) > 20:
         st.info(f"Showing top 20 of {len(filtered_df)} opportunities. Adjust filters to see more.")
-    
-    return refresh_clicked
 
 def render_status_indicator():
     """Render the status indicator at bottom left"""
@@ -618,18 +701,21 @@ def main():
     render_header()
     render_market_tabs()
     
-    # Handle modals
+    # Handle popups
     if st.session_state.show_filters_modal:
-        render_filters_modal()
-        return
+        render_filters_popup()
     
     if st.session_state.show_stats_modal:
-        render_stats_modal()
-        return
+        render_stats_popup()
+    
+    # Check for refresh button click in header (would need JavaScript integration)
+    # For now, we'll add a hidden refresh button that can be triggered
+    refresh_clicked = st.button("Hidden Refresh", key="hidden_refresh", 
+                               help="This button is hidden but can be triggered by header button")
     
     # Apply filters and render opportunities
     filtered_df = apply_filters(st.session_state.opportunities)
-    refresh_clicked = render_opportunities(filtered_df)
+    render_opportunities(filtered_df)
     
     # Data refresh logic
     if refresh_clicked:

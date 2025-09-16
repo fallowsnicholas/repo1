@@ -1,0 +1,38 @@
+# .github/workflows/fetch-mlb-data.yml
+name: Fetch MLB Betting Data
+
+on:
+  # Trigger via webhook (repository_dispatch)
+  repository_dispatch:
+    types: [fetch-data]
+  
+  # Also allow manual triggering for testing
+  workflow_dispatch:
+
+jobs:
+  fetch-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install requests pandas gspread google-auth google-auth-oauthlib google-auth-httplib2 gspread-dataframe
+    
+    - name: Run Splash Sports data fetch
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: python fetch_splash_data.py
+    
+    - name: Run Odds API data fetch
+      env:
+        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: python fetch_odds_data.py

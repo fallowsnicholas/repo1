@@ -8,13 +8,86 @@ from gspread_dataframe import set_with_dataframe
 from google.oauth2.service_account import Credentials
 import time
 import numpy as np
+import os
 
 # Page configuration
 st.set_page_config(
     page_title="MLB EV Betting Tool",
     page_icon="⚾",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-header {
+        padding: 1rem 0;
+        border-bottom: 2px solid #f0f2f6;
+        margin-bottom: 2rem;
+    }
+    
+    .metric-container {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        margin: 0.5rem 0;
+    }
+    
+    .opportunity-card {
+        background: white;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #28a745;
+        margin: 0.5rem 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .high-ev {
+        border-left-color: #28a745 !important;
+        background: linear-gradient(90deg, #d4edda 0%, #f8f9fa 100%);
+    }
+    
+    .medium-ev {
+        border-left-color: #ffc107 !important;
+        background: linear-gradient(90deg, #fff3cd 0%, #f8f9fa 100%);
+    }
+    
+    .low-ev {
+        border-left-color: #17a2b8 !important;
+        background: linear-gradient(90deg, #d1ecf1 0%, #f8f9fa 100%);
+    }
+    
+    .sidebar-section {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+    
+    .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    
+    .status-green { background-color: #28a745; }
+    .status-yellow { background-color: #ffc107; }
+    .status-red { background-color: #dc3545; }
+    
+    .filter-section {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Initialize session state
 if 'last_refresh' not in st.session_state:
@@ -25,9 +98,10 @@ if 'is_loading' not in st.session_state:
     st.session_state.is_loading = False
 
 class MLBBettingTool:
-    def __init__(self, odds_api_key, google_creds_json):
-        self.odds_api_key = odds_api_key
-        self.google_creds = json.loads(google_creds_json)
+    def __init__(self, odds_api_key=None, google_creds_json=None):
+        # Get from environment variables if not provided
+        self.odds_api_key = odds_api_key or os.environ.get('ODDS_API_KEY')
+        self.google_creds = json.loads(google_creds_json) if google_creds_json else json.loads(os.environ.get('GOOGLE_SERVICE_ACCOUNT_CREDENTIALS', '{}'))
         self.api_call_count = 0
         
         # Markets and books from your original code
@@ -56,173 +130,44 @@ class MLBBettingTool:
             'total_outs': 'pitcher_outs'
         }
 
-    def fetch_splash_data(self):
-        """Fetch data from Splash Sports API"""
-        url = "https://api.splashsports.com/props-service/api/props"
-        params = {'limit': 1000, 'offset': 0, 'league': 'mlb'}
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Connection': 'keep-alive',
-            'Referer': 'https://app.splashsports.com/',
-            'Origin': 'https://app.splashsports.com',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-site'
-        }
-        
+    def read_data_from_sheets(self):
+        """Read data from Google Sheets instead of APIs"""
         try:
-            response = requests.get(url, params=params, headers=headers, timeout=30)
-            if response.status_code == 200:
-                data = response.json()
-                props_list = data.get('data', [])
-                mlb_props = [prop for prop in props_list if prop.get('league') == 'mlb']
-                
-                extracted_data = []
-                for prop in mlb_props:
-                    extracted_data.append({
-                        'Name': prop.get('entity_name'),
-                        'Market': prop.get('type'),
-                        'Line': prop.get('line')
-                    })
-                
-                return pd.DataFrame(extracted_data)
-        except Exception as e:
-            st.error(f"Error fetching Splash data: {e}")
-            return pd.DataFrame()
-    
-    def get_todays_games_from_espn(self):
-        """Get today's MLB games from ESPN API"""
-        try:
-            today = datetime.now().strftime('%Y%m%d')
-            url = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
-            params = {'dates': today, 'limit': 50}
+            # Setup Google Sheets connection
+            scopes = [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
+            ]
             
-            response = requests.get(url, params=params, timeout=15)
-            response.raise_for_status()
-            data = response.json()
+            credentials = Credentials.from_service_account_info(
+                self.google_creds, scopes=scopes)
+            client = gspread.authorize(credentials)
             
-            games = []
-            if 'events' in data and data['events']:
-                for event in data['events']:
-                    try:
-                        competition = event.get('competitions', [{}])[0]
-                        competitors = competition.get('competitors', [])
-                        
-                        if len(competitors) >= 2:
-                            home_team = None
-                            away_team = None
-                            
-                            for competitor in competitors:
-                                team = competitor.get('team', {})
-                                team_name = team.get('displayName', '')
-                                
-                                if competitor.get('homeAway') == 'home':
-                                    home_team = team_name
-                                elif competitor.get('homeAway') == 'away':
-                                    away_team = team_name
-                            
-                            if home_team and away_team:
-                                game_info = {
-                                    'espn_id': event.get('id'),
-                                    'home_team': home_team,
-                                    'away_team': away_team,
-                                    'date': event.get('date'),
-                                    'status': event.get('status', {}).get('type', {}).get('name', 'Unknown')
-                                }
-                                games.append(game_info)
-                    except Exception:
-                        continue
+            # Read Splash data
+            with st.spinner("📊 Reading Splash data from Google Sheets..."):
+                spreadsheet = client.open("MLB_Splash_Data")
+                splash_worksheet = spreadsheet.worksheet("SPLASH_MLB")
+                splash_data = splash_worksheet.get_all_records()
+                splash_df = pd.DataFrame(splash_data)
             
-            active_games = [g for g in games if g['status'] in ['STATUS_SCHEDULED', 'STATUS_INPROGRESS']]
-            return active_games
+            # Read Odds data
+            with st.spinner("🎲 Reading Odds data from Google Sheets..."):
+                odds_worksheet = spreadsheet.worksheet("ODDS_API")
+                odds_data = odds_worksheet.get_all_records()
+                odds_df = pd.DataFrame(odds_data)
+            
+            if splash_df.empty or odds_df.empty:
+                st.warning("⚠️ One or both datasets are empty. Try refreshing the data first.")
+                return pd.DataFrame()
+            
+            # Find matches and calculate EV
+            with st.spinner("🔍 Finding matches and calculating EV..."):
+                opportunities = self.find_matches_and_calculate_ev(splash_df, odds_df)
+            
+            return opportunities
             
         except Exception as e:
-            st.error(f"Error fetching ESPN games: {e}")
-            return []
-
-    def fetch_odds_data(self):
-        """Fetch odds data using your existing logic"""
-        try:
-            espn_games = self.get_todays_games_from_espn()
-            if not espn_games:
-                st.warning("No games found from ESPN today")
-                return pd.DataFrame()
-            
-            st.info(f"Found {len(espn_games)} games from ESPN")
-            
-            # Get all odds games for mapping
-            odds_url = "https://api.the-odds-api.com/v4/sports/baseball_mlb/events"
-            params = {
-                'apiKey': self.odds_api_key,
-                'regions': 'us',
-                'markets': 'h2h',
-                'oddsFormat': 'american'
-            }
-            
-            response = requests.get(odds_url, params=params, timeout=15)
-            if response.status_code != 200:
-                st.error(f"Odds API error: {response.status_code}")
-                return pd.DataFrame()
-                
-            odds_games = response.json()
-            if not odds_games:
-                st.warning("No odds games returned from API")
-                return pd.DataFrame()
-            
-            st.info(f"Found {len(odds_games)} odds games")
-            
-            # Map ESPN to Odds API games
-            matched_games = self.map_espn_to_odds_api(espn_games, odds_games)
-            if not matched_games:
-                st.warning("No games could be matched between ESPN and Odds API")
-                return pd.DataFrame()
-            
-            st.info(f"Matched {len(matched_games)} games")
-            
-            # Fetch player props for matched games
-            all_odds = []
-            for i, game in enumerate(matched_games[:3]):  # Limit to first 3 games for testing
-                game_id = game['id']
-                st.info(f"Fetching props for game {i+1}/{len(matched_games[:3])}: {game['away_team']} @ {game['home_team']}")
-                
-                for market in self.MARKETS[:2]:  # Limit to first 2 markets for testing
-                    props_data = self.get_player_props(game_id, market)
-                    if props_data and props_data.get('bookmakers'):
-                        for bookmaker in props_data['bookmakers']:
-                            if bookmaker['key'] in self.BOOKS:
-                                for market_data in bookmaker.get('markets', []):
-                                    for outcome in market_data.get('outcomes', []):
-                                        player_name = outcome.get('description', outcome.get('name', ''))
-                                        selection = outcome.get('name', '')
-                                        point = outcome.get('point', 0)
-                                        odds = outcome.get('price', 0)
-                                        
-                                        if (player_name and 
-                                            player_name not in ['Over', 'Under'] and
-                                            selection in ['Over', 'Under'] and
-                                            point and odds):
-                                            
-                                            all_odds.append({
-                                                'Name': player_name.strip(),
-                                                'Market': market,
-                                                'Line': f"{selection} {point}",
-                                                'Odds': f"{odds:+d}",
-                                                'Book': bookmaker['title'],
-                                                'Game': f"{game['away_team']} @ {game['home_team']}", 
-                                                'Game_ID': game_id
-                                            })
-                    
-                    time.sleep(0.2)  # Rate limiting
-                
-                time.sleep(0.5)  # Rate limiting between games
-            
-            st.success(f"Collected {len(all_odds)} total player props")
-            return pd.DataFrame(all_odds)
-            
-        except Exception as e:
-            st.error(f"Error in fetch_odds_data: {e}")
+            st.error(f"❌ Error reading from Google Sheets: {e}")
             return pd.DataFrame()
 
     def find_matches_and_calculate_ev(self, splash_df, odds_df):
@@ -327,246 +272,157 @@ class MLBBettingTool:
         else:
             return pd.DataFrame()
 
-    def map_espn_to_odds_api(self, espn_games, odds_games):
-        """Map ESPN games to Odds API game IDs"""
-        team_mapping = {
-            'Arizona Diamondbacks': ['Arizona Diamondbacks', 'Diamondbacks'],
-            'Atlanta Braves': ['Atlanta Braves', 'Braves'],
-            'Baltimore Orioles': ['Baltimore Orioles', 'Orioles'],
-            'Boston Red Sox': ['Boston Red Sox', 'Red Sox'],
-            'Chicago Cubs': ['Chicago Cubs', 'Cubs'],
-            'Chicago White Sox': ['Chicago White Sox', 'White Sox'],
-            'Cincinnati Reds': ['Cincinnati Reds', 'Reds'],
-            'Cleveland Guardians': ['Cleveland Guardians', 'Guardians'],
-            'Colorado Rockies': ['Colorado Rockies', 'Rockies'],
-            'Detroit Tigers': ['Detroit Tigers', 'Tigers'],
-            'Houston Astros': ['Houston Astros', 'Astros'],
-            'Kansas City Royals': ['Kansas City Royals', 'Royals'],
-            'Los Angeles Angels': ['Los Angeles Angels', 'LA Angels', 'Angels'],
-            'Los Angeles Dodgers': ['Los Angeles Dodgers', 'LA Dodgers', 'Dodgers'],
-            'Miami Marlins': ['Miami Marlins', 'Marlins'],
-            'Milwaukee Brewers': ['Milwaukee Brewers', 'Brewers'],
-            'Minnesota Twins': ['Minnesota Twins', 'Twins'],
-            'New York Mets': ['New York Mets', 'NY Mets', 'Mets'],
-            'New York Yankees': ['New York Yankees', 'NY Yankees', 'Yankees'],
-            'Oakland Athletics': ['Oakland Athletics', 'Oakland A\'s', 'Athletics', 'A\'s'],
-            'Philadelphia Phillies': ['Philadelphia Phillies', 'Phillies'],
-            'Pittsburgh Pirates': ['Pittsburgh Pirates', 'Pirates'],
-            'San Diego Padres': ['San Diego Padres', 'Padres'],
-            'San Francisco Giants': ['San Francisco Giants', 'SF Giants', 'Giants'],
-            'Seattle Mariners': ['Seattle Mariners', 'Mariners'],
-            'St. Louis Cardinals': ['St. Louis Cardinals', 'St Louis Cardinals', 'Cardinals'],
-            'Tampa Bay Rays': ['Tampa Bay Rays', 'Rays'],
-            'Texas Rangers': ['Texas Rangers', 'Rangers'],
-            'Toronto Blue Jays': ['Toronto Blue Jays', 'Blue Jays'],
-            'Washington Nationals': ['Washington Nationals', 'Nationals']
-        }
-
-        def normalize_team_name(name):
-            return name.lower().strip().replace('.', '').replace('\'', '')
-
-        def find_team_match(name1, name2):
-            norm1 = normalize_team_name(name1)
-            norm2 = normalize_team_name(name2)
-
-            if norm1 == norm2:
-                return True
-
-            for canonical, variations in team_mapping.items():
-                canonical_norm = normalize_team_name(canonical)
-                all_norms = {normalize_team_name(v) for v in variations} | {canonical_norm}
-
-                if norm1 in all_norms and norm2 in all_norms:
-                    return True
-
-            return False
-
-        matched_games = []
-        for espn_game in espn_games:
-            espn_home = espn_game['home_team']
-            espn_away = espn_game['away_team']
-
-            for odds_game in odds_games:
-                odds_home = odds_game.get('home_team', '')
-                odds_away = odds_game.get('away_team', '')
-
-                if (find_team_match(espn_home, odds_home) and
-                    find_team_match(espn_away, odds_away)):
-
-                    matched_game = {
-                        'id': odds_game['id'],
-                        'home_team': odds_game['home_team'],
-                        'away_team': odds_game['away_team'],
-                        'commence_time': odds_game.get('commence_time'),
-                        'espn_info': espn_game
-                    }
-                    matched_games.append(matched_game)
-                    break
-
-        return matched_games
-
-    def get_player_props(self, game_id, market):
-        """Get player props for a specific game and market"""
-        endpoint = f"https://api.the-odds-api.com/v4/sports/baseball_mlb/events/{game_id}/odds"
-        params = {
-            'apiKey': self.odds_api_key,
-            'regions': 'us',
-            'markets': market,
-            'oddsFormat': 'american'
-        }
-        
-        try:
-            response = requests.get(endpoint, params=params, timeout=15)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return None
-        except Exception:
-            return None
-        """Run the complete analysis pipeline"""
-        try:
-            # Step 1: Fetch Splash data
-            splash_df = self.fetch_splash_data()
-            
-            # Step 2: Fetch Odds data  
-            odds_df = self.fetch_odds_data()
-            
-            # Step 3: Find matches and calculate EV
-            opportunities = self.find_matches_and_calculate_ev(splash_df, odds_df)
-            
-            return opportunities
-            
-        except Exception as e:
-            st.error(f"Error in analysis: {e}")
-            return pd.DataFrame()
-
-    def trigger_data_refresh(self):
-        """Trigger GitHub Actions workflow to refresh data"""
-        # This would trigger the GitHub Actions workflow
-        # For now, we'll just read from Google Sheets
-        return self.read_data_from_sheets()
-
-    def read_data_from_sheets(self):
-        """Read data from Google Sheets instead of APIs"""
-        try:
-            # Setup Google Sheets connection
-            scopes = [
-                'https://www.googleapis.com/auth/spreadsheets',
-                'https://www.googleapis.com/auth/drive'
-            ]
-            
-            credentials = Credentials.from_service_account_info(
-                self.google_creds, scopes=scopes)
-            client = gspread.authorize(credentials)
-            
-            # Read Splash data
-            st.info("Reading Splash data from Google Sheets...")
-            spreadsheet = client.open("MLB_Splash_Data")
-            splash_worksheet = spreadsheet.worksheet("SPLASH_MLB")
-            splash_data = splash_worksheet.get_all_records()
-            splash_df = pd.DataFrame(splash_data)
-            st.success(f"Loaded {len(splash_df)} Splash records")
-            
-            # Read Odds data
-            st.info("Reading Odds data from Google Sheets...")
-            odds_worksheet = spreadsheet.worksheet("ODDS_API")
-            odds_data = odds_worksheet.get_all_records()
-            odds_df = pd.DataFrame(odds_data)
-            st.success(f"Loaded {len(odds_df)} Odds records")
-            
-            if splash_df.empty or odds_df.empty:
-                st.warning("One or both datasets are empty. Try refreshing the data first.")
-                return pd.DataFrame()
-            
-            # Find matches and calculate EV
-            opportunities = self.find_matches_and_calculate_ev(splash_df, odds_df)
-            return opportunities
-            
-        except Exception as e:
-            st.error(f"Error reading from Google Sheets: {e}")
-            return pd.DataFrame()
-
     def run_full_analysis(self):
         """Run the complete analysis pipeline using Google Sheets data"""
         try:
-            st.info("Loading data from Google Sheets...")
             opportunities = self.read_data_from_sheets()
             return opportunities
             
         except Exception as e:
-            st.error(f"Error in analysis: {e}")
+            st.error(f"❌ Error in analysis: {e}")
             import traceback
             st.error(f"Full traceback: {traceback.format_exc()}")
             return pd.DataFrame()
 
-# Streamlit UI
+# Main App Header
+st.markdown('<div class="main-header">', unsafe_allow_html=True)
 st.title("⚾ MLB EV Betting Opportunities")
-st.markdown("Find profitable betting opportunities by comparing Splash Sports and sportsbook odds")
+st.markdown("**Find profitable betting opportunities by comparing Splash Sports and sportsbook odds**")
+st.markdown('</div>', unsafe_allow_html=True)
 
-# Sidebar for configuration
+# Sidebar Configuration
 with st.sidebar:
-    st.header("⚙️ Configuration")
+    st.markdown('<div class="sidebar-section">', unsafe_allow_html=True)
+    st.markdown("### ⚙️ Configuration")
     
-    # API Keys
-    odds_api_key = st.text_input("Odds API Key", type="password", help="Your Odds API key")
-    google_creds = st.text_area("Google Credentials JSON", help="Paste your Google Service Account JSON here")
+    # Status indicators
+    api_key_status = "✅" if os.environ.get('ODDS_API_KEY') else "❌"
+    creds_status = "✅" if os.environ.get('GOOGLE_SERVICE_ACCOUNT_CREDENTIALS') else "❌"
     
-    st.header("🎛️ Filters")
-    min_ev = st.slider("Minimum EV %", 0.0, 20.0, 1.0, 0.1)
-    market_filter = st.selectbox("Market Filter", ["All"] + [
+    st.markdown(f"""
+    **Environment Status:**
+    - {api_key_status} Odds API Key
+    - {creds_status} Google Credentials
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Filters Section
+    st.markdown('<div class="filter-section">', unsafe_allow_html=True)
+    st.markdown("### 🎛️ Filters")
+    
+    min_ev = st.slider("Minimum EV %", 0.0, 20.0, 1.0, 0.1, help="Only show opportunities above this EV threshold")
+    
+    market_filter = st.selectbox("Market Filter", ["All Markets"] + [
         'pitcher_strikeouts', 'pitcher_hits_allowed', 'pitcher_outs',
         'pitcher_earned_runs', 'batter_total_bases', 'batter_hits',
         'batter_runs_scored', 'batter_rbis', 'batter_singles'
-    ])
+    ], help="Filter by specific market type")
     
-    st.header("🔄 Actions")
-    refresh_button = st.button("🔄 Refresh Data from Sheets", type="primary")
+    min_books = st.slider("Minimum Books", 1, 10, 3, help="Minimum number of sportsbooks required for analysis")
     
-    # Future enhancement: Add button to trigger GitHub Actions
-    st.markdown("*Note: Data is updated via GitHub Actions workflow*")
-    st.markdown("*Click refresh to load latest data from Google Sheets*")
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    auto_refresh = st.checkbox("Auto-refresh (5 min)")
+    # Actions Section
+    st.markdown("### 🔄 Actions")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        refresh_button = st.button("🔄 Refresh Data", type="primary", use_container_width=True)
+    with col2:
+        auto_refresh = st.checkbox("Auto-refresh", help="Refresh every 5 minutes")
+    
+    # Info Section
+    st.markdown("---")
+    st.markdown("### ℹ️ About")
+    st.markdown("""
+    This tool finds profitable betting opportunities by:
+    1. 📊 Comparing Splash Sports fair odds
+    2. 🎲 Against multiple sportsbooks
+    3. 📈 Calculating expected value (EV)
+    4. 🎯 Highlighting best opportunities
+    """)
 
-# Main content
-col1, col2, col3 = st.columns(3)
+# Main Dashboard
+if not os.environ.get('ODDS_API_KEY') or not os.environ.get('GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'):
+    st.error("❌ Missing required environment variables. Please ensure ODDS_API_KEY and GOOGLE_SERVICE_ACCOUNT_CREDENTIALS are set in your repository secrets.")
+    st.stop()
+
+# Key Metrics Row
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric("Last Updated", 
-              st.session_state.last_refresh.strftime("%H:%M:%S") if st.session_state.last_refresh else "Never")
+    last_update = st.session_state.last_refresh.strftime("%H:%M:%S") if st.session_state.last_refresh else "Never"
+    st.markdown(f'''
+    <div class="metric-container">
+        <h4>🕐 Last Updated</h4>
+        <h2>{last_update}</h2>
+    </div>
+    ''', unsafe_allow_html=True)
 
 with col2:
-    st.metric("Total Opportunities", len(st.session_state.opportunities))
+    total_opps = len(st.session_state.opportunities)
+    st.markdown(f'''
+    <div class="metric-container">
+        <h4>🎯 Opportunities</h4>
+        <h2>{total_opps}</h2>
+    </div>
+    ''', unsafe_allow_html=True)
 
 with col3:
     if not st.session_state.opportunities.empty:
         avg_ev = st.session_state.opportunities['Splash_EV_Percentage'].mean()
-        st.metric("Average EV", f"{avg_ev:.2%}")
+        st.markdown(f'''
+        <div class="metric-container">
+            <h4>📊 Average EV</h4>
+            <h2>{avg_ev:.2%}</h2>
+        </div>
+        ''', unsafe_allow_html=True)
+    else:
+        st.markdown(f'''
+        <div class="metric-container">
+            <h4>📊 Average EV</h4>
+            <h2>--</h2>
+        </div>
+        ''', unsafe_allow_html=True)
+
+with col4:
+    if not st.session_state.opportunities.empty:
+        best_ev = st.session_state.opportunities['Splash_EV_Percentage'].max()
+        st.markdown(f'''
+        <div class="metric-container">
+            <h4>🚀 Best EV</h4>
+            <h2>{best_ev:.2%}</h2>
+        </div>
+        ''', unsafe_allow_html=True)
+    else:
+        st.markdown(f'''
+        <div class="metric-container">
+            <h4>🚀 Best EV</h4>
+            <h2>--</h2>
+        </div>
+        ''', unsafe_allow_html=True)
 
 # Data fetching logic
 if refresh_button or (auto_refresh and (st.session_state.last_refresh is None or 
     (datetime.now() - st.session_state.last_refresh).seconds > 300)):
     
-    if not odds_api_key or not google_creds:
-        st.error("Please provide both Odds API Key and Google Credentials in the sidebar")
-    else:
-        with st.spinner("Fetching latest data... This may take a few minutes"):
-            try:
-                tool = MLBBettingTool(odds_api_key, google_creds)
-                opportunities = tool.run_full_analysis()
+    with st.spinner("🔄 Fetching latest data... This may take a few minutes"):
+        try:
+            tool = MLBBettingTool()
+            opportunities = tool.run_full_analysis()
+            
+            st.session_state.opportunities = opportunities
+            st.session_state.last_refresh = datetime.now()
+            
+            if not opportunities.empty:
+                st.success(f"✅ Found {len(opportunities)} opportunities!")
+            else:
+                st.warning("⚠️ No opportunities found in current data")
                 
-                st.session_state.opportunities = opportunities
-                st.session_state.last_refresh = datetime.now()
-                
-                if not opportunities.empty:
-                    st.success(f"Found {len(opportunities)} opportunities!")
-                else:
-                    st.warning("No opportunities found in current data")
-                    
-            except Exception as e:
-                st.error(f"Error during data fetch: {e}")
+        except Exception as e:
+            st.error(f"❌ Error during data fetch: {e}")
 
-# Display results
+# Display Results
 if not st.session_state.opportunities.empty:
     # Apply filters
     filtered_df = st.session_state.opportunities.copy()
@@ -575,71 +431,126 @@ if not st.session_state.opportunities.empty:
     filtered_df = filtered_df[filtered_df['Splash_EV_Percentage'] >= (min_ev/100)]
     
     # Market filter
-    if market_filter != "All":
+    if market_filter != "All Markets":
         filtered_df = filtered_df[filtered_df['Market'] == market_filter]
     
+    # Books filter
+    filtered_df = filtered_df[filtered_df['Num_Books_Used'] >= min_books]
+    
     if not filtered_df.empty:
+        st.markdown("---")
         st.subheader(f"🎯 {len(filtered_df)} Opportunities Found")
         
-        # Format the dataframe for display
-        display_df = filtered_df.copy()
-        display_df['True_Prob'] = display_df['True_Prob'].apply(lambda x: f"{x:.1%}")
-        display_df['Splash_EV_Percentage'] = display_df['Splash_EV_Percentage'].apply(lambda x: f"{x:.2%}")
-        display_df['Splash_EV_Dollars_Per_100'] = display_df['Splash_EV_Dollars_Per_100'].apply(lambda x: f"${x:.2f}")
+        # Create tabs for different views
+        tab1, tab2, tab3 = st.tabs(["🎲 Opportunities", "📊 Analytics", "📈 Charts"])
         
-        # Display with column configuration
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            column_config={
-                "Splash_EV_Percentage": st.column_config.TextColumn("EV %"),
-                "Splash_EV_Dollars_Per_100": st.column_config.TextColumn("EV per $100"),
-                "True_Prob": st.column_config.TextColumn("Win Prob"),
-                "Best_Odds": st.column_config.TextColumn("Best Odds")
-            }
-        )
+        with tab1:
+            # Display opportunities in cards
+            for idx, row in filtered_df.head(10).iterrows():
+                ev_pct = row['Splash_EV_Percentage']
+                
+                # Determine card style based on EV
+                if ev_pct >= 0.05:
+                    card_class = "high-ev"
+                    ev_color = "#28a745"
+                elif ev_pct >= 0.02:
+                    card_class = "medium-ev"
+                    ev_color = "#ffc107"
+                else:
+                    card_class = "low-ev"
+                    ev_color = "#17a2b8"
+                
+                st.markdown(f'''
+                <div class="opportunity-card {card_class}">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h4 style="margin: 0; color: #333;">{row['Player']}</h4>
+                            <p style="margin: 5px 0; color: #666;">{row['Market']} - {row['Bet_Type'].title()} {row['Line']}</p>
+                            <small style="color: #888;">Best Book: {row['Best_Sportsbook']} ({row['Best_Odds']:+d})</small>
+                        </div>
+                        <div style="text-align: right;">
+                            <h3 style="margin: 0; color: {ev_color};">{ev_pct:.2%}</h3>
+                            <p style="margin: 0; color: #666;">${row['Splash_EV_Dollars_Per_100']:.2f}/100</p>
+                            <small style="color: #888;">{row['Num_Books_Used']} books</small>
+                        </div>
+                    </div>
+                </div>
+                ''', unsafe_allow_html=True)
+            
+            if len(filtered_df) > 10:
+                st.info(f"Showing top 10 of {len(filtered_df)} opportunities. Adjust filters to see more.")
         
-        # Summary statistics
-        st.subheader("📊 Summary Statistics")
-        col1, col2, col3, col4 = st.columns(4)
+        with tab2:
+            # Analytics view with full table
+            st.dataframe(
+                filtered_df.style.format({
+                    'True_Prob': '{:.1%}',
+                    'Splash_EV_Percentage': '{:.2%}',
+                    'Splash_EV_Dollars_Per_100': '${:.2f}',
+                }),
+                use_container_width=True,
+                height=400
+            )
+            
+            # Summary statistics
+            st.subheader("📊 Summary Statistics")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Market Breakdown**")
+                market_summary = filtered_df.groupby('Market').agg({
+                    'Splash_EV_Percentage': ['count', 'mean']
+                }).round(3)
+                market_summary.columns = ['Count', 'Avg EV']
+                st.dataframe(market_summary)
+            
+            with col2:
+                st.markdown("**Book Usage**")
+                book_summary = filtered_df.groupby('Best_Sportsbook').size().sort_values(ascending=False)
+                st.dataframe(book_summary.head(10))
         
-        with col1:
-            best_ev = filtered_df['Splash_EV_Percentage'].max()
-            st.metric("Best EV", f"{best_ev:.2%}")
-        
-        with col2:
-            avg_prob = filtered_df['True_Prob'].mean()
-            st.metric("Avg Win Prob", f"{avg_prob:.1%}")
-        
-        with col3:
-            total_books = filtered_df['Num_Books_Used'].sum()
-            st.metric("Total Books Used", total_books)
-        
-        with col4:
-            unique_players = filtered_df['Player'].nunique()
-            st.metric("Unique Players", unique_players)
-        
-        # Market breakdown
-        st.subheader("📈 Market Breakdown")
-        market_summary = filtered_df.groupby('Market').agg({
-            'Splash_EV_Percentage': ['count', 'mean']
-        }).round(3)
-        market_summary.columns = ['Count', 'Avg EV']
-        market_summary['Avg EV'] = market_summary['Avg EV'].apply(lambda x: f"{x:.2%}")
-        st.dataframe(market_summary)
-        
+        with tab3:
+            # Charts view
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**EV Distribution**")
+                st.bar_chart(filtered_df['Splash_EV_Percentage'])
+            
+            with col2:
+                st.markdown("**Market Distribution**")
+                market_counts = filtered_df['Market'].value_counts()
+                st.bar_chart(market_counts)
+    
     else:
-        st.warning("No opportunities match your current filters")
+        st.warning("⚠️ No opportunities match your current filters. Try adjusting the filter criteria.")
 
 else:
+    st.markdown("---")
     st.info("👆 Click 'Refresh Data' to start finding betting opportunities")
+    
+    # Show some helpful tips
+    st.markdown("""
+    ### 💡 Tips for Using This Tool
+    
+    1. **Start Fresh**: Click the refresh button to load the latest data
+    2. **Filter Smart**: Use the sidebar filters to narrow down opportunities
+    3. **Check Multiple Markets**: Different prop types may have varying EV
+    4. **Monitor Timing**: Odds change throughout the day - timing matters
+    5. **Bankroll Management**: Never bet more than you can afford to lose
+    """)
 
 # Footer
 st.markdown("---")
-st.markdown("*Data sources: Splash Sports API, The Odds API, ESPN API*")
+st.markdown("""
+<div style="text-align: center; color: #666; padding: 1rem;">
+    <p><strong>Data Sources:</strong> Splash Sports API • The Odds API • ESPN API</p>
+    <p><small>⚠️ This tool is for educational purposes. Always verify odds before placing bets.</small></p>
+</div>
+""", unsafe_allow_html=True)
 
 # Auto-refresh logic
 if auto_refresh and st.session_state.last_refresh:
     time_since_refresh = (datetime.now() - st.session_state.last_refresh).seconds
-    if time_since_refresh < 300:  # Less than 5 minutes
+    if time_since_refresh >= 300:  # 5 minutes
         st.rerun()

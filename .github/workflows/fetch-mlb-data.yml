@@ -23,8 +23,9 @@ jobs:
         python-version: '3.9'
     
     - name: Install dependencies
+      # Use requirements.txt for cleaner, more robust dependency management
       run: |
-        pip install requests pandas gspread google-auth google-auth-oauthlib google-auth-httplib2 gspread-dataframe
+        pip install -r requirements.txt
     
     - name: Run Splash Sports data fetch
       env:
@@ -36,3 +37,9 @@ jobs:
         ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: python fetch_odds_data.py
+    
+    - name: Run Comprehensive Analysis
+      # This new step runs the main analysis script after data is fetched
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: python enhanced_betting_analyzer.py

@@ -56,8 +56,16 @@ def fetch_and_write_splash_data_to_sheet():
 
                 props_list = data.get('data', [])
 
-                # Filter for MLB league
-                mlb_props = [prop for prop in props_list if prop.get('league') == 'mlb']
+                # *** KEY CHANGE HERE ***
+                # Filter for only 'OPEN' props to ensure data accuracy and avoid old/settled lines.
+                active_props = [prop for prop in props_list if prop.get('status') == 'OPEN']
+                print(f"Found {len(props_list)} total props, filtering down to {len(active_props)} active ('OPEN') props.")
+
+
+                # Filter for MLB league from the active props
+                mlb_props = [prop for prop in active_props if prop.get('league') == 'mlb']
+                print(f"Found {len(mlb_props)} active MLB props.")
+
 
                 extracted_data = []
                 for prop in mlb_props:

@@ -5,9 +5,8 @@ from datetime import datetime
 import time
 import os
 from ev_calculator import EVCalculator
-# from enhanced_betting_analyzer import EnhancedBettingAnalyzer # Not used in app.py yet
 
-# --- Page Configuration ---
+# Page configuration
 st.set_page_config(
     page_title="MLB EV Betting Tool",
     page_icon="⚾",
@@ -15,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- Custom CSS (No changes, your design is great) ---
+# Custom CSS with sport tabs and market filters
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -433,7 +432,7 @@ def render_header():
             <div class="nav-brand">EV Betting Tool</div>
             <div class="nav-subtitle">Find profitable betting opportunities by comparing Splash Sports and sportsbook odds</div>
             <div class="sport-tabs">
-                <div class="sport-tab {'active' if st.session_state.active_sport == 'MLB' else ''}" onclick="setSport('MLB')">MLB</div>
+                <div class="sport-tab {'active' if st.session_state.active_sport == 'MLB' else ''}">MLB</div>
                 <div class="sport-tab disabled" title="Coming Soon">NFL</div>
                 <div class="sport-tab disabled" title="Coming Soon">WNBA</div>
                 <div class="sport-tab disabled" title="Coming Soon">NCAAF</div>
@@ -509,15 +508,8 @@ def render_market_tabs():
 @st.fragment
 def render_filters_popup():
     """Render the filters popup"""
-    # The overlay needs to be rendered even if the modal isn't visible to allow clicks
-    # This is a hacky workaround, a better solution would be a Streamlit native modal
+    # The pop-up container is only rendered if the modal should be shown
     if st.session_state.show_filters_modal:
-        st.markdown(
-            """
-            <div class="popup-overlay" onclick="window.close()"></div>
-            """,
-            unsafe_allow_html=True
-        )
         st.markdown('<div class="popup-content filters-popup">', unsafe_allow_html=True)
         st.markdown("**FILTERS**")
         
@@ -546,12 +538,6 @@ def render_filters_popup():
 def render_stats_popup():
     """Render the stats popup"""
     if st.session_state.show_stats_modal:
-        st.markdown(
-            """
-            <div class="popup-overlay" onclick="window.close()"></div>
-            """,
-            unsafe_allow_html=True
-        )
         st.markdown('<div class="popup-content stats-popup">', unsafe_allow_html=True)
         st.markdown("**STATISTICS**")
         
@@ -594,9 +580,6 @@ def render_opportunity_card(row):
     
     # Get display name for market
     market_display = get_market_display_name(row['Market'])
-    
-    # You could also add an icon here based on the market:
-    # market_icon = "⚾" if "batter" in row['Market'] else "🧤"
     
     return f"""
     <div class="opportunity-card">
@@ -693,7 +676,7 @@ def main():
         <div class="nav-brand">EV Betting Tool</div>
         <div class="nav-subtitle">Find profitable betting opportunities by comparing Splash Sports and sportsbook odds</div>
         <div class="sport-tabs">
-            <div class="sport-tab {'active' if st.session_state.active_sport == 'MLB' else ''}" onclick="setSport('MLB')">MLB</div>
+            <div class="sport-tab {'active' if st.session_state.active_sport == 'MLB' else ''}">MLB</div>
             <div class="sport-tab disabled" title="Coming Soon">NFL</div>
             <div class="sport-tab disabled" title="Coming Soon">WNBA</div>
             <div class="sport-tab disabled" title="Coming Soon">NCAAF</div>

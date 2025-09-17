@@ -5,8 +5,9 @@ from datetime import datetime
 import time
 import os
 from ev_calculator import EVCalculator
+# from enhanced_betting_analyzer import EnhancedBettingAnalyzer # Not used in app.py yet
 
-# Page configuration
+# --- Page Configuration ---
 st.set_page_config(
     page_title="MLB EV Betting Tool",
     page_icon="⚾",
@@ -14,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS with sport tabs and market filters
+# --- Custom CSS (No changes, your design is great) ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -393,7 +394,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
+
+# --- Functions ---
+
 def init_session_state():
     """Initialize session state variables"""
     if 'last_refresh' not in st.session_state:
@@ -423,19 +426,25 @@ def check_environment():
 
 def render_header():
     """Render the main header section with sport tabs and refresh button"""
-    st.markdown(f"""
-    <div class="nav-header">
-        <div class="nav-brand">EV Betting Tool</div>
-        <div class="nav-subtitle">Find profitable betting opportunities by comparing Splash Sports and sportsbook odds</div>
-        <div class="sport-tabs">
-            <div class="sport-tab {'active' if st.session_state.active_sport == 'MLB' else ''}" onclick="setSport('MLB')">MLB</div>
-            <div class="sport-tab disabled" title="Coming Soon">NFL</div>
-            <div class="sport-tab disabled" title="Coming Soon">WNBA</div>
-            <div class="sport-tab disabled" title="Coming Soon">NCAAF</div>
+    # Use a form to wrap the refresh button to prevent full script reruns on click
+    with st.form("refresh_form"):
+        st.markdown(f"""
+        <div class="nav-header">
+            <div class="nav-brand">EV Betting Tool</div>
+            <div class="nav-subtitle">Find profitable betting opportunities by comparing Splash Sports and sportsbook odds</div>
+            <div class="sport-tabs">
+                <div class="sport-tab {'active' if st.session_state.active_sport == 'MLB' else ''}" onclick="setSport('MLB')">MLB</div>
+                <div class="sport-tab disabled" title="Coming Soon">NFL</div>
+                <div class="sport-tab disabled" title="Coming Soon">WNBA</div>
+                <div class="sport-tab disabled" title="Coming Soon">NCAAF</div>
+            </div>
+            """, unsafe_allow_html=True)
+        # The refresh button is a form submit button
+        st.form_submit_button("🔄 Refresh", use_container_width=False, key="refresh_button")
+        st.markdown("""
         </div>
-        <div class="refresh-button-header" onclick="refreshData()">🔄 Refresh</div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+
 
 def get_market_display_name(market_key):
     """Convert market key to display name"""
@@ -455,11 +464,10 @@ def get_market_display_name(market_key):
 
 def render_market_tabs():
     """Render market filter tabs with Filters and Stats buttons"""
-    # Available markets for MLB
     available_markets = [
         ('All Markets', 'All Markets'),
         ('Strikeouts', 'pitcher_strikeouts'),
-        ('Hits Allowed', 'pitcher_hits_allowed'), 
+        ('Hits Allowed', 'pitcher_hits_allowed'),
         ('Outs', 'pitcher_outs'),
         ('Earned Runs', 'pitcher_earned_runs'),
         ('Total Bases', 'batter_total_bases'),
@@ -472,12 +480,11 @@ def render_market_tabs():
     # Create columns for market tabs and special buttons
     cols = st.columns(len(available_markets) + 2)
     
-    # Market filter tabs (no button styling)
+    # Market filter tabs
     for i, (display_name, market_key) in enumerate(available_markets):
         with cols[i]:
-            # Use markdown button to remove styling
             button_class = "market-tab active" if st.session_state.active_market == market_key else "market-tab"
-            if st.button(display_name, key=f"market_{market_key}", 
+            if st.button(display_name, key=f"market_{market_key}",
                         help=f"Filter by {display_name}",
                         use_container_width=True):
                 st.session_state.active_market = market_key
@@ -485,16 +492,16 @@ def render_market_tabs():
     
     # Filters button
     with cols[-2]:
-        if st.button("FILTERS", key="filters_btn", 
+        if st.button("FILTERS", key="filters_btn",
                     help="Adjust minimum EV and book count",
                     use_container_width=True):
             st.session_state.show_filters_modal = True
             st.rerun()
     
-    # Stats button  
+    # Stats button
     with cols[-1]:
         if st.button("STATS", key="stats_btn",
-                    help="View performance statistics", 
+                    help="View performance statistics",
                     use_container_width=True):
             st.session_state.show_stats_modal = True
             st.rerun()
@@ -502,97 +509,76 @@ def render_market_tabs():
 @st.fragment
 def render_filters_popup():
     """Render the filters popup"""
+    # The overlay needs to be rendered even if the modal isn't visible to allow clicks
+    # This is a hacky workaround, a better solution would be a Streamlit native modal
     if st.session_state.show_filters_modal:
-        # Overlay to catch clicks outside
-        if st.button("", key="filters_overlay", 
-                    help="Click to close filters",
-                    use_container_width=True):
-            st.session_state.show_filters_modal = False
-            st.rerun()
+        st.markdown(
+            """
+            <div class="popup-overlay" onclick="window.close()"></div>
+            """,
+            unsafe_allow_html=True
+        )
+        st.markdown('<div class="popup-content filters-popup">', unsafe_allow_html=True)
+        st.markdown("**FILTERS**")
         
-        with st.container():
-            st.markdown("**FILTERS**")
-            
-            # Filter controls in a more compact layout
-            min_ev = st.slider("Minimum EV %", 0.0, 20.0, st.session_state.filters['min_ev'], 0.1, key="filter_ev")
-            min_books = st.slider("Minimum Books", 1, 10, st.session_state.filters['min_books'], key="filter_books")
-            
-            # Update session state
-            st.session_state.filters['min_ev'] = min_ev
-            st.session_state.filters['min_books'] = min_books
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Apply", key="apply_filters", type="primary", use_container_width=True):
-                    st.session_state.show_filters_modal = False
-                    st.rerun()
-            with col2:
-                if st.button("Reset", key="reset_filters", use_container_width=True):
-                    st.session_state.filters = {'min_ev': 1.0, 'min_books': 3}
-                    st.rerun()
+        # Filter controls in a more compact layout
+        min_ev = st.slider("Minimum EV %", 0.0, 20.0, st.session_state.filters['min_ev'], 0.1, key="filter_ev")
+        min_books = st.slider("Minimum Books", 1, 10, st.session_state.filters['min_books'], key="filter_books")
+        
+        # Update session state
+        st.session_state.filters['min_ev'] = min_ev
+        st.session_state.filters['min_books'] = min_books
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Apply", key="apply_filters", type="primary", use_container_width=True):
+                st.session_state.show_filters_modal = False
+                st.rerun()
+        with col2:
+            if st.button("Reset", key="reset_filters", use_container_width=True):
+                st.session_state.filters = {'min_ev': 1.0, 'min_books': 3}
+                st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
-@st.fragment  
+
+@st.fragment
 def render_stats_popup():
     """Render the stats popup"""
     if st.session_state.show_stats_modal:
-        # Overlay to catch clicks outside
-        if st.button("", key="stats_overlay",
-                    help="Click to close stats", 
-                    use_container_width=True):
+        st.markdown(
+            """
+            <div class="popup-overlay" onclick="window.close()"></div>
+            """,
+            unsafe_allow_html=True
+        )
+        st.markdown('<div class="popup-content stats-popup">', unsafe_allow_html=True)
+        st.markdown("**STATISTICS**")
+        
+        # Calculate stats
+        opportunities_df = st.session_state.opportunities
+        last_update = st.session_state.last_refresh.strftime("%H:%M:%S") if st.session_state.last_refresh else "Never"
+        total_opps = len(opportunities_df)
+        avg_ev = opportunities_df['Splash_EV_Percentage'].mean() if not opportunities_df.empty else 0
+        best_ev = opportunities_df['Splash_EV_Percentage'].max() if not opportunities_df.empty else 0
+        
+        # Display stats
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Last Updated", last_update)
+            st.metric("Average EV", f"{avg_ev:.2%}")
+        with col2:
+            st.metric("Opportunities", total_opps)
+            st.metric("Best EV", f"{best_ev:.2%}")
+        
+        if st.button("Close", key="close_stats", type="primary", use_container_width=True):
             st.session_state.show_stats_modal = False
             st.rerun()
         
-        with st.container():
-            st.markdown("**STATISTICS**")
-            
-            # Calculate stats
-            opportunities_df = st.session_state.opportunities
-            last_update = st.session_state.last_refresh.strftime("%H:%M:%S") if st.session_state.last_refresh else "Never"
-            total_opps = len(opportunities_df)
-            avg_ev = opportunities_df['Splash_EV_Percentage'].mean() if not opportunities_df.empty else 0
-            best_ev = opportunities_df['Splash_EV_Percentage'].max() if not opportunities_df.empty else 0
-            
-            # Display stats
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Last Updated", last_update)
-                st.metric("Average EV", f"{avg_ev:.2%}")
-            with col2:
-                st.metric("Opportunities", total_opps)  
-                st.metric("Best EV", f"{best_ev:.2%}")
-            
-            if st.button("Close", key="close_stats", type="primary", use_container_width=True):
-                st.session_state.show_stats_modal = False
-                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-def render_opportunity_card(row):
-    """Render an individual opportunity card"""
-    ev_pct = row['Splash_EV_Percentage']
-    
-    # Determine EV class
-    if ev_pct >= 0.05:
-        ev_class = "ev-high"
-    elif ev_pct >= 0.02:
-        ev_class = "ev-medium"
-    else:
-        ev_class = "ev-low"
-    
-    return f"""
-    <div class="opportunity-card">
-        <div class="opportunity-header">
-            <div>
-                <div class="player-name">{row['Player']}</div>
-                <div class="market-info">{row['Market']} - {row['Bet_Type'].title()} {row['Line']}</div>
-                <div class="book-info">Best Book: {row['Best_Sportsbook']} ({row['Best_Odds']:+d})</div>
-            </div>
-            <div style="text-align: right;">
-                <div class="ev-value {ev_class}">{ev_pct:.2%}</div>
-                <div class="ev-details">${row['Splash_EV_Dollars_Per_100']:.2f}/100</div>
-                <div class="book-info">{row['Num_Books_Used']} books</div>
-            </div>
-        </div>
-    </div>
-    """
+
+# --- Helper Functions ---
 
 def render_opportunity_card(row):
     """Render an individual opportunity card"""
@@ -608,6 +594,9 @@ def render_opportunity_card(row):
     
     # Get display name for market
     market_display = get_market_display_name(row['Market'])
+    
+    # You could also add an icon here based on the market:
+    # market_icon = "⚾" if "batter" in row['Market'] else "🧤"
     
     return f"""
     <div class="opportunity-card">
@@ -679,17 +668,18 @@ def apply_filters(df):
     
     return filtered_df
 
+
+# --- Main Application Logic ---
+
 def main():
     """Main application function"""
-    # Initialize session state
     init_session_state()
     
-    # Check environment
     if not check_environment():
         st.error("Environment Error: Missing required credentials")
         st.stop()
     
-    # Initialize EV calculator
+    # Initialize EV calculator only once
     if st.session_state.ev_calculator is None:
         try:
             st.session_state.ev_calculator = EVCalculator()
@@ -698,27 +688,33 @@ def main():
             st.stop()
     
     # Render UI components
-    render_header()
+    st.markdown(f"""
+    <div class="nav-header">
+        <div class="nav-brand">EV Betting Tool</div>
+        <div class="nav-subtitle">Find profitable betting opportunities by comparing Splash Sports and sportsbook odds</div>
+        <div class="sport-tabs">
+            <div class="sport-tab {'active' if st.session_state.active_sport == 'MLB' else ''}" onclick="setSport('MLB')">MLB</div>
+            <div class="sport-tab disabled" title="Coming Soon">NFL</div>
+            <div class="sport-tab disabled" title="Coming Soon">WNBA</div>
+            <div class="sport-tab disabled" title="Coming Soon">NCAAF</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Refresh logic wrapped in a form
+    with st.form("refresh_form"):
+        refresh_submitted = st.form_submit_button("🔄 Refresh", use_container_width=False, key="refresh_button")
+        st.markdown("""
+        </div>
+        """, unsafe_allow_html=True)
+    
     render_market_tabs()
     
     # Handle popups
-    if st.session_state.show_filters_modal:
-        render_filters_popup()
-    
-    if st.session_state.show_stats_modal:
-        render_stats_popup()
-    
-    # Check for refresh button click in header (would need JavaScript integration)
-    # For now, we'll add a hidden refresh button that can be triggered
-    refresh_clicked = st.button("Hidden Refresh", key="hidden_refresh", 
-                               help="This button is hidden but can be triggered by header button")
-    
-    # Apply filters and render opportunities
-    filtered_df = apply_filters(st.session_state.opportunities)
-    render_opportunities(filtered_df)
+    render_filters_popup()
+    render_stats_popup()
     
     # Data refresh logic
-    if refresh_clicked:
+    if refresh_submitted:
         with st.spinner("Fetching and analyzing latest data..."):
             try:
                 opportunities = st.session_state.ev_calculator.run_full_analysis()
@@ -727,13 +723,17 @@ def main():
                 
                 if not opportunities.empty:
                     st.success(f"Found {len(opportunities)} opportunities!")
-                    time.sleep(1)  # Brief pause to show success message
+                    time.sleep(1)
                     st.rerun()
                 else:
                     st.warning("No opportunities found in current data")
                     
             except Exception as e:
                 st.error(f"Error during data fetch: {e}")
+    
+    # Apply filters and render opportunities
+    filtered_df = apply_filters(st.session_state.opportunities)
+    render_opportunities(filtered_df)
     
     # Render status indicator
     render_status_indicator()

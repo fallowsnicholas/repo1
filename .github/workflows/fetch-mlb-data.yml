@@ -32,14 +32,14 @@ jobs:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: python fetch_splash_data.py
     
-    - name: Run Odds API data fetch
-      env:
-        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
-      run: python fetch_odds_data.py
+    # - name: Run Odds API data fetch
+    #   env:
+    #     ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+    #     GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+    #   run: python fetch_odds_data.py
     
-    - name: Run Comprehensive Analysis
-      # This new step runs the main analysis script after data is fetched
-      env:
-        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
-      run: python enhanced_betting_analyzer.py
+    # - name: Run Comprehensive Analysis
+    #   # This new step runs the main analysis script after data is fetched
+    #   env:
+    #     GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+    #   run: python enhanced_betting_analyzer.py

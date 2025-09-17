@@ -5,6 +5,8 @@ from datetime import datetime
 import time
 import os
 from ev_calculator import EVCalculator
+from enhanced_betting_analyzer import EnhancedBettingAnalyzer
+from correlation_analyzer import CorrelationAnalyzer
 
 # Page configuration
 st.set_page_config(
@@ -400,6 +402,12 @@ def init_session_state():
         st.session_state.last_refresh = None
     if 'opportunities' not in st.session_state:
         st.session_state.opportunities = pd.DataFrame()
+    if 'parlay_opportunities' not in st.session_state:
+        st.session_state.parlay_opportunities = []
+    if 'show_parlays' not in st.session_state:
+        st.session_state.show_parlays = False
+    if 'enhanced_analyzer' not in st.session_state:
+        st.session_state.enhanced_analyzer = None
     if 'active_sport' not in st.session_state:
         st.session_state.active_sport = 'MLB'
     if 'active_market' not in st.session_state:
@@ -470,7 +478,7 @@ def render_market_tabs():
     ]
     
     # Create columns for market tabs and special buttons
-    cols = st.columns(len(available_markets) + 2)
+    cols = st.columns(len(available_markets) + 3)
     
     # Market filter tabs (no button styling)
     for i, (display_name, market_key) in enumerate(available_markets):
@@ -481,14 +489,25 @@ def render_market_tabs():
                         help=f"Filter by {display_name}",
                         use_container_width=True):
                 st.session_state.active_market = market_key
+                st.session_state.show_parlays = False  # Hide parlays when switching markets
                 st.rerun()
     
     # Filters button
-    with cols[-2]:
+    with cols[-3]:
         if st.button("FILTERS", key="filters_btn", 
                     help="Adjust minimum EV and book count",
                     use_container_width=True):
             st.session_state.show_filters_modal = True
+            st.rerun()
+                        
+    # NEW: Parlays button
+    with cols[-2]:
+        parlay_count = len(st.session_state.parlay_opportunities)
+        button_text = f"PARLAYS ({parlay_count})" if parlay_count > 0 else "PARLAYS"
+        if st.button(button_text, key="parlays_btn",
+                    help="View correlated parlay opportunities", 
+                    use_container_width=True):
+            st.session_state.show_parlays = not st.session_state.show_parlays
             st.rerun()
     
     # Stats button  
@@ -647,6 +666,85 @@ def render_opportunities(filtered_df):
     
     if len(filtered_df) > 20:
         st.info(f"Showing top 20 of {len(filtered_df)} opportunities. Adjust filters to see more.")
+        
+def render_parlay_opportunities():
+    """Render parlay opportunities section"""
+    if not st.session_state.show_parlays:
+        return
+        
+    st.markdown("### 🎲 Parlay Opportunities")
+    
+    parlay_opportunities = st.session_state.parlay_opportunities
+    
+    if not parlay_opportunities:
+        st.markdown("""
+        <div class="no-data-container">
+            <div class="no-data-title">No Parlay Opportunities Found</div>
+            <div class="no-data-text">Refresh data to analyze correlations and find parlay opportunities.</div>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    st.markdown(f"**{len(parlay_opportunities)} parlay opportunities found**")
+    
+    # Sort by parlay EV estimate
+    sorted_parlays = sorted(parlay_opportunities, key=lambda x: x['parlay_ev_estimate'], reverse=True)
+    
+    # Display top parlay opportunities
+    for i, parlay in enumerate(sorted_parlays[:10], 1):
+        render_parlay_card(i, parlay)
+    
+    if len(parlay_opportunities) > 10:
+        st.info(f"Showing top 10 of {len(parlay_opportunities)} parlay opportunities.")
+
+# ADD NEW FUNCTION: Render individual parlay card
+def render_parlay_card(rank, parlay):
+    """Render an individual parlay opportunity card"""
+    risk_colors = {
+        'Low': '#28a745',
+        'Medium': '#ffc107', 
+        'High': '#dc3545'
+    }
+    
+    risk_color = risk_colors.get(parlay['risk_level'], '#6c757d')
+    
+    # Build props list
+    props_html = ""
+    for j, prop in enumerate(parlay['props'], 1):
+        ev_pct = prop['Splash_EV_Percentage']
+        market_display = get_market_display_name(prop['Market'])
+        props_html += f"""
+        <div style="margin: 0.5rem 0; padding: 0.5rem; background: #f8f9fa; border-radius: 4px; font-size: 0.875rem;">
+            <strong>{prop['Player']}</strong> - {market_display} {prop['Bet_Type'].title()} {prop['Line']}
+            <br><span style="color: #666;">Individual EV: {ev_pct:.2%} | True Prob: {prop['True_Prob']:.1%}</span>
+        </div>
+        """
+    
+    parlay_html = f"""
+    <div class="opportunity-card" style="border-left: 4px solid {risk_color};">
+        <div class="opportunity-header">
+            <div style="flex: 1;">
+                <div class="player-name">#{rank} Parlay - {len(parlay['props'])} Props</div>
+                <div class="market-info">
+                    Risk: <span style="color: {risk_color}; font-weight: 600;">{parlay['risk_level']}</span> | 
+                    Confidence: {parlay['confidence']:.2f} | 
+                    Correlation: {parlay['correlation_score']:.3f}
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div class="ev-value ev-high">{parlay['parlay_ev_estimate']:.3f}</div>
+                <div class="ev-details">Parlay EV Estimate</div>
+            </div>
+        </div>
+        <div style="margin-top: 1rem;">
+            <strong>Props in this parlay:</strong>
+            {props_html}
+        </div>
+    </div>
+    """
+    
+    st.markdown(parlay_html, unsafe_allow_html=True)
+
 
 def render_status_indicator():
     """Render the status indicator at bottom left"""
@@ -681,62 +779,66 @@ def apply_filters(df):
 
 def main():
     """Main application function"""
-    # Initialize session state
-    init_session_state()
+    # ... existing code until data refresh logic ...
     
-    # Check environment
-    if not check_environment():
-        st.error("Environment Error: Missing required credentials")
-        st.stop()
-    
-    # Initialize EV calculator
-    if st.session_state.ev_calculator is None:
+    # Initialize enhanced analyzer
+    if st.session_state.enhanced_analyzer is None:
         try:
-            st.session_state.ev_calculator = EVCalculator()
+            st.session_state.enhanced_analyzer = EnhancedBettingAnalyzer()
         except Exception as e:
-            st.error(f"Failed to initialize EV Calculator: {e}")
-            st.stop()
-    
-    # Render UI components
-    render_header()
-    render_market_tabs()
-    
-    # Handle popups
-    if st.session_state.show_filters_modal:
-        render_filters_popup()
-    
-    if st.session_state.show_stats_modal:
-        render_stats_popup()
-    
-    # Check for refresh button click in header (would need JavaScript integration)
-    # For now, we'll add a hidden refresh button that can be triggered
-    refresh_clicked = st.button("Hidden Refresh", key="hidden_refresh", 
-                               help="This button is hidden but can be triggered by header button")
+            st.error(f"Failed to initialize Enhanced Analyzer: {e}")
+            # Fallback to regular EV calculator
+            pass
     
     # Apply filters and render opportunities
     filtered_df = apply_filters(st.session_state.opportunities)
-    render_opportunities(filtered_df)
     
-    # Data refresh logic
+    # Render parlay section first if active
+    render_parlay_opportunities()
+    
+    # Then render regular opportunities (only if not showing parlays)
+    if not st.session_state.show_parlays:
+        render_opportunities(filtered_df)
+    
+    # MODIFY the refresh logic to include correlation analysis
     if refresh_clicked:
         with st.spinner("Fetching and analyzing latest data..."):
             try:
-                opportunities = st.session_state.ev_calculator.run_full_analysis()
-                st.session_state.opportunities = opportunities
-                st.session_state.last_refresh = datetime.now()
-                
-                if not opportunities.empty:
-                    st.success(f"Found {len(opportunities)} opportunities!")
-                    time.sleep(1)  # Brief pause to show success message
-                    st.rerun()
-                else:
-                    st.warning("No opportunities found in current data")
+                # Use enhanced analyzer if available, otherwise fallback to regular
+                if st.session_state.enhanced_analyzer:
+                    st.text("Running comprehensive analysis (EV + Correlations)...")
+                    results = st.session_state.enhanced_analyzer.run_comprehensive_analysis(save_results=True)
                     
+                    st.session_state.opportunities = results['ev_results']
+                    st.session_state.parlay_opportunities = results['parlay_opportunities']
+                    st.session_state.last_refresh = datetime.now()
+                    
+                    total_individual = len(results['ev_results'])
+                    total_parlays = len(results['parlay_opportunities'])
+                    
+                    if total_individual > 0 or total_parlays > 0:
+                        success_msg = f"Found {total_individual} individual opportunities"
+                        if total_parlays > 0:
+                            success_msg += f" and {total_parlays} parlay opportunities!"
+                        st.success(success_msg)
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.warning("No opportunities found in current data")
+                else:
+                    # Fallback to regular EV analysis
+                    st.text("Running EV analysis...")
+                    opportunities = st.session_state.ev_calculator.run_full_analysis()
+                    st.session_state.opportunities = opportunities
+                    st.session_state.last_refresh = datetime.now()
+                    
+                    if not opportunities.empty:
+                        st.success(f"Found {len(opportunities)} opportunities!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.warning("No opportunities found in current data")
+                        
             except Exception as e:
                 st.error(f"Error during data fetch: {e}")
-    
-    # Render status indicator
-    render_status_indicator()
-
-if __name__ == "__main__":
-    main()
+                st.exception(e)  # Show full traceback for debugging

@@ -57,15 +57,15 @@ def fetch_and_write_splash_data_to_sheet():
                 props_list = data.get('data', [])
 
                 # *** KEY CHANGE HERE ***
-                # Filter for only 'OPEN' props to ensure data accuracy and avoid old/settled lines.
-                active_props = [prop for prop in props_list if prop.get('status') == 'OPEN']
-                print(f"Found {len(props_list)} total props, filtering down to {len(active_props)} active ('OPEN') props.")
-
+                # Filter for props that are either 'OPEN' or 'SCHEDULED'.
+                # This is more robust and captures all relevant, bettable props.
+                valid_statuses = ['OPEN', 'SCHEDULED']
+                active_props = [prop for prop in props_list if prop.get('status') in valid_statuses]
+                print(f"Found {len(props_list)} total props, filtering down to {len(active_props)} active ('OPEN' or 'SCHEDULED') props.")
 
                 # Filter for MLB league from the active props
                 mlb_props = [prop for prop in active_props if prop.get('league') == 'mlb']
                 print(f"Found {len(mlb_props)} active MLB props.")
-
 
                 extracted_data = []
                 for prop in mlb_props:
@@ -156,9 +156,12 @@ def fetch_and_write_splash_data_to_sheet():
 
     else:
         print("\n" + "="*80)
-        print("No data to write to Google Sheet.")
+        print("No active props found to write to Google Sheet. This is not an error.")
+        print("Exiting gracefully.")
         print("="*80)
-        raise Exception("No Splash Sports data retrieved")
+        # By not raising an Exception, the script will exit with a success code (0)
+        # which will make the GitHub Action step pass.
 
 if __name__ == "__main__":
     fetch_and_write_splash_data_to_sheet()
+

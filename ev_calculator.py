@@ -150,7 +150,7 @@ class EVCalculator:
         else:
             return abs(odds) / (abs(odds) + 100)
     
-    def calculate_ev(self, matched_df, min_books=3, min_true_prob=0.50, ev_threshold=0.01):
+    def calculate_ev(self, matched_df, min_books=3, min_true_prob=0.40, ev_threshold=0.01):
         """Calculate Expected Value for matched bets"""
         if matched_df.empty:
             logger.warning("No matched data for EV calculation")

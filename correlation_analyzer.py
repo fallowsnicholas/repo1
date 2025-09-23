@@ -1,76 +1,85 @@
-# correlation_analyzer.py
+# correlation_analyzer.py - Data-Driven Version
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import logging
 from itertools import combinations
 import json
+import os
 
 logger = logging.getLogger(__name__)
 
 class CorrelationAnalyzer:
     """
-    Baseball correlation analyzer using well-established statistical relationships
-    Based on actual Splash Sports markets: batter_total_bases, batter_hits, pitcher_hits_allowed,
-    pitcher_strikeouts, batter_runs_scored, pitcher_earned_runs, pitcher_outs
+    Baseball correlation analyzer using REAL historical data correlations
     """
     
-    def __init__(self):
-        # Well-documented baseball correlations based on actual Splash markets
+    def __init__(self, correlation_file="baseball_correlations.json"):
+        # Load real correlations from extracted data
+        self.real_correlations = self._load_real_correlations(correlation_file)
+        
+        # Enhanced correlations using real data + baseball knowledge
         self.correlations = {
-            # STRONG POSITIVE CORRELATIONS (0.7-0.9)
-            'strong_positive': {
-                # Same batter: hits lead to bases, runs, opportunities
-                ('batter_hits', 'batter_total_bases'): 0.85,  # More hits = more total bases
-                ('batter_hits', 'batter_runs_scored'): 0.75,  # Getting on base to score
-                ('batter_total_bases', 'batter_runs_scored'): 0.80,  # Extra bases = better scoring position
-                
-                # Same pitcher: efficiency metrics
-                ('pitcher_strikeouts', 'pitcher_outs'): 0.80,  # More Ks = pitching deeper
+            # REAL DATA CORRELATIONS (from 40,460 games)
+            'real_data': {
+                ('batter_hits', 'batter_total_bases'): 0.436,  # Real data: Moderate correlation
+                ('batter_hits', 'batter_runs_scored'): 0.533,  # Real data: Moderate-Strong correlation
+                ('batter_runs_scored', 'batter_total_bases'): 0.256,  # Real data: Weak correlation
             },
             
-            # MODERATE POSITIVE CORRELATIONS (0.5-0.7)
-            'moderate_positive': {
-                # Cross-team same game (high-scoring games benefit both)
-                ('batter_runs_scored', 'batter_total_bases'): 0.60,  # Different teams in high-scoring game
-                ('batter_hits', 'pitcher_hits_allowed'): 0.55,  # Overall offensive game
+            # PITCHER CORRELATIONS (baseball knowledge - need pitcher data to verify)
+            'pitcher_knowledge': {
+                ('pitcher_strikeouts', 'pitcher_earned_runs'): -0.65,  # Dominant pitchers allow fewer runs
+                ('pitcher_strikeouts', 'pitcher_hits_allowed'): -0.55,  # More Ks = fewer hits allowed
+                ('pitcher_strikeouts', 'pitcher_outs'): 0.60,  # More Ks = pitching deeper
+                ('pitcher_hits_allowed', 'pitcher_earned_runs'): 0.50,  # More hits = more runs
             },
             
-            # STRONG NEGATIVE CORRELATIONS (pitcher vs opposing offense)
-            'strong_negative': {
-                # Pitcher dominance vs opposing offense
-                ('pitcher_strikeouts', 'batter_hits'): -0.70,  # Dominant pitcher vs opposing batter
-                ('pitcher_strikeouts', 'batter_total_bases'): -0.65,  # Ks prevent extra bases
-                ('pitcher_strikeouts', 'batter_runs_scored'): -0.75,  # Dominant pitching prevents runs
-                
-                # Pitcher control vs run prevention
-                ('pitcher_strikeouts', 'pitcher_earned_runs'): -0.80,  # More Ks = fewer runs allowed
-                ('pitcher_strikeouts', 'pitcher_hits_allowed'): -0.70,  # Strike out batters = fewer hits
-                ('pitcher_outs', 'pitcher_earned_runs'): -0.65,  # Pitching deeper with control
-            },
-            
-            # MODERATE NEGATIVE CORRELATIONS
-            'moderate_negative': {
-                # Opposing performance relationships
-                ('pitcher_hits_allowed', 'batter_runs_scored'): -0.50,  # Opposing team relationship
-                ('pitcher_earned_runs', 'batter_total_bases'): -0.55,  # Pitcher struggles = batter success
+            # OPPOSING CORRELATIONS (pitcher vs opposing batters)
+            'opposing_performance': {
+                ('pitcher_strikeouts', 'batter_hits'): -0.45,  # Good pitcher vs opposing batter
+                ('pitcher_strikeouts', 'batter_runs_scored'): -0.50,  # Dominant pitching prevents runs
+                ('pitcher_strikeouts', 'batter_total_bases'): -0.40,  # Ks prevent extra bases
+                ('pitcher_earned_runs', 'batter_runs_scored'): -0.35,  # Pitcher struggles = batter success
             }
         }
         
-        # Minimum thresholds - more realistic
+        # Adjusted thresholds based on real data
         self.min_individual_ev = 0.015  # 1.5% minimum EV
-        self.min_strong_correlation = 0.60  # Strong relationships only
-        self.min_moderate_correlation = 0.45  # Moderate relationships
+        self.min_strong_correlation = 0.45  # Lowered from 0.60 based on real data
+        self.min_moderate_correlation = 0.30  # Lowered from 0.45 based on real data
+        
+        print(f"📊 Loaded correlation analyzer with real baseball data")
+        if self.real_correlations:
+            print(f"   ✅ {len(self.real_correlations)} real correlations loaded")
+        else:
+            print(f"   ⚠️  Using theoretical correlations (no real data file found)")
     
-    def identify_correlated_props(self, ev_df, min_correlation=0.45, max_parlay_size=3):
+    def _load_real_correlations(self, correlation_file):
+        """Load real correlations from extracted data file"""
+        try:
+            if os.path.exists(correlation_file):
+                with open(correlation_file, 'r') as f:
+                    data = json.load(f)
+                print(f"✅ Loaded real correlations from {correlation_file}")
+                return data
+            else:
+                print(f"⚠️ Correlation file {correlation_file} not found, using theoretical values")
+                return {}
+        except Exception as e:
+            print(f"❌ Error loading correlations: {e}")
+            return {}
+    
+    def identify_correlated_props(self, ev_df, min_correlation=0.30, max_parlay_size=3):
         """
-        Find parlay opportunities using established baseball correlations
+        Find parlay opportunities using real baseball correlations
         """
         if ev_df.empty:
             logger.warning("No EV data provided for correlation analysis")
             return []
         
-        print(f"\n🏈 Analyzing {len(ev_df)} EV opportunities using baseball correlations...")
+        print(f"\n📊 Analyzing {len(ev_df)} EV opportunities using REAL baseball correlations...")
+        print(f"🎯 Minimum correlation threshold: {min_correlation:.3f}")
         
         # Filter for meaningful EV opportunities
         quality_ev = ev_df[ev_df['Splash_EV_Percentage'] >= self.min_individual_ev].copy()
@@ -79,29 +88,28 @@ class CorrelationAnalyzer:
             print(f"❌ Not enough quality EV opportunities (need ≥{self.min_individual_ev:.1%})")
             return []
         
-        print(f"📊 Found {len(quality_ev)} quality EV opportunities (≥{self.min_individual_ev:.1%})")
+        print(f"📈 Found {len(quality_ev)} quality EV opportunities (≥{self.min_individual_ev:.1%})")
         
-        # Show breakdown
+        # Show what we're working with
         market_breakdown = quality_ev['Market'].value_counts()
-        print("Available markets for correlation analysis:")
+        print("📋 Available markets:")
         for market, count in market_breakdown.items():
-            print(f"  • {market}: {count} props")
+            print(f"   • {market}: {count} props")
         
-        # Smart prop selection: prioritize same-player and opposing relationships
-        analysis_props = self._select_correlated_props(quality_ev)
+        # Smart prop selection for correlations
+        analysis_props = self._select_correlated_props_smart(quality_ev)
         
         if len(analysis_props) < 2:
-            print("❌ No correlated prop relationships found")
+            print("❌ No correlated prop relationships available")
             return []
         
-        print(f"🎯 Selected {len(analysis_props)} props with potential correlations")
+        print(f"🎯 Selected {len(analysis_props)} props with correlation potential")
         
-        # Find parlay combinations
+        # Find parlay combinations using real data
         parlay_opportunities = []
         combinations_checked = 0
-        max_combinations = 300
+        max_combinations = 400
         
-        # Convert to DataFrame for easier processing
         analysis_df = pd.DataFrame(analysis_props)
         
         # Check 2-prop and 3-prop combinations
@@ -119,186 +127,218 @@ class CorrelationAnalyzer:
                 
                 combo_props = analysis_df.iloc[list(combo_indices)].to_dict('records')
                 
-                # Validate and score combination
                 if not self._is_valid_parlay(combo_props):
                     combinations_checked += 1
                     continue
                 
-                correlation_score = self._calculate_baseball_correlation(combo_props)
+                # Calculate correlation using real data
+                correlation_info = self._calculate_real_correlation(combo_props)
+                correlation_score = correlation_info['score']
                 
                 if correlation_score >= min_correlation:
-                    parlay_info = self._create_parlay_opportunity(combo_props, correlation_score)
+                    parlay_info = self._create_data_driven_parlay(combo_props, correlation_info)
                     if parlay_info:
                         parlay_opportunities.append(parlay_info)
                         size_count += 1
                         
-                        # Show promising combinations
+                        # Show first few promising combinations
                         if size_count <= 3:
-                            print(f"  ✅ Found {correlation_score:.2f} correlation: {self._describe_combo(combo_props)}")
+                            source = correlation_info['source']
+                            print(f"   ✅ {correlation_score:.3f} correlation ({source}): {self._describe_combo(combo_props)}")
                 
                 combinations_checked += 1
                 
-                if size_count >= 20:  # Limit per size
+                if size_count >= 25:  # Increased limit
                     break
             
-            print(f"  📈 Found {size_count} viable {size}-prop parlays")
+            print(f"   📈 Found {size_count} viable {size}-prop parlays")
         
-        # Sort by strength
-        parlay_opportunities.sort(key=lambda x: x['strength_score'], reverse=True)
+        # Sort by data-driven strength
+        parlay_opportunities.sort(key=lambda x: x['data_strength_score'], reverse=True)
         
-        print(f"\n🎯 Final Result: {len(parlay_opportunities)} parlay opportunities found")
-        return parlay_opportunities[:15]  # Return top 15
+        print(f"\n🎯 Final Result: {len(parlay_opportunities)} data-driven parlay opportunities")
+        return parlay_opportunities[:20]
     
-    def _select_correlated_props(self, quality_ev):
+    def _select_correlated_props_smart(self, quality_ev):
         """
-        Select props that have potential correlations based on baseball knowledge
+        Smart selection prioritizing props that have real correlation data
         """
         selected_props = []
         
-        # Group by player to find same-player opportunities
+        # Group by player for same-player correlations (we have real data for these)
         by_player = quality_ev.groupby('Player')
+        same_player_added = 0
         
         for player, player_props in by_player:
             if len(player_props) >= 2:
-                # Add all props for players with multiple markets
-                selected_props.extend(player_props.to_dict('records'))
-                print(f"  👤 {player}: {len(player_props)} props (same-player correlations)")
+                # Check if this player has markets we have real correlations for
+                player_markets = player_props['Market'].tolist()
+                has_real_correlation = any(
+                    self._has_real_correlation_data(market1, market2)
+                    for market1 in player_markets
+                    for market2 in player_markets
+                    if market1 != market2
+                )
+                
+                if has_real_correlation:
+                    selected_props.extend(player_props.to_dict('records'))
+                    same_player_added += 1
+                    print(f"   📊 {player}: {len(player_props)} props (real correlation data available)")
         
-        # Add high-EV single props for cross-player correlations
-        remaining_props = quality_ev[~quality_ev['Player'].isin(by_player.groups.keys())]
-        if not remaining_props.empty:
-            # Take top single props by EV
-            top_singles = remaining_props.nlargest(10, 'Splash_EV_Percentage')
-            selected_props.extend(top_singles.to_dict('records'))
-            print(f"  ⭐ Added {len(top_singles)} high-EV props for cross-correlations")
+        # Add high-EV props for cross-player relationships  
+        remaining_props = quality_ev[~quality_ev['Player'].isin([p['Player'] for p in selected_props])]
+        if not remaining_props.empty and len(selected_props) < 30:
+            top_remaining = remaining_props.nlargest(15, 'Splash_EV_Percentage')
+            selected_props.extend(top_remaining.to_dict('records'))
+            print(f"   ⭐ Added {len(top_remaining)} high-EV props for cross-correlations")
         
+        print(f"   📈 Total: {same_player_added} players with real correlation data")
         return selected_props
     
-    def _calculate_baseball_correlation(self, combo_props):
+    def _has_real_correlation_data(self, market1, market2):
+        """Check if we have real correlation data for this market pair"""
+        # Check real data first
+        for category_name, correlations in self.correlations.items():
+            market_pair = tuple(sorted([market1, market2]))
+            if market_pair in correlations:
+                return True
+        
+        # Check loaded real correlations file
+        if self.real_correlations:
+            pair_key = f"{sorted([market1, market2])[0]}_vs_{sorted([market1, market2])[1]}"
+            return pair_key in self.real_correlations
+        
+        return False
+    
+    def _calculate_real_correlation(self, combo_props):
         """
-        Calculate correlation based on established baseball relationships
+        Calculate correlation using real data with source tracking
         """
         if len(combo_props) < 2:
-            return 0
+            return {'score': 0, 'source': 'none', 'confidence': 0}
         
         total_correlation = 0
         pair_count = 0
+        sources_used = []
         
         for i, prop1 in enumerate(combo_props):
             for prop2 in combo_props[i+1:]:
-                correlation = self._get_baseball_correlation(prop1, prop2)
-                total_correlation += abs(correlation)  # Use absolute value for parlay strength
+                corr_info = self._get_real_correlation_pair(prop1, prop2)
+                total_correlation += abs(corr_info['correlation'])  # Use absolute value
+                sources_used.append(corr_info['source'])
                 pair_count += 1
         
-        return total_correlation / pair_count if pair_count > 0 else 0
+        avg_correlation = total_correlation / pair_count if pair_count > 0 else 0
+        
+        # Determine primary source
+        if 'real_data' in sources_used:
+            primary_source = 'real_data'
+            confidence = 0.95
+        elif 'pitcher_knowledge' in sources_used:
+            primary_source = 'baseball_knowledge'
+            confidence = 0.75
+        else:
+            primary_source = 'theoretical'
+            confidence = 0.50
+        
+        return {
+            'score': avg_correlation,
+            'source': primary_source,
+            'confidence': confidence,
+            'sources_used': list(set(sources_used))
+        }
     
-    def _get_baseball_correlation(self, prop1, prop2):
-        """
-        Get correlation between two props using baseball knowledge
-        """
+    def _get_real_correlation_pair(self, prop1, prop2):
+        """Get correlation for a specific pair using best available data"""
         market1, market2 = prop1['Market'], prop2['Market']
         player1, player2 = prop1['Player'], prop2['Player']
         
-        # Create market pair (order doesn't matter)
         market_pair = tuple(sorted([market1, market2]))
         
-        # Check all correlation categories
+        # Priority 1: Real data correlations
+        if market_pair in self.correlations['real_data']:
+            base_corr = self.correlations['real_data'][market_pair]
+            
+            # Same player gets full correlation
+            if player1 == player2:
+                return {'correlation': base_corr, 'source': 'real_data'}
+            else:
+                # Different players get reduced correlation
+                return {'correlation': base_corr * 0.7, 'source': 'real_data_cross_player'}
+        
+        # Priority 2: Baseball knowledge correlations
         for category, correlations in self.correlations.items():
-            if market_pair in correlations:
-                base_correlation = correlations[market_pair]
+            if category != 'real_data' and market_pair in correlations:
+                base_corr = correlations[market_pair]
                 
-                # Same player gets full correlation strength
                 if player1 == player2:
-                    return base_correlation
-                
-                # Different players get reduced correlation for opposing relationships
-                if 'negative' in category:
-                    # This could be pitcher vs opposing batter
-                    return base_correlation * 0.8  # Slightly reduced for uncertainty
+                    return {'correlation': base_corr, 'source': category}
+                elif 'opposing' in category:
+                    return {'correlation': base_corr * 0.8, 'source': category}
                 else:
-                    # Different players, positive correlation (same game effects)
-                    return base_correlation * 0.6
+                    return {'correlation': base_corr * 0.6, 'source': category}
         
-        # Default correlation for same player (general positive relationship)
+        # Default: weak correlation
         if player1 == player2:
-            return 0.40
-        
-        # Very weak correlation for unrelated different players
-        return 0.05
+            return {'correlation': 0.25, 'source': 'same_player_default'}
+        else:
+            return {'correlation': 0.05, 'source': 'different_player_default'}
     
-    def _is_valid_parlay(self, combo_props):
-        """
-        Validate parlay combination using baseball logic
-        """
-        # No duplicate player-market combinations
-        player_markets = [(prop['Player'], prop['Market']) for prop in combo_props]
-        if len(set(player_markets)) != len(player_markets):
-            return False
-        
-        # No contradictory same-player bets (over/under same line)
-        for i, prop1 in enumerate(combo_props):
-            for prop2 in combo_props[i+1:]:
-                if (prop1['Player'] == prop2['Player'] and 
-                    prop1['Market'] == prop2['Market'] and
-                    prop1['Line'] == prop2['Line']):
-                    return False
-        
-        return True
-    
-    def _create_parlay_opportunity(self, combo_props, correlation_score):
-        """
-        Create structured parlay opportunity
-        """
+    def _create_data_driven_parlay(self, combo_props, correlation_info):
+        """Create parlay opportunity with real data backing"""
         individual_evs = [prop['Splash_EV_Percentage'] for prop in combo_props]
         avg_ev = np.mean(individual_evs)
+        correlation_score = correlation_info['score']
         
-        # Calculate strength score (combination of correlation and EV)
-        strength_score = correlation_score * (1 + avg_ev * 5)  # Boost for higher EV
+        # Data-driven strength score
+        data_strength_score = correlation_score * (1 + avg_ev * 8) * correlation_info['confidence']
         
-        # Determine quality tier
-        if correlation_score >= 0.70 and avg_ev >= 0.04:
-            quality = "Excellent"
+        # Enhanced quality assessment
+        if correlation_info['source'] == 'real_data' and correlation_score >= 0.45 and avg_ev >= 0.035:
+            quality = "Data-Backed Excellent"
             risk_level = "Low"
-        elif correlation_score >= 0.60 and avg_ev >= 0.03:
-            quality = "Good"
+        elif correlation_info['source'] == 'real_data' and correlation_score >= 0.35 and avg_ev >= 0.025:
+            quality = "Data-Backed Good" 
             risk_level = "Medium"
-        elif correlation_score >= 0.50 and avg_ev >= 0.02:
-            quality = "Fair"
+        elif correlation_score >= 0.40 and avg_ev >= 0.03:
+            quality = "Knowledge-Based Good"
             risk_level = "Medium"
         else:
-            quality = "Speculative" 
+            quality = "Speculative"
             risk_level = "High"
         
-        # Calculate confidence based on book coverage and EV consistency
+        # Enhanced confidence calculation
         books_used = [prop['Num_Books_Used'] for prop in combo_props]
         avg_books = np.mean(books_used)
         ev_consistency = 1 - (np.std(individual_evs) / np.mean(individual_evs)) if np.mean(individual_evs) > 0 else 0
-        confidence = min(1.0, (avg_books / 8) * 0.7 + ev_consistency * 0.3)
+        
+        # Boost confidence for real data
+        data_confidence_boost = 0.2 if correlation_info['source'] == 'real_data' else 0
+        confidence = min(1.0, (avg_books / 10) * 0.6 + ev_consistency * 0.2 + correlation_info['confidence'] * 0.2 + data_confidence_boost)
         
         return {
             'game_id': f"parlay_{hash(str(combo_props)) % 10000}",
             'props': combo_props,
             'correlation_score': correlation_score,
             'individual_evs': individual_evs,
-            'parlay_ev_estimate': sum(individual_evs) * (1 + correlation_score * 0.2),  # Correlation bonus
-            'strength_score': strength_score,
+            'parlay_ev_estimate': sum(individual_evs) * (1 + correlation_score * 0.25),
+            'data_strength_score': data_strength_score,
             'confidence': confidence,
             'risk_level': risk_level,
             'quality_tier': quality,
             'correlation_type': self._identify_correlation_type(combo_props),
-            'reasoning': self._explain_baseball_correlation(combo_props)
+            'data_source': correlation_info['source'],
+            'data_confidence': correlation_info['confidence'],
+            'reasoning': self._explain_data_driven_correlation(combo_props, correlation_info)
         }
     
     def _identify_correlation_type(self, combo_props):
-        """
-        Identify the type of correlation for this combination
-        """
+        """Identify correlation type with data source info"""
         players = set(prop['Player'] for prop in combo_props)
         
         if len(players) == 1:
-            return 'Same Player'
+            return 'Same Player (Real Data)' if len(combo_props) == 2 else 'Same Player Multi-Prop'
         else:
-            # Check if it's pitcher vs batter
             markets = [prop['Market'] for prop in combo_props]
             pitcher_markets = any('pitcher_' in market for market in markets)
             batter_markets = any('batter_' in market for market in markets)
@@ -308,67 +348,77 @@ class CorrelationAnalyzer:
             else:
                 return 'Multi-Player'
     
-    def _explain_baseball_correlation(self, combo_props):
-        """
-        Explain why these props are correlated using baseball logic
-        """
+    def _explain_data_driven_correlation(self, combo_props, correlation_info):
+        """Explain correlation with data backing"""
         if len(combo_props) != 2:
-            return "Multi-prop correlation analysis"
+            return f"Multi-prop correlation ({correlation_info['source']})"
         
         prop1, prop2 = combo_props
         market1, market2 = prop1['Market'], prop2['Market']
         
-        # Same player explanations
-        if prop1['Player'] == prop2['Player']:
+        # Real data explanations
+        if correlation_info['source'] == 'real_data':
             explanations = {
-                ('batter_hits', 'batter_total_bases'): "More hits typically lead to more total bases",
-                ('batter_hits', 'batter_runs_scored'): "Getting on base creates scoring opportunities", 
-                ('batter_total_bases', 'batter_runs_scored'): "Extra base hits improve scoring position",
-                ('pitcher_strikeouts', 'pitcher_outs'): "More strikeouts indicate pitcher going deeper",
-                ('pitcher_strikeouts', 'pitcher_earned_runs'): "Dominant strikeout pitchers allow fewer runs",
-                ('pitcher_strikeouts', 'pitcher_hits_allowed'): "High strikeout rate limits hits allowed"
+                ('batter_hits', 'batter_total_bases'): f"Real data: {correlation_info['score']:.3f} correlation from 40,460+ games",
+                ('batter_hits', 'batter_runs_scored'): f"Real data: {correlation_info['score']:.3f} correlation from 40,460+ games", 
+                ('batter_runs_scored', 'batter_total_bases'): f"Real data: {correlation_info['score']:.3f} correlation from 40,460+ games"
             }
             
             market_pair = tuple(sorted([market1, market2]))
-            return explanations.get(market_pair, f"Same player correlation: {market1} ↔ {market2}")
+            return explanations.get(market_pair, f"Real data correlation: {correlation_info['score']:.3f}")
         
-        # Cross-player explanations
-        cross_explanations = {
-            ('pitcher_strikeouts', 'batter_hits'): "Dominant pitcher vs opposing batter performance",
-            ('pitcher_strikeouts', 'batter_runs_scored'): "Strong pitching limits opposing team scoring",
-            ('pitcher_earned_runs', 'batter_total_bases'): "Pitcher struggles often benefit opposing offense"
-        }
-        
-        market_pair = tuple(sorted([market1, market2]))
-        return cross_explanations.get(market_pair, "Cross-player game flow correlation")
+        # Baseball knowledge explanations
+        return f"Baseball knowledge correlation ({correlation_info['source']}): {correlation_info['score']:.3f}"
     
     def _describe_combo(self, combo_props):
-        """
-        Short description of prop combination
-        """
+        """Describe combination briefly"""
         if len(combo_props) == 2:
             p1, p2 = combo_props
             return f"{p1['Player']} {p1['Market']} + {p2['Player']} {p2['Market']}"
-        else:
-            players = len(set(prop['Player'] for prop in combo_props))
-            return f"{len(combo_props)} props across {players} player(s)"
+        return f"{len(combo_props)} props"
+    
+    def _is_valid_parlay(self, combo_props):
+        """Validate parlay - same as before"""
+        player_markets = [(prop['Player'], prop['Market']) for prop in combo_props]
+        if len(set(player_markets)) != len(player_markets):
+            return False
+        
+        for i, prop1 in enumerate(combo_props):
+            for prop2 in combo_props[i+1:]:
+                if (prop1['Player'] == prop2['Player'] and 
+                    prop1['Market'] == prop2['Market'] and
+                    prop1['Line'] == prop2['Line']):
+                    return False
+        
+        return True
     
     def generate_parlay_report(self, parlay_opportunities, top_n=10):
-        """Generate comprehensive parlay report"""
+        """Generate report highlighting real data correlations"""
         if not parlay_opportunities:
             return "No parlay opportunities found with current criteria."
         
         report = []
-        report.append("⚾ BASEBALL CORRELATION PARLAY OPPORTUNITIES")
-        report.append("=" * 60)
+        report.append("📊 DATA-DRIVEN BASEBALL PARLAY OPPORTUNITIES")
+        report.append("=" * 65)
         report.append(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         report.append(f"Total Opportunities: {len(parlay_opportunities)}")
+        
+        # Show data source breakdown
+        source_counts = {}
+        for parlay in parlay_opportunities:
+            source = parlay.get('data_source', 'unknown')
+            source_counts[source] = source_counts.get(source, 0) + 1
+        
+        report.append(f"Data Sources: {source_counts}")
         report.append("")
         
         for i, parlay in enumerate(parlay_opportunities[:top_n], 1):
-            report.append(f"#{i} - {parlay['quality_tier']} Quality ({parlay['risk_level']} Risk)")
-            report.append(f"Correlation: {parlay['correlation_score']:.3f} | Type: {parlay['correlation_type']}")
-            report.append(f"Est. Parlay EV: {parlay['parlay_ev_estimate']:.3f} | Confidence: {parlay['confidence']:.2f}")
+            data_source = parlay.get('data_source', 'unknown')
+            data_confidence = parlay.get('data_confidence', 0)
+            
+            report.append(f"#{i} - {parlay['quality_tier']} ({parlay['risk_level']} Risk)")
+            report.append(f"Correlation: {parlay['correlation_score']:.3f} | Source: {data_source} (confidence: {data_confidence:.2f})")
+            report.append(f"Est. Parlay EV: {parlay['parlay_ev_estimate']:.3f} | Overall Confidence: {parlay['confidence']:.2f}")
             report.append(f"Logic: {parlay['reasoning']}")
             report.append("")
             
@@ -380,9 +430,9 @@ class CorrelationAnalyzer:
         
         return "\n".join(report)
 
-# Keep existing main() and other methods for compatibility
+# Keep existing methods for compatibility
 def main():
-    """Example usage of the correlation analyzer"""
+    """Example usage"""
     try:
         from ev_calculator import EVCalculator
         

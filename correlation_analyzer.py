@@ -1,326 +1,304 @@
-# correlation_analyzer.py
+# simplified_correlation_analyzer.py
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from itertools import combinations
-import json
 
 logger = logging.getLogger(__name__)
 
-class CorrelationAnalyzer:
+class SimplifiedCorrelationAnalyzer:
     """
-    Analyzes correlations between player props to identify strong parlay opportunities
+    Simple, testable correlation analyzer focused on basic MLB prop relationships
     """
     
     def __init__(self):
-        # Define correlation categories and their expected relationships
-        self.correlation_groups = {
-            'pitcher_performance': {
-                'markets': ['strikeouts', 'earned_runs', 'hits_allowed', 'total_outs'],
-                'relationships': {
-                    ('strikeouts', 'earned_runs'): 'negative',  # More Ks usually means fewer earned runs
-                    ('strikeouts', 'hits_allowed'): 'negative',  # More Ks usually means fewer hits
-                    ('earned_runs', 'hits_allowed'): 'positive',  # More hits often leads to more runs
-                    ('strikeouts', 'total_outs'): 'positive',    # More Ks means pitcher goes deeper
-                }
+        # Define simple, logical correlations based on baseball knowledge
+        self.positive_correlations = {
+            # Same player correlations (strong positive)
+            'same_player_hitting': {
+                ('hits', 'total_bases'): 0.8,
+                ('hits', 'runs'): 0.6,
+                ('hits', 'RBIs'): 0.5,
+                ('total_bases', 'RBIs'): 0.6,
             },
-            'batter_performance': {
-                'markets': ['hits', 'runs', 'RBIs', 'total_bases', 'batter_singles'],
-                'relationships': {
-                    ('hits', 'total_bases'): 'positive',        # More hits usually means more bases
-                    ('hits', 'runs'): 'positive',               # More hits can lead to more runs
-                    ('hits', 'RBIs'): 'positive',               # More hits can lead to more RBIs
-                    ('total_bases', 'RBIs'): 'positive',        # Extra base hits often drive in runs
-                    ('runs', 'hits'): 'positive',               # Getting on base to score
-                }
-            },
-            'pitcher_vs_batter': {
-                'description': 'Cross-correlations between pitcher and opposing batters',
-                'relationships': {
-                    ('pitcher_strikeouts', 'batter_hits'): 'negative',     # Good pitcher vs batter performance
-                    ('pitcher_earned_runs', 'batter_runs'): 'positive',    # Pitcher struggles = batter success
-                    ('pitcher_hits_allowed', 'batter_hits'): 'positive',   # Pitcher allows hits = batters get hits
-                }
-            },
-            'team_correlations': {
-                'description': 'Same team player correlations',
-                'relationships': {
-                    ('batter1_runs', 'batter2_RBIs'): 'positive',          # Teammate scoring and driving in runs
-                    ('batter1_hits', 'batter2_runs'): 'positive',          # Setting up teammates to score
-                }
+            # Same player pitcher correlations
+            'same_player_pitching': {
+                ('strikeouts', 'total_outs'): 0.7,  # More Ks = pitches deeper
             }
         }
-    
-    def get_matchup_data(self, ev_df):
-        """Extract matchup information from EV results"""
-        if ev_df.empty:
-            return pd.DataFrame()
         
-        # Add game identification logic
-        ev_df_copy = ev_df.copy()
+        self.negative_correlations = {
+            # Same player pitcher correlations (negative)
+            'pitcher_performance': {
+                ('strikeouts', 'earned_runs'): -0.6,
+                ('strikeouts', 'hits_allowed'): -0.5,
+                ('total_outs', 'earned_runs'): -0.4,
+            }
+        }
         
-        # Extract team information if available in player names or add game_id field
-        # This would need to be enhanced based on your actual data structure
-        ev_df_copy['game_id'] = ev_df_copy.apply(self._extract_game_id, axis=1)
-        ev_df_copy['player_position'] = ev_df_copy.apply(self._determine_position, axis=1)
-        
-        return ev_df_copy
+        # Minimum EV threshold for parlay consideration
+        self.min_individual_ev = 0.02  # 2%
+        self.min_parlay_correlation = 0.4
     
-    def _extract_game_id(self, row):
-        """Extract game identifier from player/market data"""
-        # This is a placeholder - you'd implement based on your data structure
-        # Could be based on date + teams, or if you have explicit game IDs
-        return f"game_{hash(row['Player']) % 1000}"  # Simplified example
-    
-    def _determine_position(self, row):
-        """Determine if player is pitcher or batter based on market"""
-        pitcher_markets = ['strikeouts', 'earned_runs', 'hits_allowed', 'total_outs']
-        if row['Market'] in pitcher_markets:
-            return 'pitcher'
-        else:
-            return 'batter'
-    
-    def calculate_historical_correlations(self, historical_data_df):
+    def identify_simple_parlays(self, ev_df, max_parlay_size=3):
         """
-        Calculate historical correlations between different prop types
-        This would use historical game data to establish correlation coefficients
-        """
-        correlations = {}
-        
-        if historical_data_df.empty:
-            logger.warning("No historical data provided for correlation analysis")
-            return correlations
-        
-        # Group by game to analyze within-game correlations
-        for game_id, game_data in historical_data_df.groupby('game_id'):
-            if len(game_data) < 2:
-                continue
-                
-            # Calculate correlations between different props in the same game
-            for (idx1, row1), (idx2, row2) in combinations(game_data.iterrows(), 2):
-                prop_pair = tuple(sorted([
-                    f"{row1['player_position']}_{row1['Market']}", 
-                    f"{row2['player_position']}_{row2['Market']}"
-                ]))
-                
-                if prop_pair not in correlations:
-                    correlations[prop_pair] = {'outcomes': [], 'count': 0}
-                
-                # You'd implement actual outcome correlation logic here
-                # This is simplified for demonstration
-                correlations[prop_pair]['count'] += 1
-        
-        return correlations
-    
-    def identify_correlated_props(self, ev_df, min_correlation=0.3, max_parlay_size=4):
-        """
-        Identify sets of props that are positively correlated for parlay construction
+        Find simple, logical parlay opportunities based on basic correlations
         """
         if ev_df.empty:
-            logger.warning("No EV data provided for correlation analysis")
+            logger.warning("No EV data provided")
             return []
         
-        matchup_df = self.get_matchup_data(ev_df)
+        print(f"\nAnalyzing {len(ev_df)} EV opportunities for parlay combinations...")
+        
+        # Filter to only positive EV opportunities
+        positive_ev = ev_df[ev_df['Splash_EV_Percentage'] >= self.min_individual_ev].copy()
+        
+        if len(positive_ev) < 2:
+            print("Not enough positive EV opportunities for parlays")
+            return []
+        
+        print(f"Found {len(positive_ev)} positive EV opportunities to analyze")
+        
         parlay_opportunities = []
         
-        # Group by game to find within-game correlations
-        for game_id, game_props in matchup_df.groupby('game_id'):
-            if len(game_props) < 2:
-                continue
-            
-            # Find correlated prop combinations
-            prop_combinations = self._find_prop_combinations(game_props, max_parlay_size)
-            
-            for combo in prop_combinations:
-                correlation_score = self._calculate_combo_correlation(combo)
+        # Generate all combinations of 2-3 props
+        for size in range(2, min(max_parlay_size + 1, len(positive_ev) + 1)):
+            for combo_indices in combinations(range(len(positive_ev)), size):
+                combo_props = positive_ev.iloc[list(combo_indices)]
                 
-                if correlation_score >= min_correlation:
-                    parlay_ev = self._calculate_parlay_ev(combo)
-                    
-                    parlay_opportunities.append({
-                        'game_id': game_id,
-                        'props': combo,
-                        'correlation_score': correlation_score,
-                        'individual_evs': [prop['Splash_EV_Percentage'] for prop in combo],
-                        'parlay_ev_estimate': parlay_ev,
-                        'confidence': self._calculate_confidence(combo),
-                        'risk_level': self._assess_risk_level(combo)
-                    })
+                # Check if this is a valid parlay combination
+                parlay_info = self._analyze_combination(combo_props)
+                
+                if parlay_info and parlay_info['correlation_score'] >= self.min_parlay_correlation:
+                    parlay_opportunities.append(parlay_info)
         
-        # Sort by parlay EV estimate
-        parlay_opportunities.sort(key=lambda x: x['parlay_ev_estimate'], reverse=True)
+        # Sort by estimated parlay value
+        parlay_opportunities.sort(key=lambda x: x['estimated_value'], reverse=True)
         
-        logger.info(f"Found {len(parlay_opportunities)} potential parlay opportunities")
-        return parlay_opportunities
+        print(f"Found {len(parlay_opportunities)} potential parlay opportunities")
+        return parlay_opportunities[:20]  # Return top 20
     
-    def _find_prop_combinations(self, game_props, max_size):
-        """Find all valid combinations of props within a game"""
-        combinations_list = []
-        props_list = game_props.to_dict('records')
+    def _analyze_combination(self, combo_props):
+        """
+        Analyze a combination of props for parlay viability
+        """
+        props_list = combo_props.to_dict('records')
         
-        # Generate combinations of different sizes
-        for size in range(2, min(max_size + 1, len(props_list) + 1)):
-            for combo in combinations(props_list, size):
-                if self._is_valid_combination(combo):
-                    combinations_list.append(list(combo))
+        # Basic validation
+        if not self._is_valid_parlay(props_list):
+            return None
         
-        return combinations_list
+        # Calculate correlation score
+        correlation_score = self._calculate_correlation_score(props_list)
+        
+        if correlation_score < self.min_parlay_correlation:
+            return None
+        
+        # Estimate parlay value
+        individual_evs = [prop['Splash_EV_Percentage'] for prop in props_list]
+        estimated_value = self._estimate_parlay_value(individual_evs, correlation_score)
+        
+        # Determine risk level
+        risk_level = self._assess_risk(props_list, correlation_score)
+        
+        return {
+            'props': props_list,
+            'num_props': len(props_list),
+            'correlation_score': correlation_score,
+            'correlation_type': self._identify_correlation_type(props_list),
+            'individual_evs': individual_evs,
+            'estimated_value': estimated_value,
+            'avg_individual_ev': np.mean(individual_evs),
+            'risk_level': risk_level,
+            'confidence': self._calculate_confidence(props_list),
+            'reasoning': self._explain_correlation(props_list)
+        }
     
-    def _is_valid_combination(self, prop_combo):
-        """Check if a combination of props is valid for parlaying"""
-        # Avoid same player, same market combinations
-        player_markets = [(prop['Player'], prop['Market']) for prop in prop_combo]
+    def _is_valid_parlay(self, props_list):
+        """
+        Check if a combination is valid for parlaying
+        """
+        # Can't parlay same market for same player
+        player_markets = [(prop['Player'], prop['Market']) for prop in props_list]
         if len(set(player_markets)) != len(player_markets):
             return False
         
-        # Add other validation logic (e.g., avoid conflicting props)
+        # Can't parlay contradictory props (e.g., over/under same line same player)
+        for i, prop1 in enumerate(props_list):
+            for prop2 in props_list[i+1:]:
+                if (prop1['Player'] == prop2['Player'] and 
+                    prop1['Market'] == prop2['Market'] and
+                    prop1['Line'] == prop2['Line']):
+                    return False
+        
         return True
     
-    def _calculate_combo_correlation(self, prop_combo):
-        """Calculate correlation score for a combination of props"""
-        if len(prop_combo) < 2:
-            return 0
-        
+    def _calculate_correlation_score(self, props_list):
+        """
+        Calculate correlation score for the combination
+        """
         total_correlation = 0
         pair_count = 0
         
-        # Analyze each pair in the combination
-        for prop1, prop2 in combinations(prop_combo, 2):
-            correlation = self._get_prop_pair_correlation(prop1, prop2)
-            total_correlation += correlation
-            pair_count += 1
+        for i, prop1 in enumerate(props_list):
+            for prop2 in props_list[i+1:]:
+                correlation = self._get_pair_correlation(prop1, prop2)
+                total_correlation += correlation
+                pair_count += 1
         
         return total_correlation / pair_count if pair_count > 0 else 0
     
-    def _get_prop_pair_correlation(self, prop1, prop2):
-        """Get correlation between two specific props"""
-        # Create prop pair identifier
-        market1 = f"{prop1.get('player_position', 'unknown')}_{prop1['Market']}"
-        market2 = f"{prop2.get('player_position', 'unknown')}_{prop2['Market']}"
-        
-        # Check predefined correlations
-        for group_name, group_data in self.correlation_groups.items():
-            if 'relationships' in group_data:
-                relationships = group_data['relationships']
-                
-                # Check both orderings of the pair
-                for (m1, m2), relationship in relationships.items():
-                    if (m1 == market1 and m2 == market2) or (m1 == market2 and m2 == market1):
-                        if relationship == 'positive':
-                            return 0.6  # Strong positive correlation
-                        elif relationship == 'negative':
-                            return -0.6  # Strong negative correlation (avoid in parlays)
-        
-        # Check same player correlations
+    def _get_pair_correlation(self, prop1, prop2):
+        """
+        Get correlation between two specific props
+        """
+        # Same player correlations
         if prop1['Player'] == prop2['Player']:
             return self._get_same_player_correlation(prop1['Market'], prop2['Market'])
         
-        # Check opposing pitcher-batter correlations
-        if (prop1.get('player_position') == 'pitcher' and prop2.get('player_position') == 'batter') or \
-           (prop1.get('player_position') == 'batter' and prop2.get('player_position') == 'pitcher'):
-            return self._get_pitcher_batter_correlation(prop1, prop2)
-        
-        return 0.1  # Default weak correlation
+        # Different players - assume weak positive correlation for now
+        return 0.1
     
     def _get_same_player_correlation(self, market1, market2):
-        """Get correlation for same player, different markets"""
-        same_player_correlations = {
-            ('hits', 'total_bases'): 0.7,
-            ('hits', 'runs'): 0.5,
-            ('hits', 'RBIs'): 0.4,
-            ('strikeouts', 'earned_runs'): -0.6,
-            ('strikeouts', 'hits_allowed'): -0.5,
-        }
+        """
+        Get correlation for same player, different markets
+        """
+        # Check positive correlations
+        for category, correlations in self.positive_correlations.items():
+            for (m1, m2), corr in correlations.items():
+                if (m1 == market1 and m2 == market2) or (m1 == market2 and m2 == market1):
+                    return corr
         
-        pair = tuple(sorted([market1, market2]))
-        return same_player_correlations.get(pair, 0.2)
+        # Check negative correlations  
+        for category, correlations in self.negative_correlations.items():
+            for (m1, m2), corr in correlations.items():
+                if (m1 == market1 and m2 == market2) or (m1 == market2 and m2 == market1):
+                    return corr
+        
+        # Default weak positive correlation for same player
+        return 0.2
     
-    def _get_pitcher_batter_correlation(self, pitcher_prop, batter_prop):
-        """Get correlation between pitcher and opposing batter performance"""
-        # Generally negative correlations (pitcher success vs batter success)
-        return -0.4
+    def _estimate_parlay_value(self, individual_evs, correlation_score):
+        """
+        Estimate the value of the parlay
+        """
+        # Simple estimation: sum of individual EVs adjusted by correlation
+        base_value = sum(individual_evs)
+        
+        # Positive correlation bonus
+        correlation_multiplier = 1 + (correlation_score * 0.3)  # Up to 30% bonus
+        
+        # Parlay difficulty penalty (more legs = harder)
+        difficulty_penalty = 0.9 ** len(individual_evs)
+        
+        return base_value * correlation_multiplier * difficulty_penalty
     
-    def _calculate_parlay_ev(self, prop_combo):
-        """Estimate parlay EV considering correlations"""
-        individual_evs = [prop['Splash_EV_Percentage'] for prop in prop_combo]
-        individual_probs = [prop['True_Prob'] for prop in prop_combo]
+    def _assess_risk(self, props_list, correlation_score):
+        """
+        Assess risk level of the parlay
+        """
+        num_props = len(props_list)
+        avg_ev = np.mean([prop['Splash_EV_Percentage'] for prop in props_list])
         
-        # Simple multiplicative model adjusted for correlation
-        base_parlay_prob = np.prod(individual_probs)
-        correlation_adjustment = 1.0  # Would be more sophisticated with real correlation data
-        
-        adjusted_prob = base_parlay_prob * correlation_adjustment
-        parlay_multiplier = len(prop_combo) * 1.5  # Bonus for successful parlays
-        
-        return sum(individual_evs) * parlay_multiplier * adjusted_prob
-    
-    def _calculate_confidence(self, prop_combo):
-        """Calculate confidence level for the parlay"""
-        # Based on number of books, EV consistency, etc.
-        avg_books = np.mean([prop['Num_Books_Used'] for prop in prop_combo])
-        ev_consistency = 1 - np.std([prop['Splash_EV_Percentage'] for prop in prop_combo])
-        
-        return min(1.0, (avg_books / 10) * ev_consistency)
-    
-    def _assess_risk_level(self, prop_combo):
-        """Assess risk level of the parlay"""
-        avg_prob = np.mean([prop['True_Prob'] for prop in prop_combo])
-        combo_size = len(prop_combo)
-        
-        if avg_prob > 0.7 and combo_size <= 2:
+        if num_props == 2 and avg_ev > 0.05 and correlation_score > 0.6:
             return 'Low'
-        elif avg_prob > 0.6 and combo_size <= 3:
+        elif num_props <= 3 and avg_ev > 0.03 and correlation_score > 0.4:
             return 'Medium'
         else:
             return 'High'
     
+    def _calculate_confidence(self, props_list):
+        """
+        Calculate confidence in the parlay
+        """
+        avg_books = np.mean([prop['Num_Books_Used'] for prop in props_list])
+        avg_ev = np.mean([prop['Splash_EV_Percentage'] for prop in props_list])
+        
+        # More books and higher EV = higher confidence
+        book_score = min(1.0, avg_books / 8)  # Normalize to 0-1
+        ev_score = min(1.0, avg_ev / 0.10)    # Normalize to 0-1
+        
+        return (book_score + ev_score) / 2
+    
+    def _identify_correlation_type(self, props_list):
+        """
+        Identify the type of correlation
+        """
+        if len(set(prop['Player'] for prop in props_list)) == 1:
+            return 'Same Player'
+        else:
+            return 'Multi-Player'
+    
+    def _explain_correlation(self, props_list):
+        """
+        Provide reasoning for why props are correlated
+        """
+        if len(set(prop['Player'] for prop in props_list)) == 1:
+            player = props_list[0]['Player']
+            markets = [prop['Market'] for prop in props_list]
+            return f"Same player ({player}) correlations between {', '.join(markets)}"
+        else:
+            return "Multi-player correlation analysis"
+    
     def generate_parlay_report(self, parlay_opportunities, top_n=10):
-        """Generate a formatted report of top parlay opportunities"""
+        """
+        Generate a readable report of parlay opportunities
+        """
         if not parlay_opportunities:
-            return "No parlay opportunities found."
+            return "No parlay opportunities found with current criteria."
         
         report = []
-        report.append("🎯 TOP PARLAY OPPORTUNITIES")
-        report.append("=" * 50)
+        report.append("🎯 SIMPLIFIED PARLAY OPPORTUNITIES")
+        report.append("=" * 60)
+        report.append(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        report.append(f"Total Opportunities Found: {len(parlay_opportunities)}")
+        report.append("")
         
         for i, parlay in enumerate(parlay_opportunities[:top_n], 1):
-            report.append(f"\n#{i} PARLAY (Risk: {parlay['risk_level']}, Confidence: {parlay['confidence']:.2f})")
+            report.append(f"#{i} - {parlay['correlation_type']} Parlay ({parlay['risk_level']} Risk)")
             report.append(f"Correlation Score: {parlay['correlation_score']:.3f}")
-            report.append(f"Estimated Parlay EV: {parlay['parlay_ev_estimate']:.3f}")
+            report.append(f"Estimated Value: {parlay['estimated_value']:.4f}")
+            report.append(f"Confidence: {parlay['confidence']:.2f}")
+            report.append(f"Reasoning: {parlay['reasoning']}")
+            report.append("")
             
-            report.append("Props:")
             for j, prop in enumerate(parlay['props'], 1):
-                report.append(f"  {j}. {prop['Player']} - {prop['Market']} {prop['Line']} ({prop['Bet_Type']})")
-                report.append(f"     Individual EV: {prop['Splash_EV_Percentage']:.3f} | Prob: {prop['True_Prob']:.3f}")
+                report.append(f"  {j}. {prop['Player']}")
+                report.append(f"     {prop['Market']} - {prop['Bet_Type']} {prop['Line']}")
+                report.append(f"     EV: {prop['Splash_EV_Percentage']:.3f} | Books: {prop['Num_Books_Used']}")
             
-            report.append("-" * 30)
+            report.append("-" * 40)
         
         return "\n".join(report)
 
-def main():
-    """Example usage of the correlation analyzer"""
-    try:
-        # This would typically be called after running the EV calculator
-        from ev_calculator import EVCalculator
-        
-        # Run EV analysis first
-        calculator = EVCalculator()
-        ev_results = calculator.run_full_analysis()
-        
-        if not ev_results.empty:
-            # Analyze correlations and find parlay opportunities
-            analyzer = CorrelationAnalyzer()
-            parlays = analyzer.identify_correlated_props(ev_results)
-            
-            # Generate and print report
-            report = analyzer.generate_parlay_report(parlays)
-            print(report)
-        else:
-            print("No EV results available for correlation analysis")
-            
-    except Exception as e:
-        print(f"Error in correlation analysis: {e}")
+def test_correlation_analyzer():
+    """
+    Test function to verify the analyzer works
+    """
+    print("Testing Simplified Correlation Analyzer...")
+    
+    # Create sample EV data for testing
+    sample_data = [
+        {'Player': 'Mike Trout', 'Market': 'hits', 'Line': '1.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.045, 'Num_Books_Used': 6},
+        {'Player': 'Mike Trout', 'Market': 'total_bases', 'Line': '2.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.038, 'Num_Books_Used': 7},
+        {'Player': 'Shohei Ohtani', 'Market': 'strikeouts', 'Line': '6.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.052, 'Num_Books_Used': 8},
+        {'Player': 'Shohei Ohtani', 'Market': 'earned_runs', 'Line': '2.5', 'Bet_Type': 'under', 
+         'Splash_EV_Percentage': 0.041, 'Num_Books_Used': 5},
+    ]
+    
+    test_df = pd.DataFrame(sample_data)
+    
+    analyzer = SimplifiedCorrelationAnalyzer()
+    parlays = analyzer.identify_simple_parlays(test_df)
+    
+    report = analyzer.generate_parlay_report(parlays)
+    print(report)
+    
+    return parlays
 
 if __name__ == "__main__":
-    main()
+    test_correlation_analyzer()

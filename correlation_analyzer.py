@@ -1,15 +1,16 @@
-# simplified_correlation_analyzer.py
+# correlation_analyzer.py
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from itertools import combinations
+import json
 
 logger = logging.getLogger(__name__)
 
-class SimplifiedCorrelationAnalyzer:
+class CorrelationAnalyzer:
     """
-    Simple, testable correlation analyzer focused on basic MLB prop relationships
+    Simplified correlation analyzer focused on basic MLB prop relationships
     """
     
     def __init__(self):
@@ -21,6 +22,7 @@ class SimplifiedCorrelationAnalyzer:
                 ('hits', 'runs'): 0.6,
                 ('hits', 'RBIs'): 0.5,
                 ('total_bases', 'RBIs'): 0.6,
+                ('hits', 'batter_singles'): 0.7,  # More hits often means more singles
             },
             # Same player pitcher correlations
             'same_player_pitching': {
@@ -34,6 +36,7 @@ class SimplifiedCorrelationAnalyzer:
                 ('strikeouts', 'earned_runs'): -0.6,
                 ('strikeouts', 'hits_allowed'): -0.5,
                 ('total_outs', 'earned_runs'): -0.4,
+                ('hits_allowed', 'strikeouts'): -0.5,
             }
         }
         
@@ -41,17 +44,30 @@ class SimplifiedCorrelationAnalyzer:
         self.min_individual_ev = 0.02  # 2%
         self.min_parlay_correlation = 0.4
     
-    def identify_simple_parlays(self, ev_df, max_parlay_size=3):
+    def get_matchup_data(self, ev_df):
+        """Extract matchup information from EV results - simplified version"""
+        if ev_df.empty:
+            return pd.DataFrame()
+        
+        # Just return the original dataframe with some basic grouping
+        ev_df_copy = ev_df.copy()
+        
+        # Simple game grouping - group by similar timing (this is a placeholder)
+        ev_df_copy['game_group'] = ev_df_copy.index // 10  # Group every 10 props as same "game"
+        
+        return ev_df_copy
+    
+    def identify_correlated_props(self, ev_df, min_correlation=0.3, max_parlay_size=4):
         """
-        Find simple, logical parlay opportunities based on basic correlations
+        Identify sets of props that are positively correlated for parlay construction
         """
         if ev_df.empty:
-            logger.warning("No EV data provided")
+            logger.warning("No EV data provided for correlation analysis")
             return []
         
         print(f"\nAnalyzing {len(ev_df)} EV opportunities for parlay combinations...")
         
-        # Filter to only positive EV opportunities
+        # Filter to only positive EV opportunities above threshold
         positive_ev = ev_df[ev_df['Splash_EV_Percentage'] >= self.min_individual_ev].copy()
         
         if len(positive_ev) < 2:
@@ -62,29 +78,33 @@ class SimplifiedCorrelationAnalyzer:
         
         parlay_opportunities = []
         
-        # Generate all combinations of 2-3 props
-        for size in range(2, min(max_parlay_size + 1, len(positive_ev) + 1)):
+        # Generate all combinations of 2-3 props (limit for practical purposes)
+        for size in range(2, min(max_parlay_size + 1, min(len(positive_ev) + 1, 6))):  # Cap at 5 props max
+            combo_count = 0
             for combo_indices in combinations(range(len(positive_ev)), size):
                 combo_props = positive_ev.iloc[list(combo_indices)]
                 
                 # Check if this is a valid parlay combination
-                parlay_info = self._analyze_combination(combo_props)
+                parlay_info = self._analyze_combination(combo_props.to_dict('records'))
                 
-                if parlay_info and parlay_info['correlation_score'] >= self.min_parlay_correlation:
+                if parlay_info and parlay_info['correlation_score'] >= min_correlation:
                     parlay_opportunities.append(parlay_info)
+                    combo_count += 1
+                
+                # Limit combinations to prevent excessive processing
+                if combo_count > 50:  # Max 50 combinations per size
+                    break
         
         # Sort by estimated parlay value
-        parlay_opportunities.sort(key=lambda x: x['estimated_value'], reverse=True)
+        parlay_opportunities.sort(key=lambda x: x['parlay_ev_estimate'], reverse=True)
         
         print(f"Found {len(parlay_opportunities)} potential parlay opportunities")
         return parlay_opportunities[:20]  # Return top 20
     
-    def _analyze_combination(self, combo_props):
+    def _analyze_combination(self, props_list):
         """
         Analyze a combination of props for parlay viability
         """
-        props_list = combo_props.to_dict('records')
-        
         # Basic validation
         if not self._is_valid_parlay(props_list):
             return None
@@ -97,21 +117,21 @@ class SimplifiedCorrelationAnalyzer:
         
         # Estimate parlay value
         individual_evs = [prop['Splash_EV_Percentage'] for prop in props_list]
-        estimated_value = self._estimate_parlay_value(individual_evs, correlation_score)
+        parlay_ev_estimate = self._estimate_parlay_value(individual_evs, correlation_score)
         
         # Determine risk level
-        risk_level = self._assess_risk(props_list, correlation_score)
+        risk_level = self._assess_risk_level(props_list, correlation_score)
+        confidence = self._calculate_confidence(props_list)
         
         return {
+            'game_id': f"parlay_{hash(str(props_list)) % 10000}",  # Simple ID
             'props': props_list,
-            'num_props': len(props_list),
             'correlation_score': correlation_score,
-            'correlation_type': self._identify_correlation_type(props_list),
             'individual_evs': individual_evs,
-            'estimated_value': estimated_value,
-            'avg_individual_ev': np.mean(individual_evs),
+            'parlay_ev_estimate': parlay_ev_estimate,
+            'confidence': confidence,
             'risk_level': risk_level,
-            'confidence': self._calculate_confidence(props_list),
+            'correlation_type': self._identify_correlation_type(props_list),
             'reasoning': self._explain_correlation(props_list)
         }
     
@@ -138,6 +158,9 @@ class SimplifiedCorrelationAnalyzer:
         """
         Calculate correlation score for the combination
         """
+        if len(props_list) < 2:
+            return 0
+        
         total_correlation = 0
         pair_count = 0
         
@@ -157,7 +180,7 @@ class SimplifiedCorrelationAnalyzer:
         if prop1['Player'] == prop2['Player']:
             return self._get_same_player_correlation(prop1['Market'], prop2['Market'])
         
-        # Different players - assume weak positive correlation for now
+        # Different players - assume weak positive correlation
         return 0.1
     
     def _get_same_player_correlation(self, market1, market2):
@@ -194,7 +217,7 @@ class SimplifiedCorrelationAnalyzer:
         
         return base_value * correlation_multiplier * difficulty_penalty
     
-    def _assess_risk(self, props_list, correlation_score):
+    def _assess_risk_level(self, props_list, correlation_score):
         """
         Assess risk level of the parlay
         """
@@ -242,63 +265,53 @@ class SimplifiedCorrelationAnalyzer:
             return "Multi-player correlation analysis"
     
     def generate_parlay_report(self, parlay_opportunities, top_n=10):
-        """
-        Generate a readable report of parlay opportunities
-        """
+        """Generate a formatted report of top parlay opportunities"""
         if not parlay_opportunities:
-            return "No parlay opportunities found with current criteria."
+            return "No parlay opportunities found."
         
         report = []
-        report.append("🎯 SIMPLIFIED PARLAY OPPORTUNITIES")
-        report.append("=" * 60)
-        report.append(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        report.append(f"Total Opportunities Found: {len(parlay_opportunities)}")
-        report.append("")
+        report.append("🎯 TOP PARLAY OPPORTUNITIES")
+        report.append("=" * 50)
         
         for i, parlay in enumerate(parlay_opportunities[:top_n], 1):
-            report.append(f"#{i} - {parlay['correlation_type']} Parlay ({parlay['risk_level']} Risk)")
+            report.append(f"\n#{i} PARLAY (Risk: {parlay['risk_level']}, Confidence: {parlay['confidence']:.2f})")
+            report.append(f"Type: {parlay['correlation_type']}")
             report.append(f"Correlation Score: {parlay['correlation_score']:.3f}")
-            report.append(f"Estimated Value: {parlay['estimated_value']:.4f}")
-            report.append(f"Confidence: {parlay['confidence']:.2f}")
+            report.append(f"Estimated Parlay EV: {parlay['parlay_ev_estimate']:.3f}")
             report.append(f"Reasoning: {parlay['reasoning']}")
-            report.append("")
             
+            report.append("Props:")
             for j, prop in enumerate(parlay['props'], 1):
-                report.append(f"  {j}. {prop['Player']}")
-                report.append(f"     {prop['Market']} - {prop['Bet_Type']} {prop['Line']}")
-                report.append(f"     EV: {prop['Splash_EV_Percentage']:.3f} | Books: {prop['Num_Books_Used']}")
+                report.append(f"  {j}. {prop['Player']} - {prop['Market']} {prop['Line']} ({prop['Bet_Type']})")
+                report.append(f"     Individual EV: {prop['Splash_EV_Percentage']:.3f} | Prob: {prop.get('True_Prob', 0):.3f}")
             
-            report.append("-" * 40)
+            report.append("-" * 30)
         
         return "\n".join(report)
 
-def test_correlation_analyzer():
-    """
-    Test function to verify the analyzer works
-    """
-    print("Testing Simplified Correlation Analyzer...")
-    
-    # Create sample EV data for testing
-    sample_data = [
-        {'Player': 'Mike Trout', 'Market': 'hits', 'Line': '1.5', 'Bet_Type': 'over', 
-         'Splash_EV_Percentage': 0.045, 'Num_Books_Used': 6},
-        {'Player': 'Mike Trout', 'Market': 'total_bases', 'Line': '2.5', 'Bet_Type': 'over', 
-         'Splash_EV_Percentage': 0.038, 'Num_Books_Used': 7},
-        {'Player': 'Shohei Ohtani', 'Market': 'strikeouts', 'Line': '6.5', 'Bet_Type': 'over', 
-         'Splash_EV_Percentage': 0.052, 'Num_Books_Used': 8},
-        {'Player': 'Shohei Ohtani', 'Market': 'earned_runs', 'Line': '2.5', 'Bet_Type': 'under', 
-         'Splash_EV_Percentage': 0.041, 'Num_Books_Used': 5},
-    ]
-    
-    test_df = pd.DataFrame(sample_data)
-    
-    analyzer = SimplifiedCorrelationAnalyzer()
-    parlays = analyzer.identify_simple_parlays(test_df)
-    
-    report = analyzer.generate_parlay_report(parlays)
-    print(report)
-    
-    return parlays
+def main():
+    """Example usage of the correlation analyzer"""
+    try:
+        # This would typically be called after running the EV calculator
+        from ev_calculator import EVCalculator
+        
+        # Run EV analysis first
+        calculator = EVCalculator()
+        ev_results = calculator.run_full_analysis()
+        
+        if not ev_results.empty:
+            # Analyze correlations and find parlay opportunities
+            analyzer = CorrelationAnalyzer()
+            parlays = analyzer.identify_correlated_props(ev_results)
+            
+            # Generate and print report
+            report = analyzer.generate_parlay_report(parlays)
+            print(report)
+        else:
+            print("No EV results available for correlation analysis")
+            
+    except Exception as e:
+        print(f"Error in correlation analysis: {e}")
 
 if __name__ == "__main__":
-    test_correlation_analyzer()
+    main()

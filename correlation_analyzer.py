@@ -57,7 +57,7 @@ class CorrelationAnalyzer:
         
         return ev_df_copy
     
-    def identify_correlated_props(self, ev_df, min_correlation=0.3, max_parlay_size=4):
+    def identify_correlated_props(self, ev_df, min_correlation=0.3, max_parlay_size=3):
         """
         Identify sets of props that are positively correlated for parlay construction
         """
@@ -76,12 +76,28 @@ class CorrelationAnalyzer:
         
         print(f"Found {len(positive_ev)} positive EV opportunities to analyze")
         
-        parlay_opportunities = []
+        # AGGRESSIVE LIMITS to prevent timeout
+        # Only look at top EV opportunities to limit combinations
+        top_ev_limit = min(20, len(positive_ev))  # Max 20 props to consider
+        positive_ev = positive_ev.head(top_ev_limit)
+        print(f"Limiting analysis to top {len(positive_ev)} EV opportunities")
         
-        # Generate all combinations of 2-3 props (limit for practical purposes)
-        for size in range(2, min(max_parlay_size + 1, min(len(positive_ev) + 1, 6))):  # Cap at 5 props max
+        parlay_opportunities = []
+        total_combinations_checked = 0
+        max_total_combinations = 100  # Hard limit on total combinations
+        
+        # Generate combinations starting with size 2, then 3
+        for size in range(2, min(max_parlay_size + 1, min(len(positive_ev) + 1, 4))):  # Cap at 3 props max
             combo_count = 0
+            max_combos_this_size = 50  # Max combinations per size
+            
+            print(f"Checking {size}-prop combinations...")
+            
             for combo_indices in combinations(range(len(positive_ev)), size):
+                if total_combinations_checked >= max_total_combinations:
+                    print(f"Reached maximum combination limit ({max_total_combinations}), stopping analysis")
+                    break
+                    
                 combo_props = positive_ev.iloc[list(combo_indices)]
                 
                 # Check if this is a valid parlay combination
@@ -91,15 +107,23 @@ class CorrelationAnalyzer:
                     parlay_opportunities.append(parlay_info)
                     combo_count += 1
                 
-                # Limit combinations to prevent excessive processing
-                if combo_count > 50:  # Max 50 combinations per size
+                total_combinations_checked += 1
+                
+                # Limit combinations per size to prevent excessive processing
+                if combo_count >= max_combos_this_size:
+                    print(f"Reached max combinations for size {size}, moving to next size")
                     break
+                    
+            if total_combinations_checked >= max_total_combinations:
+                break
+        
+        print(f"Checked {total_combinations_checked} total combinations")
         
         # Sort by estimated parlay value
         parlay_opportunities.sort(key=lambda x: x['parlay_ev_estimate'], reverse=True)
         
         print(f"Found {len(parlay_opportunities)} potential parlay opportunities")
-        return parlay_opportunities[:20]  # Return top 20
+        return parlay_opportunities[:10]  # Return only top 10
     
     def _analyze_combination(self, props_list):
         """

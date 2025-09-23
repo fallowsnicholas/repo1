@@ -96,51 +96,70 @@ class CorrelationAnalyzer:
         for market, count in market_counts.items():
             print(f"  {market}: {count} props")
         
-        # AGGRESSIVE LIMITS to prevent timeout
-        top_ev_limit = min(20, len(positive_ev))
-        positive_ev = positive_ev.head(top_ev_limit)
-        print(f"📊 Limiting analysis to top {len(positive_ev)} EV opportunities")
+        # SMARTER SELECTION: Prioritize players with multiple props for same-player correlations
+        analysis_props = []
+        
+        # First, add all props from players who have multiple props (for same-player correlations)
+        players_with_multiple = player_counts[player_counts >= 2].index
+        for player in players_with_multiple:
+            player_props = positive_ev[positive_ev['Player'] == player]
+            analysis_props.extend(player_props.to_dict('records'))
+            print(f"🎯 Added {len(player_props)} props for {player} (same-player correlations possible)")
+        
+        # Then fill remaining slots with highest EV single-player props
+        remaining_slots = max(0, 20 - len(analysis_props))
+        if remaining_slots > 0:
+            single_player_props = positive_ev[~positive_ev['Player'].isin(players_with_multiple)]
+            if not single_player_props.empty:
+                top_singles = single_player_props.head(remaining_slots)
+                analysis_props.extend(top_singles.to_dict('records'))
+                print(f"📈 Added {len(top_singles)} high-EV single props")
+        
+        print(f"📊 Total props for analysis: {len(analysis_props)}")
         
         parlay_opportunities = []
         total_combinations_checked = 0
-        max_total_combinations = 100
+        max_total_combinations = 200  # Increased since we're being smarter about selection
         valid_combinations = 0
         
+        # Convert back to DataFrame for easier processing
+        analysis_df = pd.DataFrame(analysis_props)
+        
         # Generate combinations starting with size 2, then 3
-        for size in range(2, min(max_parlay_size + 1, min(len(positive_ev) + 1, 4))):
+        for size in range(2, min(max_parlay_size + 1, min(len(analysis_df) + 1, 4))):
             combo_count = 0
-            max_combos_this_size = 50
+            max_combos_this_size = 100  # Increased limit
             
             print(f"\n🔍 Checking {size}-prop combinations...")
             
-            for combo_indices in combinations(range(len(positive_ev)), size):
+            for combo_indices in combinations(range(len(analysis_df)), size):
                 if total_combinations_checked >= max_total_combinations:
                     print(f"⚠️ Reached maximum combination limit ({max_total_combinations}), stopping analysis")
                     break
                     
-                combo_props = positive_ev.iloc[list(combo_indices)]
+                combo_props = analysis_df.iloc[list(combo_indices)]
                 props_list = combo_props.to_dict('records')
                 
-                # Debug: Show what combination we're checking
-                if total_combinations_checked < 5:  # Show first 5 combinations
+                # Debug: Show what combination we're checking (first 10 now)
+                if total_combinations_checked < 10:
                     print(f"  Checking combination {total_combinations_checked + 1}:")
                     for prop in props_list:
                         print(f"    - {prop['Player']} {prop['Market']} {prop['Line']} (EV: {prop['Splash_EV_Percentage']:.3f})")
                 
                 # Check if this is a valid parlay combination
                 if not self._is_valid_parlay(props_list):
-                    if total_combinations_checked < 5:
+                    if total_combinations_checked < 10:
                         print(f"    ❌ Invalid parlay (duplicate player/market or conflicting)")
                     total_combinations_checked += 1
                     continue
                 
                 valid_combinations += 1
-                if total_combinations_checked < 5:
+                if total_combinations_checked < 10:
                     print(f"    ✅ Valid combination")
                 
                 # Calculate correlation
                 correlation_score = self._calculate_correlation_score(props_list)
-                if total_combinations_checked < 5:
+                if total_combinations_checked < 10:
                     print(f"    📊 Correlation score: {correlation_score:.3f} (need ≥{min_correlation})")
                 
                 if correlation_score >= min_correlation:
@@ -148,10 +167,10 @@ class CorrelationAnalyzer:
                     if parlay_info:
                         parlay_opportunities.append(parlay_info)
                         combo_count += 1
-                        if total_combinations_checked < 5:
+                        if total_combinations_checked < 10:
                             print(f"    🎯 Added to parlay opportunities!")
                 else:
-                    if total_combinations_checked < 5:
+                    if total_combinations_checked < 10:
                         print(f"    ❌ Correlation too low")
                 
                 total_combinations_checked += 1

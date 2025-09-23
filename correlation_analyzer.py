@@ -1,4 +1,4 @@
-# correlation_analyzer.py
+# correlation_analyzer.py - Debug Version
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class CorrelationAnalyzer:
     """
-    Simplified correlation analyzer focused on basic MLB prop relationships
+    Simplified correlation analyzer focused on basic MLB prop relationships - DEBUG VERSION
     """
     
     def __init__(self):
@@ -22,11 +22,12 @@ class CorrelationAnalyzer:
                 ('hits', 'runs'): 0.6,
                 ('hits', 'RBIs'): 0.5,
                 ('total_bases', 'RBIs'): 0.6,
-                ('hits', 'batter_singles'): 0.7,  # More hits often means more singles
+                ('hits', 'batter_singles'): 0.7,
+                ('hits', 'singles'): 0.7,  # Alternative market name
             },
             # Same player pitcher correlations
             'same_player_pitching': {
-                ('strikeouts', 'total_outs'): 0.7,  # More Ks = pitches deeper
+                ('strikeouts', 'total_outs'): 0.7,
             }
         }
         
@@ -40,9 +41,9 @@ class CorrelationAnalyzer:
             }
         }
         
-        # Minimum EV threshold for parlay consideration
-        self.min_individual_ev = 0.02  # 2%
-        self.min_parlay_correlation = 0.4
+        # LOWERED THRESHOLDS for debugging
+        self.min_individual_ev = 0.01  # Lowered from 0.02 to 0.01 (1%)
+        self.min_parlay_correlation = 0.2  # Lowered from 0.4 to 0.2
     
     def get_matchup_data(self, ev_df):
         """Extract matchup information from EV results - simplified version"""
@@ -57,7 +58,7 @@ class CorrelationAnalyzer:
         
         return ev_df_copy
     
-    def identify_correlated_props(self, ev_df, min_correlation=0.3, max_parlay_size=3):
+    def identify_correlated_props(self, ev_df, min_correlation=0.2, max_parlay_size=3):  # Lowered min_correlation
         """
         Identify sets of props that are positively correlated for parlay construction
         """
@@ -65,99 +66,115 @@ class CorrelationAnalyzer:
             logger.warning("No EV data provided for correlation analysis")
             return []
         
-        print(f"\nAnalyzing {len(ev_df)} EV opportunities for parlay combinations...")
+        print(f"\n🔍 DEBUGGING: Analyzing {len(ev_df)} EV opportunities for parlay combinations...")
+        
+        # Show EV distribution
+        print(f"EV Distribution:")
+        print(f"  Min EV: {ev_df['Splash_EV_Percentage'].min():.4f}")
+        print(f"  Max EV: {ev_df['Splash_EV_Percentage'].max():.4f}")
+        print(f"  Mean EV: {ev_df['Splash_EV_Percentage'].mean():.4f}")
+        print(f"  Props above {self.min_individual_ev}: {(ev_df['Splash_EV_Percentage'] >= self.min_individual_ev).sum()}")
         
         # Filter to only positive EV opportunities above threshold
         positive_ev = ev_df[ev_df['Splash_EV_Percentage'] >= self.min_individual_ev].copy()
         
         if len(positive_ev) < 2:
-            print("Not enough positive EV opportunities for parlays")
+            print(f"❌ Not enough positive EV opportunities for parlays (need 2+, found {len(positive_ev)})")
             return []
         
-        print(f"Found {len(positive_ev)} positive EV opportunities to analyze")
+        print(f"✅ Found {len(positive_ev)} positive EV opportunities to analyze")
+        
+        # Show player breakdown
+        player_counts = positive_ev['Player'].value_counts()
+        print(f"Player breakdown (top 10):")
+        for player, count in player_counts.head(10).items():
+            print(f"  {player}: {count} props")
+        
+        # Show market breakdown
+        market_counts = positive_ev['Market'].value_counts()
+        print(f"Market breakdown:")
+        for market, count in market_counts.items():
+            print(f"  {market}: {count} props")
         
         # AGGRESSIVE LIMITS to prevent timeout
-        # Only look at top EV opportunities to limit combinations
-        top_ev_limit = min(20, len(positive_ev))  # Max 20 props to consider
+        top_ev_limit = min(20, len(positive_ev))
         positive_ev = positive_ev.head(top_ev_limit)
-        print(f"Limiting analysis to top {len(positive_ev)} EV opportunities")
+        print(f"📊 Limiting analysis to top {len(positive_ev)} EV opportunities")
         
         parlay_opportunities = []
         total_combinations_checked = 0
-        max_total_combinations = 100  # Hard limit on total combinations
+        max_total_combinations = 100
+        valid_combinations = 0
         
         # Generate combinations starting with size 2, then 3
-        for size in range(2, min(max_parlay_size + 1, min(len(positive_ev) + 1, 4))):  # Cap at 3 props max
+        for size in range(2, min(max_parlay_size + 1, min(len(positive_ev) + 1, 4))):
             combo_count = 0
-            max_combos_this_size = 50  # Max combinations per size
+            max_combos_this_size = 50
             
-            print(f"Checking {size}-prop combinations...")
+            print(f"\n🔍 Checking {size}-prop combinations...")
             
             for combo_indices in combinations(range(len(positive_ev)), size):
                 if total_combinations_checked >= max_total_combinations:
-                    print(f"Reached maximum combination limit ({max_total_combinations}), stopping analysis")
+                    print(f"⚠️ Reached maximum combination limit ({max_total_combinations}), stopping analysis")
                     break
                     
                 combo_props = positive_ev.iloc[list(combo_indices)]
+                props_list = combo_props.to_dict('records')
+                
+                # Debug: Show what combination we're checking
+                if total_combinations_checked < 5:  # Show first 5 combinations
+                    print(f"  Checking combination {total_combinations_checked + 1}:")
+                    for prop in props_list:
+                        print(f"    - {prop['Player']} {prop['Market']} {prop['Line']} (EV: {prop['Splash_EV_Percentage']:.3f})")
                 
                 # Check if this is a valid parlay combination
-                parlay_info = self._analyze_combination(combo_props.to_dict('records'))
+                if not self._is_valid_parlay(props_list):
+                    if total_combinations_checked < 5:
+                        print(f"    ❌ Invalid parlay (duplicate player/market or conflicting)")
+                    total_combinations_checked += 1
+                    continue
                 
-                if parlay_info and parlay_info['correlation_score'] >= min_correlation:
-                    parlay_opportunities.append(parlay_info)
-                    combo_count += 1
+                valid_combinations += 1
+                if total_combinations_checked < 5:
+                    print(f"    ✅ Valid combination")
+                
+                # Calculate correlation
+                correlation_score = self._calculate_correlation_score(props_list)
+                if total_combinations_checked < 5:
+                    print(f"    📊 Correlation score: {correlation_score:.3f} (need ≥{min_correlation})")
+                
+                if correlation_score >= min_correlation:
+                    parlay_info = self._analyze_combination(props_list)
+                    if parlay_info:
+                        parlay_opportunities.append(parlay_info)
+                        combo_count += 1
+                        if total_combinations_checked < 5:
+                            print(f"    🎯 Added to parlay opportunities!")
+                else:
+                    if total_combinations_checked < 5:
+                        print(f"    ❌ Correlation too low")
                 
                 total_combinations_checked += 1
                 
                 # Limit combinations per size to prevent excessive processing
                 if combo_count >= max_combos_this_size:
-                    print(f"Reached max combinations for size {size}, moving to next size")
+                    print(f"  📈 Reached max combinations for size {size}, moving to next size")
                     break
                     
             if total_combinations_checked >= max_total_combinations:
                 break
         
-        print(f"Checked {total_combinations_checked} total combinations")
+        print(f"\n📊 SUMMARY:")
+        print(f"  Total combinations checked: {total_combinations_checked}")
+        print(f"  Valid combinations: {valid_combinations}")
+        print(f"  Correlation threshold: {min_correlation}")
+        print(f"  Parlays found: {len(parlay_opportunities)}")
         
         # Sort by estimated parlay value
         parlay_opportunities.sort(key=lambda x: x['parlay_ev_estimate'], reverse=True)
         
-        print(f"Found {len(parlay_opportunities)} potential parlay opportunities")
-        return parlay_opportunities[:10]  # Return only top 10
-    
-    def _analyze_combination(self, props_list):
-        """
-        Analyze a combination of props for parlay viability
-        """
-        # Basic validation
-        if not self._is_valid_parlay(props_list):
-            return None
-        
-        # Calculate correlation score
-        correlation_score = self._calculate_correlation_score(props_list)
-        
-        if correlation_score < self.min_parlay_correlation:
-            return None
-        
-        # Estimate parlay value
-        individual_evs = [prop['Splash_EV_Percentage'] for prop in props_list]
-        parlay_ev_estimate = self._estimate_parlay_value(individual_evs, correlation_score)
-        
-        # Determine risk level
-        risk_level = self._assess_risk_level(props_list, correlation_score)
-        confidence = self._calculate_confidence(props_list)
-        
-        return {
-            'game_id': f"parlay_{hash(str(props_list)) % 10000}",  # Simple ID
-            'props': props_list,
-            'correlation_score': correlation_score,
-            'individual_evs': individual_evs,
-            'parlay_ev_estimate': parlay_ev_estimate,
-            'confidence': confidence,
-            'risk_level': risk_level,
-            'correlation_type': self._identify_correlation_type(props_list),
-            'reasoning': self._explain_correlation(props_list)
-        }
+        print(f"✅ Found {len(parlay_opportunities)} potential parlay opportunities")
+        return parlay_opportunities[:10]
     
     def _is_valid_parlay(self, props_list):
         """
@@ -202,7 +219,8 @@ class CorrelationAnalyzer:
         """
         # Same player correlations
         if prop1['Player'] == prop2['Player']:
-            return self._get_same_player_correlation(prop1['Market'], prop2['Market'])
+            corr = self._get_same_player_correlation(prop1['Market'], prop2['Market'])
+            return corr
         
         # Different players - assume weak positive correlation
         return 0.1
@@ -224,7 +242,41 @@ class CorrelationAnalyzer:
                     return corr
         
         # Default weak positive correlation for same player
-        return 0.2
+        return 0.3  # Increased from 0.2 to 0.3
+    
+    def _analyze_combination(self, props_list):
+        """
+        Analyze a combination of props for parlay viability
+        """
+        # Basic validation
+        if not self._is_valid_parlay(props_list):
+            return None
+        
+        # Calculate correlation score
+        correlation_score = self._calculate_correlation_score(props_list)
+        
+        if correlation_score < self.min_parlay_correlation:
+            return None
+        
+        # Estimate parlay value
+        individual_evs = [prop['Splash_EV_Percentage'] for prop in props_list]
+        parlay_ev_estimate = self._estimate_parlay_value(individual_evs, correlation_score)
+        
+        # Determine risk level
+        risk_level = self._assess_risk_level(props_list, correlation_score)
+        confidence = self._calculate_confidence(props_list)
+        
+        return {
+            'game_id': f"parlay_{hash(str(props_list)) % 10000}",  # Simple ID
+            'props': props_list,
+            'correlation_score': correlation_score,
+            'individual_evs': individual_evs,
+            'parlay_ev_estimate': parlay_ev_estimate,
+            'confidence': confidence,
+            'risk_level': risk_level,
+            'correlation_type': self._identify_correlation_type(props_list),
+            'reasoning': self._explain_correlation(props_list)
+        }
     
     def _estimate_parlay_value(self, individual_evs, correlation_score):
         """

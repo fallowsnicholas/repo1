@@ -4,10 +4,21 @@ name: Fetch MLB Betting Data
 on:
   # Trigger via webhook (repository_dispatch)
   repository_dispatch:
-    types: [fetch-data]
+    types: [fetch-data, fetch-splash-only, fetch-odds-only, run-analysis-only]
   
   # Also allow manual triggering for testing
   workflow_dispatch:
+    inputs:
+      task:
+        description: 'Which task to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+        - all
+        - splash-only
+        - odds-only
+        - analysis-only
 
 jobs:
   fetch-data:
@@ -23,23 +34,24 @@ jobs:
         python-version: '3.9'
     
     - name: Install dependencies
-      # Use requirements.txt for cleaner, more robust dependency management
       run: |
         pip install -r requirements.txt
     
     - name: Run Splash Sports data fetch
+      if: github.event.inputs.task == 'all' || github.event.inputs.task == 'splash-only' || github.event_name == 'repository_dispatch' && (github.event.action == 'fetch-data' || github.event.action == 'fetch-splash-only')
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: python fetch_splash_data.py
     
-    # - name: Run Odds API data fetch
-    #   env:
-    #     ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-    #     GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
-    #   run: python fetch_odds_data.py
+    - name: Run Odds API data fetch
+      if: github.event.inputs.task == 'all' || github.event.inputs.task == 'odds-only' || github.event_name == 'repository_dispatch' && (github.event.action == 'fetch-data' || github.event.action == 'fetch-odds-only')
+      env:
+        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: python fetch_odds_data.py
     
-    # - name: Run Comprehensive Analysis
-    #   # This new step runs the main analysis script after data is fetched
-    #   env:
-    #     GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
-    #   run: python enhanced_betting_analyzer.py
+    - name: Run Comprehensive Analysis
+      if: github.event.inputs.task == 'all' || github.event.inputs.task == 'analysis-only' || github.event_name == 'repository_dispatch' && (github.event.action == 'fetch-data' || github.event.action == 'run-analysis-only')
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: python enhanced_betting_analyzer.py

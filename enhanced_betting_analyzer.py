@@ -1,282 +1,146 @@
-# enhanced_betting_analyzer.py
+# test_correlation_standalone.py
+# Standalone script to test correlation analysis without running full pipeline
+
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import logging
-from ev_calculator import EVCalculator
-from correlation_analyzer import CorrelationAnalyzer
+from simplified_correlation_analyzer import SimplifiedCorrelationAnalyzer
 import json
+import os
+import gspread
+from google.oauth2.service_account import Credentials
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-class EnhancedBettingAnalyzer:
+def load_ev_data_from_sheets():
     """
-    Combines EV calculation with correlation analysis for comprehensive betting analysis
+    Load existing EV results from Google Sheets for testing
     """
-    
-    def __init__(self, google_creds_json=None):
-        self.ev_calculator = EVCalculator(google_creds_json)
-        self.correlation_analyzer = CorrelationAnalyzer()
-        
-        # Configuration parameters
-        self.config = {
-            'ev_threshold': 0.01,
-            'min_correlation': 0.3,
-            'max_parlay_size': 4,
-            'min_books': 3,
-            'min_true_prob': 0.50
-        }
-    
-    def run_comprehensive_analysis(self, save_results=True):
-        """Run both EV and correlation analysis"""
-        try:
-            logger.info("Starting comprehensive betting analysis...")
-            start_time = datetime.now()
-            
-            # Step 1: Run EV Analysis
-            logger.info("Step 1: Running EV analysis...")
-            ev_results = self.ev_calculator.run_full_analysis(save_to_sheets=save_results)
-            
-            if ev_results.empty:
-                logger.warning("No EV opportunities found. Skipping correlation analysis.")
-                return {
-                    'ev_results': ev_results,
-                    'parlay_opportunities': [],
-                    'summary': self._generate_summary(ev_results, [])
-                }
-            
-            # Step 2: Correlation Analysis
-            logger.info("Step 2: Analyzing correlations for parlay opportunities...")
-            parlay_opportunities = self.correlation_analyzer.identify_correlated_props(
-                ev_results,
-                min_correlation=self.config['min_correlation'],
-                max_parlay_size=self.config['max_parlay_size']
-            )
-            
-            # Step 3: Save comprehensive results
-            if save_results:
-                self._save_comprehensive_results(ev_results, parlay_opportunities)
-            
-            # Step 4: Generate summary
-            summary = self._generate_summary(ev_results, parlay_opportunities)
-            
-            end_time = datetime.now()
-            duration = (end_time - start_time).total_seconds()
-            logger.info(f"Comprehensive analysis completed in {duration:.2f} seconds")
-            
-            return {
-                'ev_results': ev_results,
-                'parlay_opportunities': parlay_opportunities,
-                'summary': summary,
-                'analysis_time': end_time.isoformat(),
-                'duration_seconds': duration
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in comprehensive analysis: {e}")
-            raise
-    
-    def _save_comprehensive_results(self, ev_results, parlay_opportunities):
-        """Save both individual and parlay results to Google Sheets"""
-        try:
-            client = self.ev_calculator.connect_to_sheets()
-            
-            # Save individual EV results
-            if not ev_results.empty:
-                self.ev_calculator.save_results_to_sheets(ev_results, client, "EV_RESULTS")
-            
-            # Save parlay opportunities
-            if parlay_opportunities:
-                parlay_df = self._format_parlay_results(parlay_opportunities)
-                self._save_parlay_results(parlay_df, client, "PARLAY_OPPORTUNITIES")
-            
-        except Exception as e:
-            logger.error(f"Error saving comprehensive results: {e}")
-    
-    def _format_parlay_results(self, parlay_opportunities):
-        """Format parlay opportunities into a DataFrame for saving"""
-        formatted_data = []
-        
-        for i, parlay in enumerate(parlay_opportunities, 1):
-            # Create a summary row for each parlay
-            prop_summary = " | ".join([
-                f"{prop['Player']} {prop['Market']} {prop['Line']} ({prop['Bet_Type']})"
-                for prop in parlay['props']
-            ])
-            
-            formatted_data.append({
-                'Parlay_ID': f"PARLAY_{i:03d}",
-                'Game_ID': parlay['game_id'],
-                'Num_Props': len(parlay['props']),
-                'Props_Summary': prop_summary,
-                'Correlation_Score': parlay['correlation_score'],
-                'Individual_EVs': json.dumps(parlay['individual_evs']),
-                'Parlay_EV_Estimate': parlay['parlay_ev_estimate'],
-                'Confidence': parlay['confidence'],
-                'Risk_Level': parlay['risk_level'],
-                'Analysis_Time': datetime.now().isoformat()
-            })
-        
-        return pd.DataFrame(formatted_data)
-    
-    def _save_parlay_results(self, parlay_df, client, worksheet_name="PARLAY_OPPORTUNITIES"):
-        """Save parlay results to Google Sheets"""
-        try:
-            spreadsheet = client.open("MLB_Splash_Data")
-            
-            # Try to get existing worksheet or create new one
-            try:
-                worksheet = spreadsheet.worksheet(worksheet_name)
-            except:
-                worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=20)
-            
-            # Clear and update
-            worksheet.clear()
-            
-            metadata = [
-                ['Parlay Analysis Results', ''],
-                ['Last Updated', datetime.now().isoformat()],
-                ['Total Opportunities', len(parlay_df)],
-                ['']
-            ]
-            
-            all_data = metadata + [parlay_df.columns.tolist()] + parlay_df.values.tolist()
-            worksheet.update(range_name='A1', values=all_data)
-            
-            logger.info(f"Saved {len(parlay_df)} parlay opportunities to {worksheet_name}")
-            
-        except Exception as e:
-            logger.error(f"Error saving parlay results: {e}")
-    
-    def _generate_summary(self, ev_results, parlay_opportunities):
-        """Generate comprehensive analysis summary"""
-        summary = {
-            'individual_props': {
-                'total_opportunities': len(ev_results),
-                'avg_ev': ev_results['Splash_EV_Percentage'].mean() if not ev_results.empty else 0,
-                'best_ev': ev_results['Splash_EV_Percentage'].max() if not ev_results.empty else 0,
-                'top_markets': ev_results.groupby('Market').size().to_dict() if not ev_results.empty else {}
-            },
-            'parlay_analysis': {
-                'total_parlays': len(parlay_opportunities),
-                'avg_correlation': np.mean([p['correlation_score'] for p in parlay_opportunities]) if parlay_opportunities else 0,
-                'risk_breakdown': self._get_risk_breakdown(parlay_opportunities),
-                'top_parlay_ev': max([p['parlay_ev_estimate'] for p in parlay_opportunities]) if parlay_opportunities else 0
-            },
-            'recommendations': self._generate_recommendations(ev_results, parlay_opportunities)
-        }
-        
-        return summary
-    
-    def _get_risk_breakdown(self, parlay_opportunities):
-        """Get breakdown of parlays by risk level"""
-        risk_counts = {'Low': 0, 'Medium': 0, 'High': 0}
-        for parlay in parlay_opportunities:
-            risk_counts[parlay['risk_level']] += 1
-        return risk_counts
-    
-    def _generate_recommendations(self, ev_results, parlay_opportunities):
-        """Generate actionable recommendations"""
-        recommendations = []
-        
-        # Individual prop recommendations
-        if not ev_results.empty:
-            top_individual = ev_results.iloc[0]
-            recommendations.append({
-                'type': 'individual',
-                'priority': 'high',
-                'description': f"Best individual prop: {top_individual['Player']} {top_individual['Market']} {top_individual['Line']}",
-                'ev': top_individual['Splash_EV_Percentage'],
-                'confidence': 'high' if top_individual['Num_Books_Used'] >= 5 else 'medium'
-            })
-        
-        # Parlay recommendations
-        if parlay_opportunities:
-            # High-confidence, low-risk parlays
-            safe_parlays = [p for p in parlay_opportunities if p['risk_level'] == 'Low' and p['confidence'] > 0.7]
-            if safe_parlays:
-                best_safe = max(safe_parlays, key=lambda x: x['parlay_ev_estimate'])
-                recommendations.append({
-                    'type': 'parlay',
-                    'priority': 'high',
-                    'description': f"Best safe parlay: {len(best_safe['props'])} props with {best_safe['correlation_score']:.3f} correlation",
-                    'ev': best_safe['parlay_ev_estimate'],
-                    'risk_level': best_safe['risk_level']
-                })
-            
-            # High-value medium-risk parlays
-            medium_risk = [p for p in parlay_opportunities if p['risk_level'] == 'Medium' and p['parlay_ev_estimate'] > 0.1]
-            if medium_risk:
-                best_medium = max(medium_risk, key=lambda x: x['parlay_ev_estimate'])
-                recommendations.append({
-                    'type': 'parlay',
-                    'priority': 'medium',
-                    'description': f"High-value medium-risk parlay: {len(best_medium['props'])} props",
-                    'ev': best_medium['parlay_ev_estimate'],
-                    'risk_level': best_medium['risk_level']
-                })
-        
-        return recommendations
-    
-    def print_analysis_report(self, analysis_results):
-        """Print a comprehensive analysis report"""
-        ev_results = analysis_results['ev_results']
-        parlay_opportunities = analysis_results['parlay_opportunities']
-        summary = analysis_results['summary']
-        
-        print("\n" + "="*60)
-        print("🎯 COMPREHENSIVE BETTING ANALYSIS REPORT")
-        print("="*60)
-        
-        # Individual Props Summary
-        print(f"\n📊 INDIVIDUAL PROPS ANALYSIS")
-        print(f"Total Opportunities: {summary['individual_props']['total_opportunities']}")
-        if summary['individual_props']['total_opportunities'] > 0:
-            print(f"Average EV: {summary['individual_props']['avg_ev']:.3f}")
-            print(f"Best EV: {summary['individual_props']['best_ev']:.3f}")
-            
-            print("\nTop 5 Individual Opportunities:")
-            for i, (_, row) in enumerate(ev_results.head().iterrows(), 1):
-                print(f"  {i}. {row['Player']} - {row['Market']} {row['Line']} ({row['Bet_Type']})")
-                print(f"     EV: {row['Splash_EV_Percentage']:.3f} | Books: {row['Num_Books_Used']} | Best Odds: {row['Best_Odds']}")
-        
-        # Parlay Analysis
-        print(f"\n🎲 PARLAY ANALYSIS")
-        print(f"Total Parlay Opportunities: {summary['parlay_analysis']['total_parlays']}")
-        if summary['parlay_analysis']['total_parlays'] > 0:
-            print(f"Average Correlation: {summary['parlay_analysis']['avg_correlation']:.3f}")
-            print(f"Risk Breakdown: {summary['parlay_analysis']['risk_breakdown']}")
-            
-            # Top parlay opportunities
-            top_parlays = sorted(parlay_opportunities, key=lambda x: x['parlay_ev_estimate'], reverse=True)[:3]
-            print(f"\nTop 3 Parlay Opportunities:")
-            for i, parlay in enumerate(top_parlays, 1):
-                print(f"\n  #{i} - {parlay['risk_level']} Risk (Confidence: {parlay['confidence']:.2f})")
-                print(f"      Correlation: {parlay['correlation_score']:.3f} | Est. EV: {parlay['parlay_ev_estimate']:.3f}")
-                for j, prop in enumerate(parlay['props'], 1):
-                    print(f"      {j}. {prop['Player']} {prop['Market']} {prop['Line']} (EV: {prop['Splash_EV_Percentage']:.3f})")
-        
-        # Recommendations
-        print(f"\n🎯 RECOMMENDATIONS")
-        for rec in summary['recommendations']:
-            priority_emoji = "🔥" if rec['priority'] == 'high' else "⭐" if rec['priority'] == 'medium' else "💡"
-            print(f"{priority_emoji} {rec['description']}")
-            print(f"   EV: {rec['ev']:.3f} | Priority: {rec['priority']}")
-        
-        print("\n" + "="*60)
-
-def main():
-    """Main execution function"""
     try:
-        analyzer = EnhancedBettingAnalyzer()
-        results = analyzer.run_comprehensive_analysis(save_results=True)
-        analyzer.print_analysis_report(results)
+        print("Loading EV data from Google Sheets...")
+        
+        # Connect to sheets
+        scopes = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        
+        service_account_info = json.loads(os.environ['GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'])
+        credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+        client = gspread.authorize(credentials)
+        
+        # Read EV results
+        spreadsheet = client.open("MLB_Splash_Data")
+        worksheet = spreadsheet.worksheet("EV_RESULTS")
+        
+        data = worksheet.get_all_records()
+        if not data:
+            print("No EV data found in sheets")
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(data)
+        print(f"Loaded {len(df)} EV opportunities from sheets")
+        return df
         
     except Exception as e:
-        logger.error(f"Error in main execution: {e}")
-        print(f"❌ Analysis failed: {e}")
+        print(f"Could not load from sheets: {e}")
+        return create_sample_data()
+
+def create_sample_data():
+    """
+    Create realistic sample data for testing when sheets aren't available
+    """
+    print("Creating sample EV data for testing...")
+    
+    sample_data = [
+        # Same player correlations (should create parlays)
+        {'Player': 'Aaron Judge', 'Market': 'hits', 'Line': '1.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.045, 'Num_Books_Used': 6, 'True_Prob': 0.62},
+        {'Player': 'Aaron Judge', 'Market': 'total_bases', 'Line': '2.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.038, 'Num_Books_Used': 7, 'True_Prob': 0.58},
+        {'Player': 'Aaron Judge', 'Market': 'runs', 'Line': '0.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.051, 'Num_Books_Used': 8, 'True_Prob': 0.65},
+        
+        # Pitcher correlations 
+        {'Player': 'Gerrit Cole', 'Market': 'strikeouts', 'Line': '7.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.052, 'Num_Books_Used': 8, 'True_Prob': 0.63},
+        {'Player': 'Gerrit Cole', 'Market': 'earned_runs', 'Line': '2.5', 'Bet_Type': 'under', 
+         'Splash_EV_Percentage': 0.041, 'Num_Books_Used': 5, 'True_Prob': 0.59},
+        {'Player': 'Gerrit Cole', 'Market': 'hits_allowed', 'Line': '5.5', 'Bet_Type': 'under', 
+         'Splash_EV_Percentage': 0.033, 'Num_Books_Used': 6, 'True_Prob': 0.56},
+        
+        # Different players (should have lower correlation)
+        {'Player': 'Mookie Betts', 'Market': 'hits', 'Line': '1.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.042, 'Num_Books_Used': 7, 'True_Prob': 0.61},
+        {'Player': 'Ronald Acuna Jr.', 'Market': 'runs', 'Line': '0.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.047, 'Num_Books_Used': 6, 'True_Prob': 0.64},
+        
+        # Lower EV props (should be filtered out)
+        {'Player': 'Jose Altuve', 'Market': 'hits', 'Line': '1.5', 'Bet_Type': 'over', 
+         'Splash_EV_Percentage': 0.015, 'Num_Books_Used': 4, 'True_Prob': 0.52},
+    ]
+    
+    return pd.DataFrame(sample_data)
+
+def test_correlation_analysis():
+    """
+    Test the correlation analysis with real or sample data
+    """
+    print("="*60)
+    print("TESTING CORRELATION ANALYSIS")
+    print("="*60)
+    
+    # Try to load real data, fall back to sample data
+    ev_df = load_ev_data_from_sheets()
+    
+    if ev_df.empty:
+        print("Using sample data for testing")
+        ev_df = create_sample_data()
+    
+    print(f"\nAnalyzing {len(ev_df)} EV opportunities...")
+    print(f"Data preview:")
+    print(ev_df[['Player', 'Market', 'Splash_EV_Percentage']].head(10))
+    
+    # Run correlation analysis
+    analyzer = SimplifiedCorrelationAnalyzer()
+    parlays = analyzer.identify_simple_parlays(ev_df, max_parlay_size=3)
+    
+    # Generate report
+    report = analyzer.generate_parlay_report(parlays)
+    print("\n" + report)
+    
+    # Save results to file for inspection
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Save detailed results as JSON
+    results_file = f"parlay_test_results_{timestamp}.json"
+    with open(results_file, 'w') as f:
+        # Convert numpy types to native Python types for JSON serialization
+        parlays_for_json = []
+        for parlay in parlays:
+            parlay_copy = parlay.copy()
+            parlay_copy['correlation_score'] = float(parlay_copy['correlation_score'])
+            parlay_copy['estimated_value'] = float(parlay_copy['estimated_value'])
+            parlay_copy['avg_individual_ev'] = float(parlay_copy['avg_individual_ev'])
+            parlay_copy['confidence'] = float(parlay_copy['confidence'])
+            parlay_copy['individual_evs'] = [float(x) for x in parlay_copy['individual_evs']]
+            parlays_for_json.append(parlay_copy)
+        
+        json.dump({
+            'test_date': datetime.now().isoformat(),
+            'total_ev_opportunities': len(ev_df),
+            'parlay_opportunities_found': len(parlays),
+            'parlays': parlays_for_json
+        }, f, indent=2)
+    
+    print(f"\nDetailed results saved to: {results_file}")
+    
+    # Save report as text file
+    report_file = f"parlay_report_{timestamp}.txt"
+    with open(report_file, 'w') as f:
+        f.write(report)
+    
+    print(f"Report saved to: {report_file}")
+    
+    return parlays
 
 if __name__ == "__main__":
-    main()
+    test_correlation_analysis()

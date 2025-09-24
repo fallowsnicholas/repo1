@@ -1,4 +1,4 @@
-# ev_calculator.py
+# enhanced_ev_calculator.py
 import pandas as pd
 import json
 import gspread
@@ -6,14 +6,16 @@ from google.oauth2.service_account import Credentials
 import os
 from datetime import datetime
 import logging
+from matchup_fetcher import MLBMatchupFetcher
+from pitcher_batter_correlator import PitcherBatterCorrelator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class EVCalculator:
+class EnhancedEVCalculator:
     """
-    Handles data fetching from Google Sheets, matching, and EV calculations
+    Enhanced EV Calculator with pitcher vs batter correlation support
     """
     
     def __init__(self, google_creds_json=None):
@@ -31,9 +33,14 @@ class EVCalculator:
             'batter_singles': 'batter_singles',
             'total_bases': 'batter_total_bases',
             'RBIs': 'batter_rbis',
-            'total_outs': 'pitcher_outs'
+            'total_outs': 'pitcher_outs',
+            'singles': 'batter_singles'  # Additional mapping
         }
-    
+        
+        # Initialize components
+        self.matchup_fetcher = MLBMatchupFetcher()
+        self.correlator = PitcherBatterCorrelator()
+        
     def connect_to_sheets(self):
         """Establish connection to Google Sheets"""
         try:
@@ -190,7 +197,6 @@ class EVCalculator:
                 continue
             
             # Calculate Splash Sports EV
-            # Splash pays out based on probability difference from 50%
             splash_ev_dollars = 100 * (true_prob - 0.50)
             splash_ev_percentage = splash_ev_dollars / 100
             
@@ -265,64 +271,180 @@ class EVCalculator:
             logger.error(f"Error saving results to sheets: {e}")
             raise
     
-    def run_full_analysis(self, save_to_sheets=False):
-        """Run the complete EV analysis pipeline"""
+    def save_pitcher_parlays_to_sheets(self, parlays, client, worksheet_name="PITCHER_PARLAYS"):
+        """Save pitcher-based parlays to Google Sheets"""
         try:
-            logger.info("Starting full EV analysis...")
+            if not parlays:
+                logger.warning("No pitcher parlays to save")
+                return
+            
+            logger.info(f"Saving {len(parlays)} pitcher parlays to Google Sheets...")
+            
+            spreadsheet = client.open("MLB_Splash_Data")
+            
+            # Try to get existing worksheet or create new one
+            try:
+                worksheet = spreadsheet.worksheet(worksheet_name)
+            except gspread.WorksheetNotFound:
+                worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1000, cols=25)
+            
+            # Clear existing data
+            worksheet.clear()
+            
+            # Format parlay data for sheets
+            formatted_data = []
+            for i, parlay in enumerate(parlays, 1):
+                anchor = parlay['pitcher_anchor']
+                batters = parlay['correlated_batters']
+                
+                # Create summary row
+                batter_summary = " | ".join([
+                    f"{b['batter_name']} {b['market']} {b['line']} ({b['bet_type']})"
+                    for b in batters
+                ])
+                
+                formatted_data.append([
+                    f"PARLAY_{i:03d}",
+                    parlay['game_context']['pitcher_team'],
+                    parlay['game_context']['opposing_team'],
+                    f"{anchor['pitcher_name']} {anchor['market']} {anchor['line']} ({anchor['bet_type']})",
+                    anchor['ev'],
+                    len(batters),
+                    batter_summary,
+                    parlay['parlay_ev_estimate'],
+                    parlay['avg_correlation_strength'],
+                    parlay['confidence'],
+                    parlay['risk_level'],
+                    parlay['quality_tier'],
+                    parlay['parlay_logic'],
+                    parlay['created_at']
+                ])
+            
+            # Add headers and metadata
+            headers = [
+                'Parlay_ID', 'Pitcher_Team', 'Opposing_Team', 'Pitcher_Anchor', 
+                'Pitcher_EV', 'Num_Batters', 'Batter_Props', 'Parlay_EV_Estimate',
+                'Avg_Correlation', 'Confidence', 'Risk_Level', 'Quality_Tier',
+                'Parlay_Logic', 'Created_At'
+            ]
+            
+            metadata = [
+                ['Pitcher-Based Parlay Analysis', ''],
+                ['Last Updated', datetime.now().isoformat()],
+                ['Total Parlays', len(parlays)],
+                ['']
+            ]
+            
+            all_data = metadata + [headers] + formatted_data
+            
+            # Write to sheet
+            worksheet.update(range_name='A1', values=all_data)
+            
+            logger.info(f"Successfully saved pitcher parlays to {worksheet_name}")
+            
+        except Exception as e:
+            logger.error(f"Error saving pitcher parlays to sheets: {e}")
+            raise
+    
+    def run_enhanced_analysis(self, save_to_sheets=True):
+        """Run the complete enhanced analysis pipeline with pitcher correlations"""
+        try:
+            logger.info("Starting enhanced pitcher-based analysis...")
             start_time = datetime.now()
             
-            # Connect to Google Sheets
+            # Step 1: Get game matchups
+            logger.info("Step 1: Fetching game matchups and lineups...")
+            matchup_data = self.matchup_fetcher.run_matchup_fetch()
+            
+            if not matchup_data or not matchup_data['pitcher_matchups']:
+                logger.warning("No matchup data found - falling back to individual EV only")
+                matchup_data = {'pitcher_matchups': []}
+            
+            # Step 2: Connect to Google Sheets and get data
+            logger.info("Step 2: Reading EV calculation data...")
             client = self.connect_to_sheets()
             
-            # Read data
             splash_df = self.read_splash_data(client)
             odds_df = self.read_odds_data(client)
             
             if splash_df.empty or odds_df.empty:
                 logger.error("Missing required data - cannot proceed with analysis")
-                return pd.DataFrame()
+                return {
+                    'ev_results': pd.DataFrame(),
+                    'pitcher_parlays': [],
+                    'matchup_data': matchup_data
+                }
             
-            # Preprocess odds data
+            # Step 3: Calculate individual EVs
+            logger.info("Step 3: Calculating individual EVs...")
             odds_df = self.preprocess_odds_data(odds_df)
-            
-            # Find matches
             matched_df = self.find_matching_bets(splash_df, odds_df)
             
             if matched_df.empty:
                 logger.warning("No matches found between datasets")
-                return pd.DataFrame()
+                return {
+                    'ev_results': pd.DataFrame(),
+                    'pitcher_parlays': [],
+                    'matchup_data': matchup_data
+                }
             
-            # Calculate EV
             ev_df = self.calculate_ev(matched_df)
             
-            # Optionally save results
-            if save_to_sheets and not ev_df.empty:
-                self.save_results_to_sheets(ev_df, client)
+            # Step 4: Create pitcher-based parlays
+            pitcher_parlays = []
+            if not ev_df.empty and matchup_data['pitcher_matchups']:
+                logger.info("Step 4: Creating pitcher vs batter correlation parlays...")
+                pitcher_parlays = self.correlator.create_all_pitcher_parlays(
+                    ev_df, matchup_data['pitcher_matchups']
+                )
+            else:
+                logger.warning("Skipping pitcher parlays - insufficient data")
+            
+            # Step 5: Save results
+            if save_to_sheets:
+                logger.info("Step 5: Saving results to Google Sheets...")
+                if not ev_df.empty:
+                    self.save_results_to_sheets(ev_df, client, "EV_RESULTS")
+                
+                if pitcher_parlays:
+                    self.save_pitcher_parlays_to_sheets(pitcher_parlays, client, "PITCHER_PARLAYS")
             
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
             
-            logger.info(f"Analysis completed in {duration:.2f} seconds")
-            logger.info(f"Found {len(ev_df)} EV opportunities")
+            logger.info(f"Enhanced analysis completed in {duration:.2f} seconds")
+            logger.info(f"Found {len(ev_df)} individual EV opportunities")
+            logger.info(f"Found {len(pitcher_parlays)} pitcher-based parlay opportunities")
             
-            return ev_df
+            return {
+                'ev_results': ev_df,
+                'pitcher_parlays': pitcher_parlays,
+                'matchup_data': matchup_data,
+                'analysis_duration': duration
+            }
             
         except Exception as e:
-            logger.error(f"Error in full analysis: {e}")
+            logger.error(f"Error in enhanced analysis: {e}")
             raise
 
 def main():
     """Main function for standalone execution"""
     try:
-        calculator = EVCalculator()
-        results = calculator.run_full_analysis(save_to_sheets=True)
+        calculator = EnhancedEVCalculator()
+        results = calculator.run_enhanced_analysis(save_to_sheets=True)
         
-        if not results.empty:
-            print(f"\n✅ Found {len(results)} EV opportunities:")
-            print(results.head(10).to_string(index=False))
-        else:
-            print("❌ No EV opportunities found")
-            
+        print(f"\n✅ ENHANCED ANALYSIS COMPLETE:")
+        print(f"   Individual EV Opportunities: {len(results['ev_results'])}")
+        print(f"   Pitcher-Based Parlays: {len(results['pitcher_parlays'])}")
+        
+        if results['pitcher_parlays']:
+            print(f"\nTop 3 Pitcher Parlays:")
+            for i, parlay in enumerate(results['pitcher_parlays'][:3], 1):
+                anchor = parlay['pitcher_anchor']
+                batters_count = len(parlay['correlated_batters'])
+                print(f"  {i}. {anchor['pitcher_name']} + {batters_count} opposing batters")
+                print(f"     EV: {parlay['parlay_ev_estimate']:.3f} | Quality: {parlay['quality_tier']}")
+        
     except Exception as e:
         print(f"❌ Error: {e}")
 

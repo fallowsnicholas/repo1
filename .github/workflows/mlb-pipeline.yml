@@ -1,0 +1,158 @@
+name: MLB Pitcher-Batter Correlation Pipeline
+
+on:
+  # Trigger via webhook (repository_dispatch)
+  repository_dispatch:
+    types: [full-pipeline, test-step-1, test-steps-6-7, data-only]
+  
+  # Manual triggering with comprehensive options
+  workflow_dispatch:
+    inputs:
+      pipeline:
+        description: 'Which pipeline to run'
+        required: true
+        default: 'full-pipeline'
+        type: choice
+        options:
+        - full-pipeline
+        - data-only
+        - test-step-1
+        - test-step-2
+        - test-step-3
+        - test-step-4
+        - test-step-5
+        - test-steps-6-7
+        - parlays-only
+
+jobs:
+  mlb-pipeline:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    # STEP 1: Fetch matchups from ESPN
+    - name: "Step 1: Fetch MLB Matchups"
+      if: |
+        github.event.inputs.pipeline == 'full-pipeline' || 
+        github.event.inputs.pipeline == 'data-only' ||
+        github.event.inputs.pipeline == 'test-step-1' ||
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-1')
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Starting Step 1: Fetch MLB Matchups"
+        python fetch_matchups.py
+        echo "✅ Step 1 complete"
+    
+    # STEP 2: Fetch Splash Sports data
+    - name: "Step 2: Fetch Splash Sports Data"
+      if: |
+        github.event.inputs.pipeline == 'full-pipeline' || 
+        github.event.inputs.pipeline == 'data-only' ||
+        github.event.inputs.pipeline == 'test-step-2' ||
+        github.event_name == 'repository_dispatch' && github.event.action == 'full-pipeline'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Starting Step 2: Fetch Splash Sports Data"
+        python fetch_splash.py
+        echo "✅ Step 2 complete"
+    
+    # STEP 3: Fetch targeted odds
+    - name: "Step 3: Fetch Targeted Odds"
+      if: |
+        github.event.inputs.pipeline == 'full-pipeline' || 
+        github.event.inputs.pipeline == 'data-only' ||
+        github.event.inputs.pipeline == 'test-step-3' ||
+        github.event_name == 'repository_dispatch' && github.event.action == 'full-pipeline'
+      env:
+        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Starting Step 3: Fetch Targeted Odds"
+        python fetch_targeted_odds.py
+        echo "✅ Step 3 complete"
+    
+    # STEP 4: Match lines
+    - name: "Step 4: Match Splash to Odds Lines"
+      if: |
+        github.event.inputs.pipeline == 'full-pipeline' || 
+        github.event.inputs.pipeline == 'data-only' ||
+        github.event.inputs.pipeline == 'test-step-4' ||
+        github.event_name == 'repository_dispatch' && github.event.action == 'full-pipeline'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Starting Step 4: Match Lines"
+        python match_lines.py
+        echo "✅ Step 4 complete"
+    
+    # STEP 5: Calculate EV
+    - name: "Step 5: Calculate Expected Values"
+      if: |
+        github.event.inputs.pipeline == 'full-pipeline' || 
+        github.event.inputs.pipeline == 'data-only' ||
+        github.event.inputs.pipeline == 'test-step-5' ||
+        github.event_name == 'repository_dispatch' && github.event.action == 'full-pipeline'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Starting Step 5: Calculate EV"
+        python calculate_ev.py
+        echo "✅ Step 5 complete"
+    
+    # STEP 6: Find pitcher anchors
+    - name: "Step 6: Find Pitcher Anchors"
+      if: |
+        github.event.inputs.pipeline == 'full-pipeline' || 
+        github.event.inputs.pipeline == 'test-steps-6-7' ||
+        github.event.inputs.pipeline == 'parlays-only' ||
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-steps-6-7')
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Starting Step 6: Find Pitcher Anchors"
+        python find_pitcher_anchors.py
+        echo "✅ Step 6 complete"
+    
+    # STEP 7: Build correlation parlays
+    - name: "Step 7: Build Correlation Parlays"
+      if: |
+        github.event.inputs.pipeline == 'full-pipeline' || 
+        github.event.inputs.pipeline == 'test-steps-6-7' ||
+        github.event.inputs.pipeline == 'parlays-only' ||
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-steps-6-7')
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Starting Step 7: Build Correlation Parlays"
+        python build_parlays.py
+        echo "✅ Step 7 complete"
+    
+    # PIPELINE SUMMARY
+    - name: "Pipeline Summary"
+      if: |
+        github.event.inputs.pipeline == 'full-pipeline' || 
+        github.event_name == 'repository_dispatch' && github.event.action == 'full-pipeline'
+      run: |
+        echo "🎉 FULL PIPELINE COMPLETE!"
+        echo "✅ All 7 steps executed successfully"
+        echo "📊 Check Google Sheets for results:"
+        echo "   • MATCHUPS: Today's games and player rosters"
+        echo "   • SPLASH_MLB: Splash Sports props"
+        echo "   • ODDS_API: Targeted odds data"
+        echo "   • MATCHED_LINES: Matched props between sources"
+        echo "   • EV_RESULTS: Expected value opportunities"
+        echo "   • PITCHER_ANCHORS: Pitcher-based parlay anchors"
+        echo "   • CORRELATION_PARLAYS: Final pitcher vs batter parlays"

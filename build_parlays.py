@@ -1,4 +1,4 @@
-# build_parlays.py - Step 7: Build correlated parlays using pitcher anchors vs opposing batters
+# build_parlays.py - Step 7: Build pitcher vs opposing batter correlation parlays (Complete Restructure)
 import pandas as pd
 import numpy as np
 import gspread
@@ -11,45 +11,34 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class ParlayBuilder:
-    """Step 7: Build pitcher vs opposing batter correlation parlays"""
+class CorrelationParlayBuilder:
+    """Step 7: Build pitcher vs opposing batter correlation parlays with proper team matching"""
     
     def __init__(self):
-        # Research-based correlation strengths for pitcher vs opposing batters
+        # Correlation mappings with proper bet direction logic
         self.CORRELATIONS = {
-            # Negative correlations (opposing directions)
-            ('pitcher_strikeouts', 'batter_hits'): {
+            'pitcher_strikeouts': {
+                'opposing_market': 'batter_hits',
+                'correlation': 'negative',  # More strikeouts = fewer hits
                 'strength': -0.70,
-                'logic': 'More strikeouts = fewer hits for opposing batters'
+                'bet_logic': 'opposite'  # If pitcher OVER strikeouts, then batter UNDER hits
             },
-            ('pitcher_strikeouts', 'batter_total_bases'): {
-                'strength': -0.60,
-                'logic': 'Strikeouts prevent extra-base hits'
-            },
-            ('pitcher_strikeouts', 'batter_runs_scored'): {
-                'strength': -0.75,
-                'logic': 'Dominant pitching prevents runs'
-            },
-            
-            # Positive correlations (same directions)
-            ('pitcher_earned_runs', 'batter_runs_scored'): {
+            'pitcher_earned_runs': {
+                'opposing_market': 'batter_runs_scored', 
+                'correlation': 'positive',  # More earned runs allowed = more runs scored
                 'strength': 0.70,
-                'logic': 'Pitcher struggles = opposing batters score more'
+                'bet_logic': 'same'  # If pitcher OVER earned runs, then batter OVER runs
             },
-            ('pitcher_hits_allowed', 'batter_hits'): {
+            'pitcher_hits_allowed': {
+                'opposing_market': 'batter_hits',
+                'correlation': 'positive',  # More hits allowed = more hits
                 'strength': 0.75,
-                'logic': 'Pitcher allows hits = batters get hits'
-            },
-            ('pitcher_hits_allowed', 'batter_total_bases'): {
-                'strength': 0.65,
-                'logic': 'Hits allowed often include extra-base hits'
+                'bet_logic': 'same'  # If pitcher OVER hits allowed, then batter OVER hits
             }
         }
         
-        # Minimum thresholds
-        self.MIN_BATTER_EV = 0.01  # 1% minimum EV for batters
-        self.MIN_CORRELATION_STRENGTH = 0.50  # Only use strong correlations
-        self.MAX_BATTERS_PER_PARLAY = 5  # Up to 5 batters per pitcher
+        self.MIN_BATTER_EV = 0.005  # 0.5% minimum EV for batters
+        self.MAX_BATTERS_PER_PARLAY = 5
     
     def connect_to_sheets(self):
         """Establish connection to Google Sheets"""
@@ -68,41 +57,84 @@ class ParlayBuilder:
             logger.error(f"Failed to connect to Google Sheets: {e}")
             raise
     
-    def read_pitcher_anchors(self, client):
-        """Read pitcher anchor data from Step 6"""
+    def read_matchups(self, client):
+        """Step 1: Read today's matchups to know who plays who"""
         try:
-            print("📋 Reading pitcher anchor data from Step 6...")
+            print("📋 Step 1: Reading matchups from MATCHUPS sheet...")
+            spreadsheet = client.open("MLB_Splash_Data")
+            matchups_worksheet = spreadsheet.worksheet("MATCHUPS")
+            
+            # Get all data and find header row
+            all_data = matchups_worksheet.get_all_values()
+            
+            header_row = -1
+            for i, row in enumerate(all_data):
+                if any(col in row for col in ['Game_ID', 'Away_Team', 'Home_Team']):
+                    header_row = i
+                    break
+            
+            if header_row == -1:
+                print("❌ Could not find header row in MATCHUPS")
+                return pd.DataFrame()
+            
+            headers = all_data[header_row]
+            data_rows = all_data[header_row + 1:]
+            
+            if not data_rows:
+                print("❌ No matchup data found")
+                return pd.DataFrame()
+            
+            matchups_df = pd.DataFrame(data_rows, columns=headers)
+            matchups_df = matchups_df[matchups_df['Game_ID'].notna() & (matchups_df['Game_ID'] != '')]
+            
+            print(f"✅ Found {len(matchups_df)} matchups")
+            
+            # Show the matchups
+            for _, row in matchups_df.iterrows():
+                away = row.get('Away_Abbr', row.get('Away_Team', ''))
+                home = row.get('Home_Abbr', row.get('Home_Team', ''))
+                print(f"   {away} @ {home}")
+            
+            return matchups_df
+            
+        except Exception as e:
+            logger.error(f"Error reading matchups: {e}")
+            print(f"❌ Failed to read matchups: {e}")
+            return pd.DataFrame()
+    
+    def read_pitcher_anchors(self, client):
+        """Step 2: Read pitcher anchors from Step 6"""
+        try:
+            print("📋 Step 2: Reading pitcher anchors from Step 6...")
             spreadsheet = client.open("MLB_Splash_Data")
             anchors_worksheet = spreadsheet.worksheet("PITCHER_ANCHORS")
             
-            # Get all data and skip metadata rows
             all_data = anchors_worksheet.get_all_values()
             
-            # Find where the actual data starts
-            data_start_row = 0
+            # Find header row
+            header_row = -1
             for i, row in enumerate(all_data):
-                if row and row[0] == 'Anchor_ID':
-                    data_start_row = i
+                if any(col in row for col in ['Anchor_ID', 'Player_Name', 'Market']):
+                    header_row = i
                     break
             
-            if data_start_row == 0:
-                data_start_row = 4  # Fallback
+            if header_row == -1:
+                print("❌ Could not find header row in PITCHER_ANCHORS")
+                return pd.DataFrame()
             
-            # Extract headers and data
-            headers = all_data[data_start_row]
-            data_rows = all_data[data_start_row + 1:]
+            headers = all_data[header_row]
+            data_rows = all_data[header_row + 1:]
             
-            # Create DataFrame
             anchors_df = pd.DataFrame(data_rows, columns=headers)
             anchors_df = anchors_df[anchors_df['Anchor_ID'].notna() & (anchors_df['Anchor_ID'] != '')]
             
             # Convert numeric columns
-            numeric_columns = ['Pitcher_EV', 'Num_Books', 'Best_Odds', 'Num_Opposing_Batters']
+            numeric_columns = ['EV', 'Num_Books', 'Best_Odds', 'Correlation_Strength']
             for col in numeric_columns:
                 if col in anchors_df.columns:
                     anchors_df[col] = pd.to_numeric(anchors_df[col], errors='coerce')
             
-            print(f"✅ Successfully read {len(anchors_df)} pitcher anchors")
+            print(f"✅ Found {len(anchors_df)} pitcher anchors")
             return anchors_df
             
         except Exception as e:
@@ -111,30 +143,28 @@ class ParlayBuilder:
             return pd.DataFrame()
     
     def read_all_ev_results(self, client):
-        """Read all EV results to find correlated batter opportunities"""
+        """Read all EV results for batter lookup"""
         try:
             print("📋 Reading all EV results for batter correlation lookup...")
             spreadsheet = client.open("MLB_Splash_Data")
             ev_worksheet = spreadsheet.worksheet("EV_RESULTS")
             
-            # Get all data and skip metadata rows
             all_data = ev_worksheet.get_all_values()
             
-            # Find where the actual data starts
-            data_start_row = 0
+            # Find header row
+            header_row = -1
             for i, row in enumerate(all_data):
-                if row and row[0] in ['Player', 'Name']:
-                    data_start_row = i
+                if any(col in row for col in ['Player', 'Name', 'Market']):
+                    header_row = i
                     break
             
-            if data_start_row == 0:
-                data_start_row = 6  # Fallback
+            if header_row == -1:
+                print("❌ Could not find header row in EV_RESULTS")
+                return pd.DataFrame()
             
-            # Extract headers and data
-            headers = all_data[data_start_row]
-            data_rows = all_data[data_start_row + 1:]
+            headers = all_data[header_row]
+            data_rows = all_data[header_row + 1:]
             
-            # Create DataFrame
             ev_df = pd.DataFrame(data_rows, columns=headers)
             ev_df = ev_df[ev_df['Player'].notna() & (ev_df['Player'] != '')]
             
@@ -144,7 +174,7 @@ class ParlayBuilder:
                 if col in ev_df.columns:
                     ev_df[col] = pd.to_numeric(ev_df[col], errors='coerce')
             
-            print(f"✅ Successfully read {len(ev_df)} total EV opportunities")
+            print(f"✅ Found {len(ev_df)} total EV opportunities")
             return ev_df
             
         except Exception as e:
@@ -152,202 +182,173 @@ class ParlayBuilder:
             print(f"❌ Failed to read EV results: {e}")
             return pd.DataFrame()
     
-    def build_pitcher_parlays(self, pitcher_anchors_df, all_evs_df):
-        """Build correlated parlays for each pitcher anchor"""
+    def match_pitchers_to_opponents(self, pitcher_anchors_df, matchups_df):
+        """Step 3: Match each pitcher to their opposing team"""
+        print("📋 Step 3: Matching pitchers to their opposing teams...")
+        
+        if pitcher_anchors_df.empty or matchups_df.empty:
+            print("❌ Missing pitcher or matchup data")
+            return []
+        
+        pitcher_matchups = []
+        
+        for _, pitcher in pitcher_anchors_df.iterrows():
+            pitcher_name = pitcher['Player_Name']
+            
+            # For now, we'll need to manually map pitcher names to teams
+            # In a real implementation, you'd have team roster data
+            # For this demo, we'll create a mapping structure
+            
+            # Find potential opposing teams from matchups
+            opposing_teams = []
+            for _, matchup in matchups_df.iterrows():
+                # We'll add both teams as potential opponents for now
+                # In reality, you'd know which team the pitcher plays for
+                home_team = matchup.get('Home_Team', '')
+                away_team = matchup.get('Away_Team', '')
+                home_abbr = matchup.get('Home_Abbr', '')
+                away_abbr = matchup.get('Away_Abbr', '')
+                
+                if home_team and away_team:
+                    opposing_teams.extend([
+                        {'name': home_team, 'abbr': home_abbr, 'opponent': away_team, 'opponent_abbr': away_abbr},
+                        {'name': away_team, 'abbr': away_abbr, 'opponent': home_team, 'opponent_abbr': home_abbr}
+                    ])
+            
+            # For each pitcher, we'll create entries for potential opposing teams
+            for team_info in opposing_teams:
+                pitcher_matchups.append({
+                    'pitcher_name': pitcher_name,
+                    'pitcher_market': pitcher['Market'],
+                    'pitcher_line': pitcher.get('Line', ''),
+                    'pitcher_bet_type': pitcher.get('Bet_Type', ''),
+                    'pitcher_ev': pitcher.get('EV', 0),
+                    'pitcher_anchor_id': pitcher['Anchor_ID'],
+                    'opposing_team': team_info['name'],
+                    'opposing_team_abbr': team_info['opponent_abbr'],
+                    'correlation_info': self.CORRELATIONS.get(pitcher['Market'], {})
+                })
+        
+        print(f"✅ Created {len(pitcher_matchups)} pitcher-opponent combinations")
+        return pitcher_matchups
+    
+    def find_correlated_batters(self, pitcher_matchups, all_ev_df):
+        """Step 4 & 5: Find correlated batter props and build parlays"""
         print("⚾ STEP 7: BUILDING PITCHER-BATTER CORRELATION PARLAYS")
         print("=" * 60)
         
-        if pitcher_anchors_df.empty or all_evs_df.empty:
-            print("❌ Missing pitcher anchors or EV data")
+        if not pitcher_matchups or all_ev_df.empty:
+            print("❌ Missing pitcher matchups or EV data")
             return []
         
-        print(f"🎯 Building parlays for {len(pitcher_anchors_df)} pitcher anchors")
-        print(f"📊 Available correlations: {len(self.CORRELATIONS)}")
+        print(f"🎯 Building parlays for {len(set(p['pitcher_anchor_id'] for p in pitcher_matchups))} unique pitchers")
+        print(f"📊 Correlation logic:")
+        print(f"   • Strikeouts ↔ Batter Hits (NEGATIVE - opposite bets)")
+        print(f"   • Earned Runs ↔ Batter Runs (POSITIVE - same bets)")
+        print(f"   • Hits Allowed ↔ Batter Hits (POSITIVE - same bets)")
         
         all_parlays = []
+        processed_anchors = set()
         
-        for _, anchor_row in pitcher_anchors_df.iterrows():
-            parlay = self._build_single_pitcher_parlay(anchor_row, all_evs_df)
-            if parlay:
+        for pitcher_match in pitcher_matchups:
+            anchor_id = pitcher_match['pitcher_anchor_id']
+            
+            # Skip if we already processed this anchor
+            if anchor_id in processed_anchors:
+                continue
+            processed_anchors.add(anchor_id)
+            
+            pitcher_name = pitcher_match['pitcher_name']
+            pitcher_market = pitcher_match['pitcher_market']
+            pitcher_bet_type = pitcher_match['pitcher_bet_type']
+            opposing_team = pitcher_match['opposing_team']
+            correlation_info = pitcher_match['correlation_info']
+            
+            if not correlation_info:
+                continue
+            
+            print(f"\n🎯 Building parlay for: {pitcher_name} ({pitcher_market})")
+            print(f"   Looking for opposing {correlation_info['opposing_market']} from {opposing_team}")
+            
+            # Find correlated batter opportunities
+            target_market = correlation_info['opposing_market']
+            bet_logic = correlation_info['bet_logic']
+            
+            # Determine target bet type based on correlation
+            if bet_logic == 'opposite':
+                target_bet_type = 'under' if pitcher_bet_type.lower() == 'over' else 'over'
+            else:  # same
+                target_bet_type = pitcher_bet_type.lower()
+            
+            print(f"   Pitcher bet: {pitcher_bet_type} → Looking for batter: {target_bet_type}")
+            
+            # Find matching batter opportunities
+            batter_opportunities = all_ev_df[
+                (all_ev_df['Market'] == target_market) &
+                (all_ev_df['Bet_Type'].str.lower() == target_bet_type) &
+                (all_ev_df['Splash_EV_Percentage'] >= self.MIN_BATTER_EV)
+            ].copy()
+            
+            if batter_opportunities.empty:
+                print(f"   ❌ No correlated batter opportunities found")
+                continue
+            
+            # Sort by EV and take top batters
+            batter_opportunities = batter_opportunities.sort_values('Splash_EV_Percentage', ascending=False)
+            selected_batters = batter_opportunities.head(self.MAX_BATTERS_PER_PARLAY)
+            
+            if len(selected_batters) > 0:
+                parlay = self._create_parlay(pitcher_match, selected_batters.to_dict('records'), correlation_info)
                 all_parlays.append(parlay)
+                
+                print(f"   ✅ Created parlay with {len(selected_batters)} correlated batters")
+                for _, batter in selected_batters.iterrows():
+                    print(f"      • {batter['Player']} {target_market} {batter['Line']} ({target_bet_type}) - EV: {batter['Splash_EV_Percentage']:.3f}")
         
         # Sort parlays by estimated value
-        all_parlays.sort(key=lambda x: x['parlay_ev_estimate'], reverse=True)
+        all_parlays.sort(key=lambda x: x['estimated_parlay_ev'], reverse=True)
         
-        print(f"✅ Built {len(all_parlays)} correlation parlays!")
+        print(f"\n🎉 Built {len(all_parlays)} correlation parlays!")
         
         if all_parlays:
-            # Show summary
-            print(f"\n📈 PARLAY SUMMARY:")
-            print(f"   Best parlay EV: {all_parlays[0]['parlay_ev_estimate']:.3f}")
-            print(f"   Average correlation: {np.mean([p['avg_correlation_strength'] for p in all_parlays]):.3f}")
-            
-            # Show top parlays
-            print(f"\n🏆 Top 3 parlays:")
-            for i, parlay in enumerate(all_parlays[:3], 1):
-                anchor = parlay['pitcher_anchor']
-                batter_count = len(parlay['correlated_batters'])
-                print(f"   {i}. {anchor['Pitcher_Name']} + {batter_count} opposing batters")
-                print(f"      EV: {parlay['parlay_ev_estimate']:.3f} | Correlation: {parlay['avg_correlation_strength']:.3f}")
+            print(f"📈 Best parlay EV estimate: {all_parlays[0]['estimated_parlay_ev']:.3f}")
+            print(f"📊 Average correlation strength: {np.mean([p['avg_correlation_strength'] for p in all_parlays]):.3f}")
         
         return all_parlays
     
-    def _build_single_pitcher_parlay(self, anchor_row, all_evs_df):
-        """Build a parlay for a single pitcher anchor"""
-        pitcher_name = anchor_row['Pitcher_Name']
-        pitcher_market = anchor_row['Market']
-        pitcher_bet_type = anchor_row['Bet_Type']
-        
-        # Parse opposing batter names
-        opposing_batter_names = []
-        if anchor_row['Opposing_Batter_Names']:
-            batter_names = str(anchor_row['Opposing_Batter_Names']).split('; ')
-            opposing_batter_names = [name.strip() for name in batter_names if name.strip()]
-        
-        if not opposing_batter_names:
-            return None
-        
-        # Find correlations for this pitcher market
-        applicable_correlations = []
-        for (p_market, b_market), corr_info in self.CORRELATIONS.items():
-            if p_market == pitcher_market and abs(corr_info['strength']) >= self.MIN_CORRELATION_STRENGTH:
-                applicable_correlations.append((b_market, corr_info))
-        
-        if not applicable_correlations:
-            return None
-        
-        # Find correlated batter opportunities
-        correlated_batters = []
-        for batter_name in opposing_batter_names:
-            for batter_market, corr_info in applicable_correlations:
-                batter_opportunities = self._find_batter_opportunities(
-                    batter_name, batter_market, pitcher_bet_type, corr_info, all_evs_df
-                )
-                correlated_batters.extend(batter_opportunities)
-        
-        if not correlated_batters:
-            return None
-        
-        # Sort by correlation strength * EV and take top batters
-        correlated_batters.sort(key=lambda x: x['correlation_strength'] * x['ev'], reverse=True)
-        selected_batters = correlated_batters[:self.MAX_BATTERS_PER_PARLAY]
-        
-        # Build the parlay
-        return self._create_parlay_object(anchor_row, selected_batters)
-    
-    def _find_batter_opportunities(self, batter_name, batter_market, pitcher_bet_type, corr_info, all_evs_df):
-        """Find EV opportunities for a specific batter in the correlated market"""
-        correlation_strength = abs(corr_info['strength'])
-        
-        # Determine target bet type based on correlation
-        if corr_info['strength'] < 0:  # Negative correlation
-            target_bet_type = 'under' if pitcher_bet_type == 'over' else 'over'
-        else:  # Positive correlation
-            target_bet_type = pitcher_bet_type
-        
-        # Find matching batter EVs
-        batter_evs = all_evs_df[
-            (all_evs_df['Player'] == batter_name) &
-            (all_evs_df['Market'] == batter_market) &
-            (all_evs_df['Bet_Type'] == target_bet_type) &
-            (all_evs_df['Splash_EV_Percentage'] >= self.MIN_BATTER_EV)
-        ]
-        
-        opportunities = []
-        for _, batter_ev in batter_evs.iterrows():
-            opportunities.append({
-                'player': batter_name,
-                'market': batter_market,
-                'line': batter_ev['Line'],
-                'bet_type': batter_ev['Bet_Type'],
-                'ev': batter_ev['Splash_EV_Percentage'],
-                'books_used': batter_ev['Num_Books_Used'],
-                'best_odds': batter_ev['Best_Odds'],
-                'correlation_strength': correlation_strength,
-                'correlation_logic': corr_info['logic'],
-                'true_prob': batter_ev.get('True_Prob', 0)
-            })
-        
-        return opportunities
-    
-    def _create_parlay_object(self, anchor_row, selected_batters):
+    def _create_parlay(self, pitcher_match, selected_batters, correlation_info):
         """Create a complete parlay object"""
-        # Extract pitcher anchor info
-        pitcher_anchor = {
-            'player': anchor_row['Pitcher_Name'],
-            'market': anchor_row['Market'],
-            'line': anchor_row['Line'],
-            'bet_type': anchor_row['Bet_Type'],
-            'ev': anchor_row['Pitcher_EV'],
-            'books_used': anchor_row['Num_Books'],
-            'best_odds': anchor_row['Best_Odds']
-        }
+        pitcher_ev = pitcher_match['pitcher_ev']
+        batter_evs = [b['Splash_EV_Percentage'] for b in selected_batters]
         
-        # Calculate parlay metrics
-        all_evs = [pitcher_anchor['ev']] + [b['ev'] for b in selected_batters]
-        avg_correlation = np.mean([b['correlation_strength'] for b in selected_batters])
-        
-        # Estimate parlay EV with correlation bonus
-        base_ev = sum(all_evs)
-        correlation_bonus = avg_correlation * 0.3  # Up to 30% bonus
-        parlay_ev_estimate = base_ev * (1 + correlation_bonus)
-        
-        # Calculate confidence
-        all_books = [pitcher_anchor['books_used']] + [b['books_used'] for b in selected_batters]
-        avg_books = np.mean(all_books)
-        confidence = min(1.0, (avg_books / 8) * 0.6 + avg_correlation * 0.4)
-        
-        # Assess risk and quality
-        risk_level, quality = self._assess_parlay_quality(all_evs, avg_correlation, len(selected_batters))
+        # Calculate estimated parlay EV (simplified)
+        total_individual_ev = pitcher_ev + sum(batter_evs)
+        correlation_strength = abs(correlation_info['strength'])
+        correlation_bonus = correlation_strength * 0.2  # Up to 20% bonus for strong correlations
+        estimated_parlay_ev = total_individual_ev * (1 + correlation_bonus)
         
         return {
-            'parlay_id': f"parlay_{hash(str(anchor_row['Anchor_ID']) + str(selected_batters)) % 10000}",
-            'game_id': anchor_row['Game_ID'],
-            'pitcher_anchor': pitcher_anchor,
-            'correlated_batters': selected_batters,
+            'parlay_id': f"PARLAY_{pitcher_match['pitcher_anchor_id']}_{len(selected_batters)}",
+            'pitcher_anchor_id': pitcher_match['pitcher_anchor_id'],
+            'pitcher_name': pitcher_match['pitcher_name'],
+            'pitcher_market': pitcher_match['pitcher_market'],
+            'pitcher_line': pitcher_match['pitcher_line'],
+            'pitcher_bet_type': pitcher_match['pitcher_bet_type'],
+            'pitcher_ev': pitcher_ev,
+            'opposing_team': pitcher_match['opposing_team'],
+            'num_batters': len(selected_batters),
+            'batter_props': selected_batters,
+            'correlation_type': correlation_info['correlation'],
+            'correlation_strength': correlation_info['strength'],
+            'avg_correlation_strength': correlation_strength,
+            'bet_logic': correlation_info['bet_logic'],
+            'estimated_parlay_ev': estimated_parlay_ev,
             'total_legs': 1 + len(selected_batters),
-            'individual_evs': all_evs,
-            'parlay_ev_estimate': parlay_ev_estimate,
-            'avg_correlation_strength': avg_correlation,
-            'confidence': confidence,
-            'risk_level': risk_level,
-            'quality_tier': quality,
-            'game_context': {
-                'pitcher_team': anchor_row['Pitcher_Team'],
-                'opposing_team': anchor_row['Opposing_Team'],
-                'matchup_type': anchor_row['Matchup_Type']
-            },
-            'parlay_logic': self._explain_parlay_logic(pitcher_anchor, selected_batters),
             'created_at': datetime.now().isoformat()
         }
     
-    def _assess_parlay_quality(self, all_evs, avg_correlation, num_batters):
-        """Assess parlay risk level and quality tier"""
-        avg_ev = np.mean(all_evs)
-        
-        if avg_correlation >= 0.70 and avg_ev >= 0.035 and num_batters <= 3:
-            return "Low", "Excellent"
-        elif avg_correlation >= 0.60 and avg_ev >= 0.025 and num_batters <= 4:
-            return "Medium", "Good"
-        elif avg_correlation >= 0.50 and avg_ev >= 0.02:
-            return "Medium", "Fair"
-        else:
-            return "High", "Speculative"
-    
-    def _explain_parlay_logic(self, pitcher_anchor, selected_batters):
-        """Generate human-readable parlay logic"""
-        pitcher_desc = f"{pitcher_anchor['player']} {pitcher_anchor['market']} {pitcher_anchor['bet_type']}"
-        
-        batter_descriptions = []
-        for batter in selected_batters:
-            batter_desc = f"{batter['player']} {batter['market']} {batter['bet_type']}"
-            logic = batter['correlation_logic']
-            batter_descriptions.append(f"{batter_desc} ({logic})")
-        
-        return f"Anchor: {pitcher_desc} → Correlated: {'; '.join(batter_descriptions)}"
-    
     def save_parlays(self, parlays, client):
-        """Save final parlays to Google Sheets"""
+        """Save correlation parlays to Google Sheets"""
         try:
             if not parlays:
                 print("❌ No parlays to save")
@@ -357,67 +358,59 @@ class ParlayBuilder:
             
             spreadsheet = client.open("MLB_Splash_Data")
             
-            # Get or create CORRELATION_PARLAYS worksheet
             try:
                 worksheet = spreadsheet.worksheet("CORRELATION_PARLAYS")
             except:
                 worksheet = spreadsheet.add_worksheet(title="CORRELATION_PARLAYS", rows=1000, cols=25)
             
-            # Clear existing data
             worksheet.clear()
             
-            # Format parlay data for sheet
+            # Format parlay data
             formatted_data = []
             for i, parlay in enumerate(parlays, 1):
-                pitcher = parlay['pitcher_anchor']
-                batters = parlay['correlated_batters']
-                
                 # Create batter summary
                 batter_summary = " | ".join([
-                    f"{b['player']} {b['market']} {b['line']} ({b['bet_type']})"
-                    for b in batters
+                    f"{b['Player']} {b['Market']} {b['Line']} ({b['Bet_Type']}) EV:{b['Splash_EV_Percentage']:.3f}"
+                    for b in parlay['batter_props'][:3]  # Show first 3 batters
                 ])
                 
+                if len(parlay['batter_props']) > 3:
+                    batter_summary += f" + {len(parlay['batter_props']) - 3} more"
+                
                 formatted_data.append([
-                    f"PARLAY_{i:03d}",
-                    parlay['game_id'],
-                    parlay['game_context']['pitcher_team'],
-                    parlay['game_context']['opposing_team'],
-                    f"{pitcher['player']} {pitcher['market']} {pitcher['line']} ({pitcher['bet_type']})",
-                    pitcher['ev'],
-                    len(batters),
+                    parlay['parlay_id'],
+                    parlay['pitcher_name'],
+                    f"{parlay['pitcher_market']} {parlay['pitcher_line']} ({parlay['pitcher_bet_type']})",
+                    parlay['pitcher_ev'],
+                    parlay['opposing_team'],
+                    parlay['num_batters'],
                     batter_summary,
-                    parlay['parlay_ev_estimate'],
-                    parlay['avg_correlation_strength'],
-                    parlay['confidence'],
-                    parlay['risk_level'],
-                    parlay['quality_tier'],
-                    parlay['parlay_logic'],
+                    parlay['correlation_type'],
+                    parlay['correlation_strength'],
+                    parlay['bet_logic'],
+                    parlay['estimated_parlay_ev'],
+                    parlay['total_legs'],
                     parlay['created_at']
                 ])
             
-            # Headers and metadata
             headers = [
-                'Parlay_ID', 'Game_ID', 'Pitcher_Team', 'Opposing_Team', 'Pitcher_Anchor',
-                'Pitcher_EV', 'Num_Batters', 'Batter_Props', 'Parlay_EV_Estimate',
-                'Avg_Correlation', 'Confidence', 'Risk_Level', 'Quality_Tier',
-                'Parlay_Logic', 'Created_At'
+                'Parlay_ID', 'Pitcher_Name', 'Pitcher_Prop', 'Pitcher_EV', 'Opposing_Team',
+                'Num_Batters', 'Batter_Props_Summary', 'Correlation_Type', 'Correlation_Strength',
+                'Bet_Logic', 'Estimated_Parlay_EV', 'Total_Legs', 'Created_At'
             ]
             
             metadata = [
                 ['Pitcher vs Batter Correlation Parlays', ''],
                 ['Created At', datetime.now().isoformat()],
                 ['Total Parlays', len(parlays)],
-                ['Best Parlay EV', f"{parlays[0]['parlay_ev_estimate']:.3f}" if parlays else 'N/A'],
+                ['Correlation Logic', 'Negative=Opposite Bets, Positive=Same Bets'],
                 ['']
             ]
             
             all_data = metadata + [headers] + formatted_data
-            
-            # Write to sheet
             worksheet.update(range_name='A1', values=all_data)
             
-            print("✅ Successfully saved correlation parlays to CORRELATION_PARLAYS sheet")
+            print("✅ Successfully saved correlation parlays!")
             
         except Exception as e:
             logger.error(f"Error saving parlays: {e}")
@@ -427,40 +420,48 @@ class ParlayBuilder:
 def main():
     """Main function for Step 7"""
     try:
-        builder = ParlayBuilder()
+        builder = CorrelationParlayBuilder()
         
         # Connect to Google Sheets
         client = builder.connect_to_sheets()
         
-        # Read pitcher anchors from Step 6
+        # Step 1: Read matchups to know who plays who
+        matchups_df = builder.read_matchups(client)
+        
+        # Step 2: Read pitcher anchors
         pitcher_anchors_df = builder.read_pitcher_anchors(client)
+        
+        # Read all EV data for batter lookup
+        all_ev_df = builder.read_all_ev_results(client)
         
         if pitcher_anchors_df.empty:
             print("❌ No pitcher anchors found from Step 6")
             return
         
-        # Read all EV results for batter lookup
-        all_evs_df = builder.read_all_ev_results(client)
-        
-        if all_evs_df.empty:
-            print("❌ No EV results found for batter correlation lookup")
+        if all_ev_df.empty:
+            print("❌ No EV data found for batter correlation lookup")
             return
         
-        # Build correlation parlays
-        parlays = builder.build_pitcher_parlays(pitcher_anchors_df, all_evs_df)
+        # Step 3: Match pitchers to opponents
+        pitcher_matchups = builder.match_pitchers_to_opponents(pitcher_anchors_df, matchups_df)
+        
+        if not pitcher_matchups:
+            print("❌ No pitcher-opponent matchups created")
+            return
+        
+        # Steps 4 & 5: Find correlated batters and build parlays
+        parlays = builder.find_correlated_batters(pitcher_matchups, all_ev_df)
         
         if not parlays:
             print("❌ No correlation parlays could be built")
             return
         
-        # Save parlays
+        # Save results
         builder.save_parlays(parlays, client)
         
         print(f"\n✅ STEP 7 COMPLETE - FULL PIPELINE FINISHED!")
-        print(f"   Correlation parlays built: {len(parlays)}")
-        print(f"   Best parlay EV: {parlays[0]['parlay_ev_estimate']:.3f}")
-        print(f"   Average parlay correlation: {np.mean([p['avg_correlation_strength'] for p in parlays]):.3f}")
-        print("   📊 Results saved to CORRELATION_PARLAYS sheet")
+        print(f"   🎯 Correlation parlays built: {len(parlays)}")
+        print(f"   📊 Results saved to CORRELATION_PARLAYS sheet")
         
     except Exception as e:
         logger.error(f"Error in Step 7: {e}")

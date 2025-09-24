@@ -1,4 +1,4 @@
-# match_lines.py - Step 4: Match Splash props to Odds data
+# match_lines.py - Step 4: Match Splash props to Odds data (both from Google Sheets)
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class LineMatching:
-    """Step 4: Match Splash Sports props to Odds API data"""
+    """Step 4: Match Splash Sports props to Odds API data (both read from Google Sheets)"""
     
     def __init__(self):
         # Market mapping for matching between Splash and Odds API
@@ -26,7 +26,7 @@ class LineMatching:
             'total_bases': 'batter_total_bases',
             'RBIs': 'batter_rbis',
             'total_outs': 'pitcher_outs',
-            'singles': 'batter_singles'  # Additional mapping
+            'singles': 'batter_singles'
         }
     
     def connect_to_sheets(self):
@@ -47,20 +47,26 @@ class LineMatching:
             raise
     
     def read_splash_data(self, client):
-        """Read Splash Sports data from Step 2"""
+        """Read Splash Sports data from SPLASH_MLB sheet"""
         try:
-            print("📋 Reading Splash data from Step 2...")
+            print("📋 Reading Splash data from SPLASH_MLB sheet...")
             spreadsheet = client.open("MLB_Splash_Data")
             splash_worksheet = spreadsheet.worksheet("SPLASH_MLB")
             splash_data = splash_worksheet.get_all_records()
             splash_df = pd.DataFrame(splash_data)
             
+            if splash_df.empty:
+                print("❌ No Splash data found - make sure SPLASH_MLB sheet is populated")
+                return pd.DataFrame()
+            
             print(f"✅ Successfully read {len(splash_df)} rows of Splash data")
             
-            # Show market breakdown
-            if not splash_df.empty:
+            # Show breakdown
+            if not splash_df.empty and 'Market' in splash_df.columns:
+                unique_players = splash_df['Name'].nunique() if 'Name' in splash_df.columns else 0
                 market_counts = splash_df['Market'].value_counts()
-                print(f"📊 Splash markets: {dict(market_counts)}")
+                print(f"📊 Splash: {unique_players} players, {len(market_counts)} markets")
+                print(f"   Markets: {dict(market_counts)}")
             
             return splash_df
             
@@ -70,20 +76,28 @@ class LineMatching:
             return pd.DataFrame()
     
     def read_odds_data(self, client):
-        """Read targeted Odds API data from Step 3"""
+        """Read Odds API data from ODDS_API sheet (populated externally)"""
         try:
-            print("📋 Reading targeted odds data from Step 3...")
+            print("📋 Reading Odds data from ODDS_API sheet...")
             spreadsheet = client.open("MLB_Splash_Data")
             odds_worksheet = spreadsheet.worksheet("ODDS_API")
             odds_data = odds_worksheet.get_all_records()
             odds_df = pd.DataFrame(odds_data)
             
-            print(f"✅ Successfully read {len(odds_df)} rows of targeted odds data")
+            if odds_df.empty:
+                print("❌ No Odds data found - make sure ODDS_API sheet is populated")
+                print("   💡 Run your fetch_odds_data.py script first to populate this sheet")
+                return pd.DataFrame()
             
-            # Show market breakdown
+            print(f"✅ Successfully read {len(odds_df)} rows of Odds data")
+            
+            # Show breakdown
             if not odds_df.empty:
-                market_counts = odds_df['Market'].value_counts()
-                print(f"📊 Odds markets: {dict(market_counts)}")
+                unique_players = odds_df['Name'].nunique() if 'Name' in odds_df.columns else 0
+                unique_books = odds_df['Book'].nunique() if 'Book' in odds_df.columns else 0
+                market_counts = odds_df['Market'].value_counts() if 'Market' in odds_df.columns else {}
+                print(f"📊 Odds: {unique_players} players, {unique_books} books")
+                print(f"   Markets: {dict(market_counts.head())}")
             
             return odds_df
             
@@ -97,7 +111,7 @@ class LineMatching:
         if odds_df.empty:
             return odds_df
         
-        print("🔧 Preprocessing odds data...")
+        print("🔧 Preprocessing odds data for matching...")
         
         def extract_bet_info(line_str):
             line_str = str(line_str).strip()
@@ -110,9 +124,9 @@ class LineMatching:
 
         odds_df = odds_df.copy()
         odds_df['bet_type'] = odds_df['Line'].apply(lambda x: extract_bet_info(x)[0])
-        odds_df['Line'] = odds_df['Line'].apply(lambda x: extract_bet_info(x)[1])
+        odds_df['line_value'] = odds_df['Line'].apply(lambda x: extract_bet_info(x)[1])
         
-        # Map markets using the market mapping
+        # Map markets using the market mapping (reverse lookup)
         reverse_mapping = {v: k for k, v in self.market_mapping.items()}
         odds_df['mapped_market'] = odds_df['Market'].map(reverse_mapping)
         
@@ -122,38 +136,47 @@ class LineMatching:
         unmapped_after = len(odds_df)
         
         if unmapped_before != unmapped_after:
-            print(f"⚠️ Filtered out {unmapped_before - unmapped_after} unmappable market rows")
+            print(f"   ⚠️ Filtered out {unmapped_before - unmapped_after} unmappable market rows")
         
-        print(f"✅ Preprocessed odds data: {len(odds_df)} rows ready for matching")
+        print(f"   ✅ Preprocessed: {len(odds_df)} rows ready for matching")
         return odds_df
     
     def find_matching_lines(self, splash_df, odds_df):
-        """Find matching lines between Splash and preprocessed Odds data"""
+        """Find matching lines between Splash and Odds data"""
         print("⚾ STEP 4: MATCHING SPLASH PROPS TO ODDS DATA")
         print("=" * 60)
         
-        if splash_df.empty or odds_df.empty:
-            print("❌ One or both datasets are empty - cannot match")
+        if splash_df.empty:
+            print("❌ No Splash data - cannot proceed")
+            return pd.DataFrame()
+            
+        if odds_df.empty:
+            print("❌ No Odds data - cannot proceed")
+            print("   💡 Make sure to populate ODDS_API sheet first")
             return pd.DataFrame()
         
-        # Convert Line columns to string for consistent matching
+        # Prepare data for matching
         splash_df = splash_df.copy()
-        odds_df = odds_df.copy()
         splash_df['Line'] = splash_df['Line'].astype(str)
-        odds_df['Line'] = odds_df['Line'].astype(str)
         
-        print(f"🔍 Attempting to match {len(splash_df)} Splash props with {len(odds_df)} odds entries...")
+        print(f"🔍 Attempting to match:")
+        print(f"   📊 Splash: {len(splash_df)} props")
+        print(f"   📈 Odds: {len(odds_df)} odds entries")
         
         matching_rows = []
         matches_found = 0
         match_details = {}
         
         for _, splash_row in splash_df.iterrows():
+            splash_name = splash_row['Name']
+            splash_market = splash_row['Market'] 
+            splash_line = splash_row['Line']
+            
             # Find odds rows that match this splash prop
             matches = odds_df[
-                (odds_df['Name'] == splash_row['Name']) &
-                (odds_df['mapped_market'] == splash_row['Market']) &
-                (odds_df['Line'] == splash_row['Line'])
+                (odds_df['Name'].str.lower() == splash_name.lower()) &
+                (odds_df['mapped_market'] == splash_market) &
+                (odds_df['line_value'] == splash_line)
             ]
             
             if not matches.empty:
@@ -161,7 +184,7 @@ class LineMatching:
                 matching_rows.append(matches)
                 
                 # Track match details for reporting
-                key = f"{splash_row['Name']}_{splash_row['Market']}_{splash_row['Line']}"
+                key = f"{splash_name}_{splash_market}_{splash_line}"
                 match_details[key] = len(matches)
         
         if not matching_rows:
@@ -171,7 +194,7 @@ class LineMatching:
         
         # Combine all matches
         matched_df = pd.concat(matching_rows, ignore_index=True)
-        matched_df = matched_df.drop('mapped_market', axis=1)  # Remove helper column
+        matched_df = matched_df.drop(['mapped_market', 'line_value'], axis=1)  # Remove helper columns
         
         # Get unique prop count
         unique_props = len(matched_df.groupby(['Name', 'Market', 'Line']))
@@ -181,11 +204,12 @@ class LineMatching:
         print(f"   🎯 Unique props with odds: {unique_props}")
         print(f"   📈 Average books per prop: {matches_found / unique_props:.1f}")
         
-        # Show top matches
-        print(f"\n🔝 Top matched props by book count:")
-        prop_book_counts = matched_df.groupby(['Name', 'Market', 'Line']).size().sort_values(ascending=False)
-        for (player, market, line), count in prop_book_counts.head(5).items():
-            print(f"   • {player} {market} {line}: {count} books")
+        # Show top matches by book count
+        if not matched_df.empty:
+            print(f"\n🔝 Top matched props by book count:")
+            prop_book_counts = matched_df.groupby(['Name', 'Market', 'Line']).size().sort_values(ascending=False)
+            for (player, market, line), count in prop_book_counts.head(5).items():
+                print(f"   • {player} {market} {line}: {count} books")
         
         return matched_df
     
@@ -194,8 +218,8 @@ class LineMatching:
         print("\n🔍 ANALYZING MATCH FAILURES:")
         
         # Check player name overlaps
-        splash_players = set(splash_df['Name'].unique())
-        odds_players = set(odds_df['Name'].unique()) 
+        splash_players = set(splash_df['Name'].str.lower()) if 'Name' in splash_df.columns else set()
+        odds_players = set(odds_df['Name'].str.lower()) if 'Name' in odds_df.columns else set()
         common_players = splash_players.intersection(odds_players)
         
         print(f"   👥 Players in Splash: {len(splash_players)}")
@@ -203,17 +227,28 @@ class LineMatching:
         print(f"   🤝 Common players: {len(common_players)}")
         
         if len(common_players) < 5:
-            print("   Sample Splash players:", list(splash_players)[:5])
-            print("   Sample Odds players:", list(odds_players)[:5])
+            print(f"   Sample Splash players: {list(splash_players)[:5]}")
+            print(f"   Sample Odds players: {list(odds_players)[:5]}")
+            if common_players:
+                print(f"   Common players found: {list(common_players)[:5]}")
         
         # Check market overlaps
-        splash_markets = set(splash_df['Market'].unique())
-        odds_markets = set(odds_df['Market'].unique())
-        common_markets = splash_markets.intersection(odds_markets)
+        splash_markets = set(splash_df['Market']) if 'Market' in splash_df.columns else set()
+        odds_mapped_markets = set(odds_df['mapped_market'].dropna()) if 'mapped_market' in odds_df.columns else set()
+        common_markets = splash_markets.intersection(odds_mapped_markets)
         
         print(f"   📊 Markets in Splash: {splash_markets}")
-        print(f"   📊 Markets in Odds: {odds_markets}")
+        print(f"   📊 Mapped markets in Odds: {odds_mapped_markets}")
         print(f"   🤝 Common markets: {common_markets}")
+        
+        # Sample line formats
+        if 'Line' in splash_df.columns:
+            sample_splash_lines = splash_df['Line'].head(3).tolist()
+            print(f"   Sample Splash lines: {sample_splash_lines}")
+        
+        if 'line_value' in odds_df.columns:
+            sample_odds_lines = odds_df['line_value'].head(3).tolist()
+            print(f"   Sample Odds line values: {sample_odds_lines}")
     
     def save_matched_lines(self, matched_df, client):
         """Save matched lines to Google Sheets for Step 5"""
@@ -235,12 +270,13 @@ class LineMatching:
             # Clear existing data
             worksheet.clear()
             
-            # Add metadata and matched data
+            # Add metadata
             metadata = [
                 ['Matched Lines Data', ''],
                 ['Created At', datetime.now().isoformat()],
                 ['Total Matched Lines', len(matched_df)],
                 ['Unique Props', len(matched_df.groupby(['Name', 'Market', 'Line']))],
+                ['Data Sources', 'SPLASH_MLB + ODDS_API sheets'],
                 ['']  # Empty row for spacing
             ]
             
@@ -258,19 +294,25 @@ class LineMatching:
             raise
 
 def main():
-    """Main function for Step 4"""
+    """Main function for Step 4 - matching data from Google Sheets"""
     try:
         matcher = LineMatching()
         
         # Connect to Google Sheets
         client = matcher.connect_to_sheets()
         
-        # Read data from previous steps
+        # Read data from both sheets
         splash_df = matcher.read_splash_data(client)
         odds_df = matcher.read_odds_data(client)
         
-        if splash_df.empty or odds_df.empty:
-            print("❌ Missing required data from previous steps")
+        if splash_df.empty:
+            print("❌ Missing Splash data from SPLASH_MLB sheet")
+            print("   💡 Populate this sheet externally first")
+            return
+            
+        if odds_df.empty:
+            print("❌ Missing Odds data from ODDS_API sheet") 
+            print("   💡 Run your fetch_odds_data.py script first")
             return
         
         # Preprocess odds data for matching
@@ -292,7 +334,8 @@ def main():
         
         print(f"\n✅ STEP 4 COMPLETE:")
         print(f"   Matched lines: {len(matched_df)}")
-        print(f"   Ready for Step 5 (EV Calculation)")
+        print(f"   Unique props: {len(matched_df.groupby(['Name', 'Market', 'Line']))}")
+        print("   Ready for Step 5 (EV Calculation)")
         
     except Exception as e:
         logger.error(f"Error in Step 4: {e}")

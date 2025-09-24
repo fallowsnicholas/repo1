@@ -12,11 +12,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class MatchupFetcher:
-    """Step 1: Fetch today's MLB matchups, teams, pitchers, and lineups from ESPN"""
+    """Step 1: Fetch today's MLB matchups - matchups only"""
     
     def __init__(self):
         self.espn_base_url = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
-        self.matchups = []
         
     def fetch_todays_games(self):
         """Get today's games with teams and basic info"""
@@ -28,6 +27,8 @@ class MatchupFetcher:
             url = f"{self.espn_base_url}/scoreboard"
             
             params = {'dates': today, 'limit': 50}
+            print(f"📅 Fetching games for: {datetime.now().strftime('%B %d, %Y')}")
+            
             response = requests.get(url, params=params, timeout=15)
             response.raise_for_status()
             
@@ -35,13 +36,37 @@ class MatchupFetcher:
             matchups = []
             
             if 'events' in data and data['events']:
-                print(f"📅 Found {len(data['events'])} games scheduled for today")
+                print(f"🏟️ Found {len(data['events'])} games scheduled for today:")
+                print()
                 
-                for event in data['events']:
+                for i, event in enumerate(data['events'], 1):
                     try:
                         matchup = self._parse_game_event(event)
                         if matchup:
                             matchups.append(matchup)
+                            
+                            # Display each matchup clearly
+                            away_team = matchup['away_team']['name']
+                            home_team = matchup['home_team']['name']
+                            away_abbr = matchup['away_team']['abbreviation']
+                            home_abbr = matchup['home_team']['abbreviation']
+                            status = matchup['status']
+                            venue = matchup['venue']
+                            game_time = matchup.get('date', '')
+                            
+                            # Format game time if available
+                            time_str = ""
+                            if game_time:
+                                try:
+                                    dt = datetime.fromisoformat(game_time.replace('Z', '+00:00'))
+                                    time_str = f" at {dt.strftime('%I:%M %p ET')}"
+                                except:
+                                    pass
+                            
+                            print(f"   {i:2d}. {away_team} ({away_abbr}) @ {home_team} ({home_abbr}){time_str}")
+                            print(f"       Status: {status} | Venue: {venue}")
+                            print()
+                            
                     except Exception as e:
                         logger.error(f"Error parsing game: {e}")
                         continue
@@ -49,7 +74,6 @@ class MatchupFetcher:
             else:
                 print("⚠️ No games found for today")
             
-            self.matchups = matchups
             print(f"✅ Successfully parsed {len(matchups)} game matchups")
             return matchups
             
@@ -90,7 +114,8 @@ class MatchupFetcher:
                 'date': event.get('date', ''),
                 'status': event.get('status', {}).get('type', {}).get('name', 'Unknown'),
                 'venue': competition.get('venue', {}).get('fullName', 'Unknown'),
-                **teams
+                'home_team': teams['home_team'],
+                'away_team': teams['away_team']
             }
             
             return game_info
@@ -99,123 +124,8 @@ class MatchupFetcher:
             logger.error(f"Error parsing game event: {e}")
             return None
     
-    def get_team_rosters(self):
-        """Get rosters for all teams playing today"""
-        print(f"👥 Fetching team rosters for {len(self.matchups)} games...")
-        
-        team_ids_seen = set()
-        all_players = []
-        
-        for matchup in self.matchups:
-            # Get unique team IDs - FIX: Access the nested dictionary correctly
-            home_team_info = matchup['home_team']
-            away_team_info = matchup['away_team']
-            
-            home_id = home_team_info['espn_id']
-            away_id = away_team_info['espn_id']
-            
-            # FIX: Pass both team_id and team_info correctly
-            for team_id, team_info in [(home_id, home_team_info), (away_id, away_team_info)]:
-                if team_id not in team_ids_seen:
-                    team_ids_seen.add(team_id)
-                    roster = self._fetch_team_roster(team_id, team_info)
-                    if roster:
-                        all_players.extend(roster)
-        
-        print(f"📋 Found {len(all_players)} total players across all teams")
-        return all_players
-    
-    def _fetch_team_roster(self, team_id, team_info):
-        """Fetch roster for a specific team"""
-        try:
-            url = f"{self.espn_base_url}/teams/{team_id}/roster"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            
-            data = response.json()
-            roster = []
-            
-            if 'athletes' in data:
-                for athlete in data['athletes']:
-                    # FIX: Add better error checking for athlete data structure
-                    if not isinstance(athlete, dict):
-                        continue
-                        
-                    position_info = athlete.get('position', {})
-                    if not isinstance(position_info, dict):
-                        position = 'Unknown'
-                    else:
-                        position = position_info.get('name', 'Unknown')
-                    
-                    # Focus on position players (batters) and pitchers
-                    if position in ['Outfielder', 'Infielder', 'Catcher', 'Designated Hitter', 'Pitcher']:
-                        player_info = {
-                            'espn_id': athlete.get('id'),
-                            'name': athlete.get('displayName', ''),
-                            'position': position,
-                            'team_name': team_info['name'],
-                            'team_abbr': team_info['abbreviation'],
-                            'team_espn_id': team_id,
-                            'jersey_number': athlete.get('jersey', ''),
-                            'is_pitcher': position == 'Pitcher',
-                            'is_batter': position in ['Outfielder', 'Infielder', 'Catcher', 'Designated Hitter']
-                        }
-                        roster.append(player_info)
-                        
-            print(f"  📄 {team_info['abbreviation']}: {len(roster)} players")
-            return roster
-            
-        except Exception as e:
-            logger.error(f"Error fetching roster for team {team_id}: {e}")
-            return []
-    
-    def create_pitcher_batter_matchups(self, all_players):
-        """Create pitcher vs opposing batter matchup combinations"""
-        print(f"🎯 Creating pitcher vs opposing batter matchups...")
-        
-        pitcher_matchups = []
-        
-        for matchup in self.matchups:
-            game_id = matchup['game_id']
-            home_team_id = matchup['home_team']['espn_id']
-            away_team_id = matchup['away_team']['espn_id']
-            
-            # Get pitchers and batters for each team
-            home_pitchers = [p for p in all_players if p['team_espn_id'] == home_team_id and p['is_pitcher']]
-            away_pitchers = [p for p in all_players if p['team_espn_id'] == away_team_id and p['is_pitcher']]
-            
-            home_batters = [p for p in all_players if p['team_espn_id'] == home_team_id and p['is_batter']]
-            away_batters = [p for p in all_players if p['team_espn_id'] == away_team_id and p['is_batter']]
-            
-            # Home pitchers vs Away batters
-            for pitcher in home_pitchers:
-                if away_batters:
-                    pitcher_matchups.append({
-                        'game_id': game_id,
-                        'pitcher': pitcher,
-                        'opposing_batters': away_batters[:5],  # Top 5 batters
-                        'pitcher_team': matchup['home_team']['name'],
-                        'opposing_team': matchup['away_team']['name'],
-                        'matchup_type': 'home_pitcher_vs_away_batters'
-                    })
-            
-            # Away pitchers vs Home batters  
-            for pitcher in away_pitchers:
-                if home_batters:
-                    pitcher_matchups.append({
-                        'game_id': game_id,
-                        'pitcher': pitcher,
-                        'opposing_batters': home_batters[:5],  # Top 5 batters
-                        'pitcher_team': matchup['away_team']['name'],
-                        'opposing_team': matchup['home_team']['name'],
-                        'matchup_type': 'away_pitcher_vs_home_batters'
-                    })
-        
-        print(f"⚾ Created {len(pitcher_matchups)} pitcher vs batter matchup combinations")
-        return pitcher_matchups
-    
-    def save_to_google_sheets(self, matchups, all_players, pitcher_matchups):
-        """Save all matchup data to Google Sheets for next steps"""
+    def save_to_google_sheets(self, matchups):
+        """Save matchup data to Google Sheets"""
         try:
             print("💾 Saving matchup data to Google Sheets...")
             
@@ -234,13 +144,7 @@ class MatchupFetcher:
             # Save game matchups
             self._save_matchups_sheet(spreadsheet, matchups)
             
-            # Save all players
-            self._save_players_sheet(spreadsheet, all_players)
-            
-            # Save pitcher vs batter matchups
-            self._save_pitcher_matchups_sheet(spreadsheet, pitcher_matchups)
-            
-            print("✅ Successfully saved all matchup data to Google Sheets")
+            print("✅ Successfully saved matchup data to Google Sheets")
             
         except Exception as e:
             logger.error(f"Error saving to Google Sheets: {e}")
@@ -251,116 +155,96 @@ class MatchupFetcher:
         try:
             worksheet = spreadsheet.worksheet("MATCHUPS")
         except:
-            worksheet = spreadsheet.add_worksheet(title="MATCHUPS", rows=100, cols=10)
+            worksheet = spreadsheet.add_worksheet(title="MATCHUPS", rows=100, cols=15)
         
         worksheet.clear()
         
         if matchups:
+            # Create headers
+            headers = [
+                'Game_ID', 'Date', 'Game_Time', 
+                'Away_Team', 'Away_Abbr', 'Away_Team_ID',
+                'Home_Team', 'Home_Abbr', 'Home_Team_ID',
+                'Venue', 'Status', 'Matchup_Display', 'Fetched_At'
+            ]
+            
             # Flatten data for sheet
             flattened = []
             for game in matchups:
+                # Create readable matchup display
+                matchup_display = f"{game['away_team']['abbreviation']} @ {game['home_team']['abbreviation']}"
+                
+                # Format game time
+                game_time = ""
+                if game.get('date'):
+                    try:
+                        dt = datetime.fromisoformat(game['date'].replace('Z', '+00:00'))
+                        game_time = dt.strftime('%I:%M %p ET')
+                    except:
+                        game_time = game.get('date', '')
+                
                 flattened.append([
                     game['game_id'],
-                    game['date'],
-                    game['home_team']['name'],
-                    game['home_team']['abbreviation'],
-                    game['away_team']['name'], 
+                    game.get('date', ''),
+                    game_time,
+                    game['away_team']['name'],
                     game['away_team']['abbreviation'],
+                    game['away_team']['espn_id'],
+                    game['home_team']['name'], 
+                    game['home_team']['abbreviation'],
+                    game['home_team']['espn_id'],
                     game['venue'],
                     game['status'],
+                    matchup_display,
                     datetime.now().isoformat()
                 ])
             
-            headers = ['Game_ID', 'Date', 'Home_Team', 'Home_Abbr', 'Away_Team', 'Away_Abbr', 'Venue', 'Status', 'Fetched_At']
-            worksheet.update(range_name='A1', values=[headers] + flattened)
-    
-    def _save_players_sheet(self, spreadsheet, all_players):
-        """Save all players to PLAYERS sheet"""
-        try:
-            worksheet = spreadsheet.worksheet("PLAYERS")
-        except:
-            worksheet = spreadsheet.add_worksheet(title="PLAYERS", rows=1000, cols=10)
-        
-        worksheet.clear()
-        
-        if all_players:
-            # Convert to sheet format
-            player_rows = []
-            for player in all_players:
-                player_rows.append([
-                    player['name'],
-                    player['position'],
-                    player['team_name'],
-                    player['team_abbr'],
-                    player['team_espn_id'],
-                    player['espn_id'],
-                    player['is_pitcher'],
-                    player['is_batter'],
-                    datetime.now().isoformat()
-                ])
+            # Add metadata at top
+            metadata = [
+                ['MLB Matchups for ' + datetime.now().strftime('%B %d, %Y')],
+                ['Total Games: ' + str(len(matchups))],
+                ['Fetched At: ' + datetime.now().isoformat()],
+                ['']  # Empty row
+            ]
             
-            headers = ['Player_Name', 'Position', 'Team_Name', 'Team_Abbr', 'Team_ESPN_ID', 'Player_ESPN_ID', 'Is_Pitcher', 'Is_Batter', 'Fetched_At']
-            worksheet.update(range_name='A1', values=[headers] + player_rows)
-    
-    def _save_pitcher_matchups_sheet(self, spreadsheet, pitcher_matchups):
-        """Save pitcher vs batter matchups to PITCHER_MATCHUPS sheet"""
-        try:
-            worksheet = spreadsheet.worksheet("PITCHER_MATCHUPS") 
-        except:
-            worksheet = spreadsheet.add_worksheet(title="PITCHER_MATCHUPS", rows=1000, cols=15)
-        
-        worksheet.clear()
-        
-        if pitcher_matchups:
-            matchup_rows = []
-            for matchup in pitcher_matchups:
-                pitcher = matchup['pitcher']
-                batter_names = [b['name'] for b in matchup['opposing_batters']]
-                
-                matchup_rows.append([
-                    matchup['game_id'],
-                    pitcher['name'],
-                    pitcher['team_name'],
-                    matchup['opposing_team'],
-                    len(matchup['opposing_batters']),
-                    '; '.join(batter_names),
-                    matchup['matchup_type'],
-                    datetime.now().isoformat()
-                ])
+            # Combine metadata, headers, and data
+            all_data = metadata + [headers] + flattened
             
-            headers = ['Game_ID', 'Pitcher_Name', 'Pitcher_Team', 'Opposing_Team', 'Num_Opposing_Batters', 'Batter_Names', 'Matchup_Type', 'Created_At']
-            worksheet.update(range_name='A1', values=[headers] + matchup_rows)
+            # Write to sheet
+            worksheet.update(range_name='A1', values=all_data)
+            
+            print(f"📊 Saved {len(matchups)} matchups to MATCHUPS sheet")
+            
+        else:
+            # Add a note if no games found
+            worksheet.update(range_name='A1', values=[
+                ['No games found for ' + datetime.now().strftime('%B %d, %Y')],
+                ['Fetched At: ' + datetime.now().isoformat()]
+            ])
+            print("📝 Saved 'no games' notice to MATCHUPS sheet")
 
 def main():
-    """Main execution for Step 1"""
+    """Main execution for Step 1 - matchups only"""
     try:
         fetcher = MatchupFetcher()
         
-        # Step 1a: Get today's games
+        # Fetch today's games
         matchups = fetcher.fetch_todays_games()
         
-        if not matchups:
-            print("❌ No games found - cannot proceed")
-            return
+        # Save to Google Sheets
+        fetcher.save_to_google_sheets(matchups)
         
-        # Step 1b: Get team rosters
-        all_players = fetcher.get_team_rosters()
+        print(f"\n🎯 STEP 1 COMPLETE:")
+        print(f"   📅 Date: {datetime.now().strftime('%B %d, %Y')}")
+        print(f"   🏟️ Games Found: {len(matchups)}")
+        print(f"   💾 Data saved to Google Sheets (MATCHUPS tab)")
         
-        if not all_players:
-            print("❌ No players found - cannot proceed")
-            return
-        
-        # Step 1c: Create pitcher vs batter matchups
-        pitcher_matchups = fetcher.create_pitcher_batter_matchups(all_players)
-        
-        # Step 1d: Save everything to Google Sheets
-        fetcher.save_to_google_sheets(matchups, all_players, pitcher_matchups)
-        
-        print("\n🎯 STEP 1 COMPLETE:")
-        print(f"   Games: {len(matchups)}")
-        print(f"   Players: {len(all_players)}")
-        print(f"   Pitcher Matchups: {len(pitcher_matchups)}")
-        print("   Data saved to Google Sheets for next steps")
+        if matchups:
+            print(f"\n📋 SUMMARY OF TODAY'S MATCHUPS:")
+            for i, game in enumerate(matchups, 1):
+                away = game['away_team']['abbreviation']
+                home = game['home_team']['abbreviation']
+                print(f"   {i:2d}. {away} @ {home}")
         
     except Exception as e:
         logger.error(f"Error in Step 1: {e}")

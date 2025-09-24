@@ -3,7 +3,7 @@ name: MLB Pitcher-Batter Correlation Pipeline
 on:
   # Trigger via webhook (repository_dispatch)
   repository_dispatch:
-    types: [full-pipeline, test-step-1, test-step-2, test-step-3, test-step-4, test-step-5, test-steps-7-8, data-only]
+    types: [full-pipeline, test-step-1, test-step-2, test-step-3, test-step-4, test-step-5, test-step-6, test-step-7, data-only, parlays-only]
   
   # Manual triggering with comprehensive options
   workflow_dispatch:
@@ -22,7 +22,7 @@ on:
         - test-step-4
         - test-step-5
         - test-step-6
-        - test-steps-7-8
+        - test-step-7
         - parlays-only
 
 jobs:
@@ -48,7 +48,7 @@ jobs:
         github.event.inputs.pipeline == 'full-pipeline' || 
         github.event.inputs.pipeline == 'data-only' ||
         github.event.inputs.pipeline == 'test-step-1' ||
-        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-1')
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-1' || github.event.action == 'data-only')
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
@@ -62,7 +62,7 @@ jobs:
         github.event.inputs.pipeline == 'full-pipeline' || 
         github.event.inputs.pipeline == 'data-only' ||
         github.event.inputs.pipeline == 'test-step-2' ||
-        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-2')
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-2' || github.event.action == 'data-only')
       env:
         ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
@@ -77,7 +77,7 @@ jobs:
         github.event.inputs.pipeline == 'full-pipeline' || 
         github.event.inputs.pipeline == 'data-only' ||
         github.event.inputs.pipeline == 'test-step-3' ||
-        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-3')
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-3' || github.event.action == 'data-only')
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
@@ -91,7 +91,7 @@ jobs:
         github.event.inputs.pipeline == 'full-pipeline' || 
         github.event.inputs.pipeline == 'data-only' ||
         github.event.inputs.pipeline == 'test-step-4' ||
-        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-4')
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-4' || github.event.action == 'data-only')
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
@@ -105,7 +105,7 @@ jobs:
         github.event.inputs.pipeline == 'full-pipeline' || 
         github.event.inputs.pipeline == 'data-only' ||
         github.event.inputs.pipeline == 'test-step-5' ||
-        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-5')
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-5' || github.event.action == 'data-only')
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
@@ -118,9 +118,8 @@ jobs:
       if: |
         github.event.inputs.pipeline == 'full-pipeline' || 
         github.event.inputs.pipeline == 'test-step-6' ||
-        github.event.inputs.pipeline == 'test-steps-7-8' ||
         github.event.inputs.pipeline == 'parlays-only' ||
-        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-steps-7-8')
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-6' || github.event.action == 'parlays-only')
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
@@ -132,9 +131,9 @@ jobs:
     - name: "Step 7: Build Correlation Parlays"
       if: |
         github.event.inputs.pipeline == 'full-pipeline' || 
-        github.event.inputs.pipeline == 'test-steps-7-8' ||
+        github.event.inputs.pipeline == 'test-step-7' ||
         github.event.inputs.pipeline == 'parlays-only' ||
-        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-steps-7-8')
+        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-7' || github.event.action == 'parlays-only')
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
@@ -152,7 +151,7 @@ jobs:
         echo "✅ All 7 steps executed successfully"
         echo "📊 Check Google Sheets for results:"
         echo "   • MATCHUPS: Today's games and matchups"
-        echo "   • ODDS_API: Odds data from multiple sportsbooks"
+        echo "   • ODDS_API: Odds data from multiple sportsbooks"  
         echo "   • SPLASH_MLB: Splash Sports props"
         echo "   • MATCHED_LINES: Matched props between sources"
         echo "   • EV_RESULTS: Expected value opportunities"

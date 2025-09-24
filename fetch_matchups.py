@@ -107,11 +107,15 @@ class MatchupFetcher:
         all_players = []
         
         for matchup in self.matchups:
-            # Get unique team IDs
-            home_id = matchup['home_team']['espn_id']
-            away_id = matchup['away_team']['espn_id']
+            # Get unique team IDs - FIX: Access the nested dictionary correctly
+            home_team_info = matchup['home_team']
+            away_team_info = matchup['away_team']
             
-            for team_id, team_info in [(home_id, matchup['home_team']), (away_id, matchup['away_team'])]:
+            home_id = home_team_info['espn_id']
+            away_id = away_team_info['espn_id']
+            
+            # FIX: Pass both team_id and team_info correctly
+            for team_id, team_info in [(home_id, home_team_info), (away_id, away_team_info)]:
                 if team_id not in team_ids_seen:
                     team_ids_seen.add(team_id)
                     roster = self._fetch_team_roster(team_id, team_info)
@@ -133,7 +137,15 @@ class MatchupFetcher:
             
             if 'athletes' in data:
                 for athlete in data['athletes']:
-                    position = athlete.get('position', {}).get('name', 'Unknown')
+                    # FIX: Add better error checking for athlete data structure
+                    if not isinstance(athlete, dict):
+                        continue
+                        
+                    position_info = athlete.get('position', {})
+                    if not isinstance(position_info, dict):
+                        position = 'Unknown'
+                    else:
+                        position = position_info.get('name', 'Unknown')
                     
                     # Focus on position players (batters) and pitchers
                     if position in ['Outfielder', 'Infielder', 'Catcher', 'Designated Hitter', 'Pitcher']:

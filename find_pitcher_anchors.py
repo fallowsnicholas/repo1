@@ -1,4 +1,4 @@
-# find_pitcher_anchors.py - Step 6: Find pitchers with positive EV to use as parlay anchors
+# find_pitcher_anchors.py - Step 6: Find pitcher anchors in target correlation markets
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -11,19 +11,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class PitcherAnchorFinder:
-    """Step 6: Identify pitchers with positive EV to use as parlay anchors"""
+    """Step 6: Find pitcher props with positive EV in target correlation markets"""
     
     def __init__(self):
         # Target pitcher markets for correlation parlays
-        self.PITCHER_MARKETS = [
-            'pitcher_strikeouts',
-            'pitcher_earned_runs', 
-            'pitcher_hits_allowed',
-            'pitcher_outs'
+        self.TARGET_PITCHER_MARKETS = [
+            'pitcher_strikeouts',    # Correlates with opposing batter hits (negative)
+            'pitcher_earned_runs',   # Correlates with opposing batter runs (positive)  
+            'pitcher_hits_allowed'   # Correlates with opposing batter hits (positive)
         ]
         
         # Minimum EV threshold for pitcher anchors
-        self.MIN_PITCHER_EV = 0.02  # 2% minimum EV
+        self.MIN_PITCHER_EV = 0.01  # 1% minimum EV
         
     def connect_to_sheets(self):
         """Establish connection to Google Sheets"""
@@ -87,120 +86,117 @@ class PitcherAnchorFinder:
             print(f"❌ Failed to read EV results: {e}")
             return pd.DataFrame()
     
-    def read_pitcher_matchups(self, client):
-        """Read pitcher matchups from Step 1"""
-        try:
-            print("📋 Reading pitcher matchup data from Step 1...")
-            spreadsheet = client.open("MLB_Splash_Data")
-            matchups_worksheet = spreadsheet.worksheet("PITCHER_MATCHUPS")
-            matchups_data = matchups_worksheet.get_all_records()
-            matchups_df = pd.DataFrame(matchups_data)
-            
-            print(f"✅ Successfully read {len(matchups_df)} pitcher matchups")
-            return matchups_df
-            
-        except Exception as e:
-            logger.error(f"Error reading pitcher matchups: {e}")
-            print(f"❌ Failed to read pitcher matchups: {e}")
-            return pd.DataFrame()
-    
     def find_pitcher_anchors(self, ev_df):
-        """Find pitchers with positive EV in target markets"""
-        print("⚾ STEP 6: FINDING PITCHER ANCHORS")
+        """Find pitcher anchors in target correlation markets"""
+        print("⚾ STEP 6: FINDING PITCHER ANCHORS FOR CORRELATION PARLAYS")
         print("=" * 60)
         
         if ev_df.empty:
             print("❌ No EV data available")
             return pd.DataFrame()
         
-        print(f"🎯 Looking for pitcher EVs in markets: {self.PITCHER_MARKETS}")
+        print(f"🎯 Target pitcher markets for correlations:")
+        print(f"   • pitcher_strikeouts ↔ opposing batter hits (negative correlation)")
+        print(f"   • pitcher_earned_runs ↔ opposing batter runs (positive correlation)")
+        print(f"   • pitcher_hits_allowed ↔ opposing batter hits (positive correlation)")
         print(f"📈 Minimum EV threshold: {self.MIN_PITCHER_EV:.1%}")
         
         # Filter for pitcher markets with sufficient EV
-        pitcher_evs = ev_df[
-            (ev_df['Market'].isin(self.PITCHER_MARKETS)) & 
+        pitcher_anchors = ev_df[
+            (ev_df['Market'].isin(self.TARGET_PITCHER_MARKETS)) & 
             (ev_df['Splash_EV_Percentage'] >= self.MIN_PITCHER_EV)
         ].copy()
         
-        if pitcher_evs.empty:
-            print("❌ No pitcher EVs found above threshold")
+        if pitcher_anchors.empty:
+            print("❌ No pitcher anchors found above EV threshold")
+            print("💡 Try lowering MIN_PITCHER_EV or check if pitcher markets exist in EV data")
+            
+            # Show what markets we do have
+            if 'Market' in ev_df.columns:
+                available_markets = ev_df['Market'].value_counts()
+                print(f"📊 Available markets in EV data:")
+                for market, count in available_markets.head(10).items():
+                    print(f"   • {market}: {count} opportunities")
+            
             return pd.DataFrame()
         
-        print(f"✅ Found {len(pitcher_evs)} pitcher EV opportunities")
+        print(f"✅ Found {len(pitcher_anchors)} pitcher anchor opportunities")
         
         # Show breakdown by market
-        market_breakdown = pitcher_evs['Market'].value_counts()
-        print(f"📊 Pitcher EVs by market:")
+        market_breakdown = pitcher_anchors['Market'].value_counts()
+        print(f"📊 Pitcher anchors by market:")
         for market, count in market_breakdown.items():
             print(f"   • {market}: {count} opportunities")
         
         # Show top pitcher opportunities
         print(f"\n🏆 Top pitcher anchor opportunities:")
-        top_pitchers = pitcher_evs.nlargest(5, 'Splash_EV_Percentage')
+        top_pitchers = pitcher_anchors.nlargest(10, 'Splash_EV_Percentage')
         for i, (_, row) in enumerate(top_pitchers.iterrows(), 1):
-            print(f"   {i}. {row['Player']} - {row['Market']} {row['Line']} ({row['Bet_Type']})")
-            print(f"      EV: {row['Splash_EV_Percentage']:.3f} ({row['Splash_EV_Percentage']:.1%}) | Books: {row['Num_Books_Used']}")
-        
-        return pitcher_evs
-    
-    def match_pitchers_to_opponents(self, pitcher_evs, matchups_df):
-        """Match pitcher anchors to their opposing batters"""
-        if pitcher_evs.empty or matchups_df.empty:
-            print("❌ Missing pitcher EVs or matchup data")
-            return []
-        
-        print(f"🔗 Matching {len(pitcher_evs)} pitcher anchors to opposing batters...")
-        
-        pitcher_anchor_matchups = []
-        
-        for _, pitcher_ev in pitcher_evs.iterrows():
-            pitcher_name = pitcher_ev['Player']
+            player = row['Player']
+            market = row['Market']
+            line = row.get('Line', 'N/A')
+            bet_type = row.get('Bet_Type', 'N/A')
+            ev = row['Splash_EV_Percentage']
+            books = row.get('Num_Books_Used', 0)
             
-            # Find matchups for this pitcher
-            pitcher_matchups = matchups_df[matchups_df['Pitcher_Name'] == pitcher_name]
+            # Determine correlation type
+            correlation_type = "negative" if market == 'pitcher_strikeouts' else "positive"
             
-            for _, matchup in pitcher_matchups.iterrows():
-                # Parse opposing batter names
-                opposing_batters = []
-                if matchup['Batter_Names'] and matchup['Batter_Names'] != '':
-                    batter_names = str(matchup['Batter_Names']).split('; ')
-                    for i, name in enumerate(batter_names[:5], 1):  # Top 5 batters
-                        opposing_batters.append({
-                            'name': name.strip(),
-                            'position': i
-                        })
-                
-                if opposing_batters:
-                    pitcher_anchor_matchups.append({
-                        'pitcher_anchor': pitcher_ev.to_dict(),
-                        'game_id': matchup['Game_ID'],
-                        'pitcher_team': matchup['Pitcher_Team'],
-                        'opposing_team': matchup['Opposing_Team'],
-                        'opposing_batters': opposing_batters,
-                        'matchup_type': matchup['Matchup_Type']
-                    })
+            print(f"   {i:2d}. {player} - {market} {line} ({bet_type})")
+            print(f"       EV: {ev:.3f} ({ev:.1%}) | Books: {books} | Correlation: {correlation_type}")
         
-        print(f"⚾ Created {len(pitcher_anchor_matchups)} pitcher anchor vs opposing batter matchups")
-        
-        if pitcher_anchor_matchups:
-            # Show sample matchups
-            print(f"\n🎯 Sample pitcher anchor matchups:")
-            for i, matchup in enumerate(pitcher_anchor_matchups[:3], 1):
-                anchor = matchup['pitcher_anchor']
-                batters_count = len(matchup['opposing_batters'])
-                print(f"   {i}. {anchor['Player']} ({matchup['pitcher_team']}) vs {batters_count} opposing batters ({matchup['opposing_team']})")
-                print(f"      Anchor EV: {anchor['Splash_EV_Percentage']:.3f} | Market: {anchor['Market']} {anchor['Line']} ({anchor['Bet_Type']})")
-        
-        return pitcher_anchor_matchups
+        return pitcher_anchors
     
-    def save_pitcher_anchors(self, pitcher_anchor_matchups, client):
-        """Save pitcher anchor matchups for Step 7"""
+    def add_correlation_info(self, pitcher_anchors):
+        """Add correlation information to pitcher anchors"""
+        if pitcher_anchors.empty:
+            return pitcher_anchors
+            
+        print(f"🔗 Adding correlation information to pitcher anchors...")
+        
+        # Define correlations for each pitcher market
+        correlation_mappings = {
+            'pitcher_strikeouts': {
+                'opposing_market': 'batter_hits',
+                'correlation_strength': -0.70,
+                'correlation_type': 'negative',
+                'logic': 'More strikeouts = fewer hits for opposing batters'
+            },
+            'pitcher_earned_runs': {
+                'opposing_market': 'batter_runs_scored', 
+                'correlation_strength': 0.70,
+                'correlation_type': 'positive',
+                'logic': 'Pitcher struggles = opposing batters score more runs'
+            },
+            'pitcher_hits_allowed': {
+                'opposing_market': 'batter_hits',
+                'correlation_strength': 0.75,
+                'correlation_type': 'positive', 
+                'logic': 'Pitcher allows hits = batters get hits'
+            }
+        }
+        
+        # Add correlation info to each pitcher anchor
+        pitcher_anchors = pitcher_anchors.copy()
+        
+        for market, corr_info in correlation_mappings.items():
+            mask = pitcher_anchors['Market'] == market
+            pitcher_anchors.loc[mask, 'Opposing_Market'] = corr_info['opposing_market']
+            pitcher_anchors.loc[mask, 'Correlation_Strength'] = corr_info['correlation_strength']
+            pitcher_anchors.loc[mask, 'Correlation_Type'] = corr_info['correlation_type']
+            pitcher_anchors.loc[mask, 'Correlation_Logic'] = corr_info['logic']
+        
+        print(f"✅ Added correlation info to {len(pitcher_anchors)} pitcher anchors")
+        return pitcher_anchors
+    
+    def save_pitcher_anchors(self, pitcher_anchors, client):
+        """Save pitcher anchors for Step 7"""
         try:
-            if not pitcher_anchor_matchups:
-                print("❌ No pitcher anchor matchups to save")
+            if pitcher_anchors.empty:
+                print("❌ No pitcher anchors to save")
                 return
             
-            print(f"💾 Saving {len(pitcher_anchor_matchups)} pitcher anchor matchups...")
+            print(f"💾 Saving {len(pitcher_anchors)} pitcher anchors to Google Sheets...")
             
             spreadsheet = client.open("MLB_Splash_Data")
             
@@ -213,49 +209,44 @@ class PitcherAnchorFinder:
             # Clear existing data
             worksheet.clear()
             
-            # Format data for sheet
-            formatted_data = []
-            for i, matchup in enumerate(pitcher_anchor_matchups, 1):
-                anchor = matchup['pitcher_anchor']
-                opposing_batters = matchup['opposing_batters']
-                
-                # Create summary of opposing batters
-                batter_names = [b['name'] for b in opposing_batters]
-                batter_summary = '; '.join(batter_names)
-                
-                formatted_data.append([
-                    f"ANCHOR_{i:03d}",
-                    matchup['game_id'],
-                    anchor['Player'],
-                    anchor['Market'],
-                    anchor['Line'],
-                    anchor['Bet_Type'],
-                    anchor['Splash_EV_Percentage'],
-                    anchor['Num_Books_Used'],
-                    anchor['Best_Odds'],
-                    matchup['pitcher_team'],
-                    matchup['opposing_team'],
-                    len(opposing_batters),
-                    batter_summary,
-                    matchup['matchup_type'],
-                    datetime.now().isoformat()
+            # Prepare data for saving
+            save_data = []
+            for i, (_, row) in enumerate(pitcher_anchors.iterrows(), 1):
+                save_data.append([
+                    f"ANCHOR_{i:03d}",  # Anchor_ID
+                    row['Player'],      # Player_Name
+                    row['Market'],      # Market
+                    row.get('Line', ''), # Line
+                    row.get('Bet_Type', ''), # Bet_Type
+                    row['Splash_EV_Percentage'], # EV
+                    row.get('Num_Books_Used', 0), # Num_Books
+                    row.get('Best_Odds', 0), # Best_Odds
+                    row.get('Best_Sportsbook', ''), # Best_Book
+                    row.get('Opposing_Market', ''), # Opposing_Market
+                    row.get('Correlation_Strength', 0), # Correlation_Strength
+                    row.get('Correlation_Type', ''), # Correlation_Type
+                    row.get('Correlation_Logic', ''), # Correlation_Logic
+                    datetime.now().isoformat() # Created_At
                 ])
             
-            # Add headers and metadata
+            # Headers
             headers = [
-                'Anchor_ID', 'Game_ID', 'Pitcher_Name', 'Market', 'Line', 'Bet_Type',
-                'Pitcher_EV', 'Num_Books', 'Best_Odds', 'Pitcher_Team', 'Opposing_Team',
-                'Num_Opposing_Batters', 'Opposing_Batter_Names', 'Matchup_Type', 'Created_At'
+                'Anchor_ID', 'Player_Name', 'Market', 'Line', 'Bet_Type', 'EV',
+                'Num_Books', 'Best_Odds', 'Best_Book', 'Opposing_Market', 
+                'Correlation_Strength', 'Correlation_Type', 'Correlation_Logic', 'Created_At'
             ]
             
+            # Add metadata
             metadata = [
-                ['Pitcher Anchor Data', ''],
+                ['Pitcher Anchor Data for Correlation Parlays', ''],
                 ['Created At', datetime.now().isoformat()],
-                ['Total Anchors', len(pitcher_anchor_matchups)],
+                ['Total Anchors', len(pitcher_anchors)],
+                ['Target Markets', ', '.join(self.TARGET_PITCHER_MARKETS)],
+                ['Min EV Threshold', f"{self.MIN_PITCHER_EV:.1%}"],
                 ['']
             ]
             
-            all_data = metadata + [headers] + formatted_data
+            all_data = metadata + [headers] + save_data
             
             # Write to sheet
             worksheet.update(range_name='A1', values=all_data)
@@ -282,34 +273,26 @@ def main():
             print("❌ No EV results found from Step 5")
             return
         
-        # Read pitcher matchups from Step 1
-        matchups_df = finder.read_pitcher_matchups(client)
+        # Find pitcher anchors in target markets
+        pitcher_anchors = finder.find_pitcher_anchors(ev_df)
         
-        if matchups_df.empty:
-            print("❌ No pitcher matchup data found from Step 1")
+        if pitcher_anchors.empty:
+            print("❌ No pitcher anchors found")
             return
         
-        # Find pitcher anchors
-        pitcher_evs = finder.find_pitcher_anchors(ev_df)
-        
-        if pitcher_evs.empty:
-            print("❌ No pitcher anchors found with sufficient EV")
-            return
-        
-        # Match pitchers to opposing batters
-        pitcher_anchor_matchups = finder.match_pitchers_to_opponents(pitcher_evs, matchups_df)
-        
-        if not pitcher_anchor_matchups:
-            print("❌ No pitcher anchor matchups created")
-            return
+        # Add correlation information
+        pitcher_anchors = finder.add_correlation_info(pitcher_anchors)
         
         # Save for Step 7
-        finder.save_pitcher_anchors(pitcher_anchor_matchups, client)
+        finder.save_pitcher_anchors(pitcher_anchors, client)
         
         print(f"\n✅ STEP 6 COMPLETE:")
-        print(f"   Pitcher anchors found: {len(pitcher_evs)}")
-        print(f"   Anchor-opponent matchups: {len(pitcher_anchor_matchups)}")
-        print(f"   Ready for Step 7 (Build Parlays)")
+        print(f"   🎯 Pitcher anchors found: {len(pitcher_anchors)}")
+        print(f"   📊 Target correlation markets:")
+        print(f"      • Strikeouts → Opposing Hits (negative)")
+        print(f"      • Earned Runs → Opposing Runs (positive)")  
+        print(f"      • Hits Allowed → Opposing Hits (positive)")
+        print(f"   📋 Data ready for Step 7 (Build Parlays)")
         
     except Exception as e:
         logger.error(f"Error in Step 6: {e}")

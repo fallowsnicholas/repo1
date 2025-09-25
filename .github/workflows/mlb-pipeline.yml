@@ -82,7 +82,7 @@ jobs:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
         echo "🎯 Starting Step 3: Fetch Splash Sports Data"
-        python fetch_splash_data.py
+        python fetch_splash.py
         echo "✅ Step 3 complete"
     
     # STEP 4: Match lines

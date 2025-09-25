@@ -15,17 +15,14 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_brightdata_proxy():
-    """Get Bright Data proxy configuration with session ID (alphanumeric only)"""
-    proxy_username = os.environ.get('PROXY_USERNAME')
-    proxy_password = os.environ.get('PROXY_PASSWORD')
+    """Get Bright Data proxy configuration with exact dashboard credentials"""
+    # Use exact credentials from dashboard screenshot
+    proxy_username = "brd-customer-hl_41883af7-zone-residential_proxy1"
+    proxy_password = "i874o85in443"
     
-    if not proxy_username:
-        raise ValueError("Missing PROXY_USERNAME environment variable")
-    if not proxy_password:
-        raise ValueError("Missing PROXY_PASSWORD environment variable")
-    
-    print(f"🔑 Username: {proxy_username}")
-    print(f"🔑 Password: {proxy_password}")
+    print(f"🔑 Using exact dashboard credentials:")
+    print(f"   Username: {proxy_username}")
+    print(f"   Password: {proxy_password}")
     
     # Add session ID to username (alphanumeric only per Bright Data requirements)
     import random

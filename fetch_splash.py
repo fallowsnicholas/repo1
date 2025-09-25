@@ -9,14 +9,23 @@ from google.oauth2.service_account import Credentials
 import os
 import time
 import random
+import urllib3
+
+# Disable SSL warnings when using proxies
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_brightdata_proxy():
-    """Get Bright Data proxy configuration from environment variables"""
+    """Get Bright Data proxy configuration with debug info"""
     proxy_username = os.environ.get('PROXY_USERNAME')
     proxy_password = os.environ.get('PROXY_PASSWORD')
     
-    if not all([proxy_username, proxy_password]):
-        raise ValueError("Missing Bright Data proxy credentials. Please set PROXY_USERNAME and PROXY_PASSWORD environment variables.")
+    if not proxy_username:
+        raise ValueError("Missing PROXY_USERNAME environment variable")
+    if not proxy_password:
+        raise ValueError("Missing PROXY_PASSWORD environment variable")
+    
+    print(f"🔑 Username: {proxy_username[:20]}...{proxy_username[-10:]}")
+    print(f"🔑 Password: {proxy_password[:5]}...{proxy_password[-5:]}")
     
     # Use the exact endpoint from your Bright Data dashboard
     proxy_endpoint = "brd.superproxy.io:33335"
@@ -34,23 +43,59 @@ def get_brightdata_proxy():
     return proxies
 
 def test_proxy_connection(proxies):
-    """Test if the proxy connection is working"""
+    """Test if the proxy connection is working with better error handling"""
     test_url = "http://httpbin.org/ip"
     
     try:
         print("🔍 Testing proxy connection...")
-        response = requests.get(test_url, proxies=proxies, timeout=15)
+        print(f"🌐 Proxy URL format: http://[username]:[password]@brd.superproxy.io:33335")
+        
+        # Test with longer timeout and better error handling
+        response = requests.get(test_url, proxies=proxies, timeout=30, verify=False)
         
         if response.status_code == 200:
             ip_info = response.json()
-            print(f"✅ Proxy working! Current IP: {ip_info.get('origin', 'Unknown')}")
-            return True
+            current_ip = ip_info.get('origin', 'Unknown')
+            print(f"✅ Proxy working! Current IP: {current_ip}")
+            
+            # Check if it's actually a different IP (not the original GitHub Actions IP)
+            if current_ip != 'Unknown':
+                print(f"🏠 Using residential IP: {current_ip}")
+                return True
+            else:
+                print(f"⚠️ IP detection unclear, but connection successful")
+                return True
         else:
             print(f"❌ Proxy test failed with status: {response.status_code}")
+            print(f"    Response: {response.text[:200]}")
             return False
             
+    except requests.exceptions.ProxyError as e:
+        print(f"❌ Proxy authentication/configuration error: {e}")
+        print("💡 Common causes:")
+        print("   • Wrong username or password")
+        print("   • Proxy zone not active")
+        print("   • IP not whitelisted (if required)")
+        return False
+        
+    except requests.exceptions.Timeout as e:
+        print(f"❌ Proxy timeout (30s): {e}")
+        print("💡 Common causes:")
+        print("   • Proxy server overloaded")
+        print("   • Wrong endpoint/port")
+        print("   • Network connectivity issues")
+        return False
+        
+    except requests.exceptions.ConnectionError as e:
+        print(f"❌ Connection error: {e}")
+        print("💡 Common causes:")
+        print("   • Wrong host or port")
+        print("   • Proxy service down")
+        print("   • Network firewall blocking connection")
+        return False
+        
     except Exception as e:
-        print(f"❌ Proxy test failed: {e}")
+        print(f"❌ Unexpected error: {e}")
         return False
 
 def get_random_headers():
@@ -169,8 +214,8 @@ def fetch_splash_data_with_residential_proxy():
             delay = random_delay(2, 6)
             print(f"   ⏱️ Delayed {delay:.1f}s")
             
-            # Make request through residential proxy
-            response = session.get(url, params=params, headers=headers, timeout=30)
+            # Make request through residential proxy (disable SSL verification for proxy)
+            response = session.get(url, params=params, headers=headers, timeout=30, verify=False)
             print(f"   📡 Status Code: {response.status_code}")
             
             if response.status_code == 200:

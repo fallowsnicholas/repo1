@@ -15,7 +15,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_brightdata_proxy():
-    """Get Bright Data proxy configuration with debug info"""
+    """Get Bright Data proxy configuration with session ID"""
     proxy_username = os.environ.get('PROXY_USERNAME')
     proxy_password = os.environ.get('PROXY_PASSWORD')
     
@@ -27,18 +27,24 @@ def get_brightdata_proxy():
     print(f"🔑 Username: {proxy_username[:20]}...{proxy_username[-10:]}")
     print(f"🔑 Password: {proxy_password[:5]}...{proxy_password[-5:]}")
     
+    # Add session ID to username for better connection handling
+    import random
+    session_id = random.randint(1000, 9999)
+    username_with_session = f"{proxy_username}-session-{session_id}"
+    
     # Use the exact endpoint from your Bright Data dashboard
     proxy_endpoint = "brd.superproxy.io:33335"
     
-    # Bright Data proxy URL
-    proxy_url = f"http://{proxy_username}:{proxy_password}@{proxy_endpoint}"
+    print(f"🌐 Using endpoint: {proxy_endpoint}")
+    print(f"🆔 Session ID: {session_id}")
+    
+    # Bright Data proxy URL with session
+    proxy_url = f"http://{username_with_session}:{proxy_password}@{proxy_endpoint}"
     
     proxies = {
         'http': proxy_url,
         'https': proxy_url
     }
-    
-    print(f"🌐 Using endpoint: {proxy_endpoint}")
     
     return proxies
 
@@ -132,8 +138,8 @@ def get_random_headers():
         'Pragma': 'no-cache'
     }
 
-def random_delay(min_seconds=2, max_seconds=6):
-    """Add random delay to mimic human behavior"""
+def random_delay(min_seconds=5, max_seconds=15):
+    """Add random delay to mimic human behavior and avoid rate limiting"""
     delay = random.uniform(min_seconds, max_seconds)
     time.sleep(delay)
     return delay
@@ -183,8 +189,8 @@ def fetch_splash_data_with_residential_proxy():
     
     all_props = []
     offset = 0
-    limit = 500  # Can be more aggressive with residential proxies
-    max_requests = 10
+    limit = 100  # Much smaller batches for Immediate Access mode
+    max_requests = 20  # Allow more requests with smaller batches
     requests_made = 0
     consecutive_failures = 0
     max_consecutive_failures = 3
@@ -192,10 +198,11 @@ def fetch_splash_data_with_residential_proxy():
     print("⚾ STEP 3: FETCHING SPLASH SPORTS DATA (RESIDENTIAL PROXY)")
     print("=" * 60)
     print("🏠 Using Bright Data residential proxy network")
-    print("🛡️ Anti-bot measures:")
-    print("   • Residential IP addresses")
-    print("   • Randomized headers")
-    print("   • Human-like delays")
+    print("🛡️ IMMEDIATE ACCESS MODE - Rate Limited")
+    print("   • SSL verification: disabled (✅)")
+    print("   • Request throttling: active")
+    print("   • Batch size: reduced to 100")
+    print("   • Delays: 5-15 seconds between requests")
     print()
     
     while requests_made < max_requests and consecutive_failures < max_consecutive_failures:
@@ -210,9 +217,9 @@ def fetch_splash_data_with_residential_proxy():
         print(f"🔄 Request {requests_made + 1}: offset={offset}, limit={limit}")
         
         try:
-            # Random delay between requests
-            delay = random_delay(2, 6)
-            print(f"   ⏱️ Delayed {delay:.1f}s")
+            # Random delay between requests (longer for Immediate Access)
+            delay = random_delay(5, 15)
+            print(f"   ⏱️ Delayed {delay:.1f}s (rate limiting compliance)")
             
             # Make request through residential proxy (disable SSL verification for proxy)
             response = session.get(url, params=params, headers=headers, timeout=30, verify=False)
@@ -247,16 +254,18 @@ def fetch_splash_data_with_residential_proxy():
                 print(f"   🚫 403 Forbidden (attempt {consecutive_failures}/{max_consecutive_failures})")
                 
                 if consecutive_failures < max_consecutive_failures:
-                    print("   🔄 Residential IP may be flagged, trying new session...")
-                    # Close and recreate session to potentially get new residential IP
-                    session.close()
-                    session = requests.Session()
-                    session.proxies.update(proxies)
+                    print("   🔄 503 Service Unavailable - Rate limited by Immediate Access")
+                    print("      • This is normal for non-KYC verified accounts")
+                    print("      • Increasing delays and reducing batch size...")
                     
-                    # Longer delay
-                    extended_delay = random.uniform(15, 25)
+                    # Longer delay for 503 errors
+                    extended_delay = random.uniform(30, 60)
                     print(f"      • Extended delay: {extended_delay:.1f}s")
                     time.sleep(extended_delay)
+                    
+                    # Further reduce batch size
+                    limit = max(50, limit // 2)
+                    print(f"      • Reduced batch size to: {limit}")
                 else:
                     print("   ❌ Multiple 403 errors even with residential proxy")
                     

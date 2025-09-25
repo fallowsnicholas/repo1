@@ -18,12 +18,8 @@ def get_brightdata_proxy():
     if not all([proxy_username, proxy_password]):
         raise ValueError("Missing Bright Data proxy credentials. Please set PROXY_USERNAME and PROXY_PASSWORD environment variables.")
     
-    # Extract endpoint from username (newer Bright Data format)
-    # Username format: brd-customer-hl_41883af7-zone-residential_proxy1
-    # Endpoint format: brd-customer-hl_41883af7-zone-residential_proxy1:22225
-    
-    # Standard Bright Data residential proxy port
-    proxy_endpoint = f"{proxy_username}:22225"
+    # Use the exact endpoint from your Bright Data dashboard
+    proxy_endpoint = "brd.superproxy.io:33335"
     
     # Bright Data proxy URL
     proxy_url = f"http://{proxy_username}:{proxy_password}@{proxy_endpoint}"
@@ -33,9 +29,29 @@ def get_brightdata_proxy():
         'https': proxy_url
     }
     
-    print(f"🌐 Proxy endpoint: {proxy_endpoint}")
+    print(f"🌐 Using endpoint: {proxy_endpoint}")
     
     return proxies
+
+def test_proxy_connection(proxies):
+    """Test if the proxy connection is working"""
+    test_url = "http://httpbin.org/ip"
+    
+    try:
+        print("🔍 Testing proxy connection...")
+        response = requests.get(test_url, proxies=proxies, timeout=15)
+        
+        if response.status_code == 200:
+            ip_info = response.json()
+            print(f"✅ Proxy working! Current IP: {ip_info.get('origin', 'Unknown')}")
+            return True
+        else:
+            print(f"❌ Proxy test failed with status: {response.status_code}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Proxy test failed: {e}")
+        return False
 
 def get_random_headers():
     """Generate randomized headers for residential proxy requests"""

@@ -15,7 +15,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_brightdata_proxy():
-    """Get Bright Data proxy configuration with session ID"""
+    """Get Bright Data proxy configuration with session ID (alphanumeric only)"""
     proxy_username = os.environ.get('PROXY_USERNAME')
     proxy_password = os.environ.get('PROXY_PASSWORD')
     
@@ -24,19 +24,19 @@ def get_brightdata_proxy():
     if not proxy_password:
         raise ValueError("Missing PROXY_PASSWORD environment variable")
     
-    print(f"🔑 Username: {proxy_username[:20]}...{proxy_username[-10:]}")
-    print(f"🔑 Password: {proxy_password[:5]}...{proxy_password[-5:]}")
+    print(f"🔑 Username: {proxy_username}")
+    print(f"🔑 Password: {proxy_password}")
     
-    # Add session ID to username for better connection handling
+    # Add session ID to username (alphanumeric only per Bright Data requirements)
     import random
-    session_id = random.randint(1000, 9999)
-    username_with_session = f"{proxy_username}-session-{session_id}"
+    session_id = f"session{random.randint(1000, 9999)}"  # sessionXXXX format
+    username_with_session = f"{proxy_username}-{session_id}"
     
     # Use the exact endpoint from your Bright Data dashboard
     proxy_endpoint = "brd.superproxy.io:33335"
     
     print(f"🌐 Using endpoint: {proxy_endpoint}")
-    print(f"🆔 Session ID: {session_id}")
+    print(f"🆔 Full username with session: {username_with_session}")
     
     # Bright Data proxy URL with session
     proxy_url = f"http://{username_with_session}:{proxy_password}@{proxy_endpoint}"

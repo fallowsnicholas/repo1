@@ -72,16 +72,13 @@ jobs:
         python fetch_odds_data.py
         echo "✅ Step 2 complete"
     
-    # STEP 3: Fetch Splash Sports data
+    # STEP 3: Fetch Splash Sports data  
     - name: "Step 3: Fetch Splash Sports Data"
       if: |
-        github.event.inputs.pipeline == 'full-pipeline' || 
-        github.event.inputs.pipeline == 'data-only' ||
         github.event.inputs.pipeline == 'test-step-3'
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
-        PROXY_USERNAME: ${{ secrets.PROXY_USERNAME }}
-        PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
+        # Temporarily removed proxy credentials - they're hardcoded for testing
       run: |
         echo "🎯 Starting Step 3: Fetch Splash Sports Data"
         python fetch_splash.py

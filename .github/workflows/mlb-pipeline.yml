@@ -158,3 +158,12 @@ jobs:
         echo "   • EV_RESULTS: Expected value opportunities"
         echo "   • PITCHER_ANCHORS: Pitcher-based parlay anchors"
         echo "   • CORRELATION_PARLAYS: Final pitcher vs batter parlays"
+
+    # Test Bright Data
+    - name: "Debug: Test Bright Data Connection"  
+      env:
+        PROXY_USERNAME: ${{ secrets.PROXY_USERNAME }}
+        PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
+      run: |
+        echo "🔍 Testing Bright Data connection..."
+        python brightdata_test.py  

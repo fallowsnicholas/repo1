@@ -76,10 +76,11 @@ jobs:
       if: |
         github.event.inputs.pipeline == 'full-pipeline' || 
         github.event.inputs.pipeline == 'data-only' ||
-        github.event.inputs.pipeline == 'test-step-3' ||
-        github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-3' || github.event.action == 'data-only')
+        github.event.inputs.pipeline == 'test-step-3'
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+        PROXY_USERNAME: ${{ secrets.PROXY_USERNAME }}
+        PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
       run: |
         echo "🎯 Starting Step 3: Fetch Splash Sports Data"
         python fetch_splash.py

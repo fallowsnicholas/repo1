@@ -24,6 +24,7 @@ on:
         - test-step-6
         - test-step-7
         - parlays-only
+        - Test Bright Data
 
 jobs:
   mlb-pipeline:

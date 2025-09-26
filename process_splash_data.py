@@ -217,7 +217,7 @@ class RobustSplashDataProcessor:
         return df
     
     def save_to_google_sheets(self, df):
-        """Save processed data to Google Sheets - Clean data only, no metadata"""
+        """Save processed data to Google Sheets with helpful metadata"""
         if df.empty:
             print("❌ No data to save to Google Sheets")
             return False
@@ -250,23 +250,43 @@ class RobustSplashDataProcessor:
             print("🧹 Clearing existing data...")
             worksheet.clear()
             
+            # Prepare helpful metadata (readable scripts will skip this)
+            header_info = [
+                ['=== SPLASH SPORTS MLB DATA ===', ''],
+                ['Processed At:', datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')],
+                ['Total Props:', str(len(df))],
+                ['Unique Players:', str(df['Name'].nunique())],
+                ['Unique Markets:', str(df['Market'].nunique())],
+                ['Top Markets:', ', '.join(df['Market'].value_counts().head(3).index.tolist())],
+                ['Data Source:', 'Splash Sports via ScraperAPI/ScrapFly/ZenRows'],
+                ['Processing Method:', 'Robust structure detection'],
+                ['Pipeline Step:', 'Step 3B - JSON Processing'],
+                [''],  # Empty row for spacing
+                ['NOTE: Scripts automatically skip this metadata when reading data'],
+                ['']   # Another empty row before actual data
+            ]
+            
             # Sort data by market then by player name for consistency
             df_sorted = df.sort_values(['Market', 'Name']).reset_index(drop=True)
             
-            # Write clean data directly - headers + data only
-            print("✍️ Writing clean data to sheet...")
-            all_data = [df_sorted.columns.tolist()] + df_sorted.values.tolist()
+            # Combine metadata, headers, and data
+            all_data = header_info + [df_sorted.columns.tolist()] + df_sorted.values.tolist()
+            
+            # Write to sheet
+            print("✍️ Writing data with metadata to sheet...")
             worksheet.update(range_name='A1', values=all_data)
             
             print("✅ Successfully saved to Google Sheets!")
             print(f"📊 Saved {len(df)} props to SPLASH_MLB worksheet")
-            print(f"📋 Format: Headers in row 1, data starts row 2")
+            print(f"📋 Format: Metadata rows 1-12, headers row 13, data starts row 14")
+            print(f"🤖 Downstream scripts will automatically skip metadata")
             
-            # Show final summary in logs (metadata visible in workflow)
-            print(f"\n📈 SUMMARY (visible in workflow logs):")
+            # Show final summary in logs (also visible in metadata)
+            print(f"\n📈 SUMMARY:")
             print(f"   • Total Props: {len(df)}")
             print(f"   • Unique Players: {df['Name'].nunique()}")
             print(f"   • Unique Markets: {df['Market'].nunique()}")
+            print(f"   • Top Markets: {', '.join(df['Market'].value_counts().head(3).index.tolist())}")
             print(f"   • Processed At: {datetime.now().isoformat()}")
             
             return True

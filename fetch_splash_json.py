@@ -119,10 +119,11 @@ class SplashJSONFetcher:
         return f"{base_url}?{param_string}"
     
     def fetch_all_splash_json(self):
-        """Main fetching logic - collect all JSON data without processing"""
-        print("📥 STEP 3A: FETCHING SPLASH SPORTS JSON DATA")
+        """Main fetching logic - collect raw JSON responses only (NO PROCESSING)"""
+        print("📥 STEP 3A: FETCHING RAW JSON RESPONSES")
         print("=" * 60)
-        print("🎯 Goal: Collect raw JSON data only (no processing)")
+        print("🎯 Goal: Collect raw API responses only")
+        print("🚫 NO data analysis, filtering, or counting")
         print("💾 Output: splash_raw_data.json")
         print()
         
@@ -133,7 +134,7 @@ class SplashJSONFetcher:
             ('ZenRows', self.fetch_via_zenrows)
         ]
         
-        all_raw_data = []
+        all_raw_responses = []
         offset = 0
         limit = 100
         max_requests = 25  # Conservative for free tiers
@@ -151,55 +152,52 @@ class SplashJSONFetcher:
             print(f"\n📊 Request {requests_made + 1}/{max_requests}: offset={offset}, limit={limit}")
             
             # Try each API service in priority order
-            data_fetched = False
+            response_received = False
             service_used = None
             
             for service_name, service_func in api_services:
                 print(f"   🔍 Trying {service_name}...")
                 
-                json_data, used_service = service_func(self.base_url, params)
+                raw_json_response, used_service = service_func(self.base_url, params)
                 
-                if json_data and 'data' in json_data:
-                    props_batch = json_data['data']
+                if raw_json_response:
+                    print(f"   ✅ Raw JSON received via {used_service}")
                     
-                    if props_batch:
-                        print(f"   ✅ Success! {len(props_batch)} props via {used_service}")
-                        
-                        # Store raw response with metadata
-                        batch_info = {
-                            'request_number': requests_made + 1,
-                            'offset': offset,
-                            'limit': limit,
-                            'service_used': used_service,
-                            'timestamp': datetime.now().isoformat(),
-                            'props_count': len(props_batch),
-                            'raw_data': props_batch
-                        }
-                        
-                        all_raw_data.append(batch_info)
-                        data_fetched = True
-                        service_used = used_service
-                        
-                        # Track service usage
-                        if used_service not in self.services_used:
-                            self.services_used.append(used_service)
-                        
-                        break
-                    else:
-                        print(f"   ℹ️ {service_name}: Empty data array (end of pagination)")
-                        print("   🏁 Pagination complete - no more data available")
-                        return self._save_raw_data(all_raw_data)
+                    # Store the COMPLETE raw response with minimal metadata
+                    response_info = {
+                        'request_number': requests_made + 1,
+                        'offset': offset,
+                        'limit': limit,
+                        'service_used': used_service,
+                        'timestamp': datetime.now().isoformat(),
+                        'complete_raw_response': raw_json_response  # Store everything as-is
+                    }
+                    
+                    all_raw_responses.append(response_info)
+                    response_received = True
+                    service_used = used_service
+                    
+                    # Track service usage
+                    if used_service not in self.services_used:
+                        self.services_used.append(used_service)
+                    
+                    # Check for pagination end WITHOUT analyzing content
+                    # Just check if response has data field and if it's empty
+                    if isinstance(raw_json_response, dict) and 'data' in raw_json_response:
+                        if not raw_json_response['data']:  # Empty data array
+                            print(f"   🏁 API returned empty data array - pagination complete")
+                            return self._save_raw_responses(all_raw_responses)
+                        elif len(raw_json_response['data']) < limit:
+                            print(f"   🏁 API returned partial batch - end of data")
+                            return self._save_raw_responses(all_raw_responses)
+                    
+                    break
                 else:
-                    print(f"   ❌ {service_name}: Invalid response format")
+                    print(f"   ❌ {service_name}: No response received")
             
-            if not data_fetched:
+            if not response_received:
                 print(f"   ❌ All API services failed for request {requests_made + 1}")
                 print("   🛑 Stopping fetch due to service failures")
-                break
-            
-            # Check if we got less than limit (end of pagination)
-            if len(props_batch) < limit:
-                print(f"   🏁 End of data: Got {len(props_batch)} < {limit} (limit)")
                 break
             
             offset += limit
@@ -211,33 +209,32 @@ class SplashJSONFetcher:
                 print(f"   ⏱️ Rate limiting delay: {delay:.1f}s")
                 time.sleep(delay)
         
-        return self._save_raw_data(all_raw_data)
+        return self._save_raw_responses(all_raw_responses)
     
-    def _save_raw_data(self, all_raw_data):
-        """Save collected data to JSON file"""
-        if not all_raw_data:
-            print("❌ No data collected to save")
+    def _save_raw_responses(self, all_raw_responses):
+        """Save collected raw API responses to JSON file"""
+        if not all_raw_responses:
+            print("❌ No responses collected to save")
             return False
         
-        # Calculate totals
-        total_props = sum(batch['props_count'] for batch in all_raw_data)
-        total_requests = len(all_raw_data)
+        # Calculate basic totals WITHOUT analyzing content
+        total_requests = len(all_raw_responses)
         services_summary = {}
         
-        for batch in all_raw_data:
-            service = batch['service_used']
+        for response in all_raw_responses:
+            service = response['service_used']
             services_summary[service] = services_summary.get(service, 0) + 1
         
-        # Create final JSON structure
+        # Create final JSON structure - store everything as-is
         output_data = {
             'fetch_metadata': {
                 'fetch_timestamp': datetime.now().isoformat(),
                 'total_requests_made': total_requests,
-                'total_props_collected': total_props,
                 'services_used': services_summary,
-                'fetch_success': True
+                'fetch_success': True,
+                'note': 'Raw API responses - no content analysis performed'
             },
-            'raw_batches': all_raw_data
+            'raw_api_responses': all_raw_responses
         }
         
         try:
@@ -245,11 +242,10 @@ class SplashJSONFetcher:
             with open(self.output_file, 'w', encoding='utf-8') as f:
                 json.dump(output_data, f, indent=2, ensure_ascii=False)
             
-            print(f"\n💾 RAW DATA SAVED SUCCESSFULLY")
+            print(f"\n💾 RAW API RESPONSES SAVED")
             print(f"=" * 40)
             print(f"📁 File: {self.output_file}")
-            print(f"📊 Total Props: {total_props}")
-            print(f"🔢 Total Requests: {total_requests}")
+            print(f"🔢 Total API Requests: {total_requests}")
             print(f"🛠️ Services Used: {list(services_summary.keys())}")
             
             for service, count in services_summary.items():
@@ -258,11 +254,12 @@ class SplashJSONFetcher:
             # File size info
             file_size = os.path.getsize(self.output_file) / 1024  # KB
             print(f"📦 File Size: {file_size:.1f} KB")
+            print(f"🚫 NO content analysis performed - raw data only")
             
             return True
             
         except Exception as e:
-            print(f"❌ Failed to save raw data: {e}")
+            print(f"❌ Failed to save raw responses: {e}")
             return False
 
 def main():

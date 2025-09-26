@@ -58,16 +58,22 @@ class SplashDataProcessor:
         print("\n🔄 STEP 3B: PROCESSING RAW SPLASH DATA")
         print("=" * 60)
         
-        batches = raw_data['raw_batches']
+        responses = raw_data['raw_api_responses']
         all_props = []
         
-        # Extract all props from all batches
-        for batch_info in batches:
-            batch_props = batch_info['raw_data']
-            batch_num = batch_info['request_number']
+        # Extract all props from all API responses
+        for response_info in responses:
+            raw_response = response_info['complete_raw_response']
+            request_num = response_info['request_number']
             
-            print(f"   Processing batch {batch_num}: {len(batch_props)} props")
-            all_props.extend(batch_props)
+            # Extract props from the response (now we analyze the structure)
+            if isinstance(raw_response, dict) and 'data' in raw_response:
+                response_props = raw_response['data']
+                print(f"   Processing response {request_num}: {len(response_props)} items")
+                all_props.extend(response_props)
+            else:
+                print(f"   ⚠️ Response {request_num}: Unexpected structure")
+                continue
         
         print(f"📊 Total raw props: {len(all_props)}")
         

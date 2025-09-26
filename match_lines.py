@@ -1,4 +1,4 @@
-# match_lines.py - Step 4: Match Splash props to Odds data (both from Google Sheets)
+# match_lines.py - Step 4: Match Splash props to Odds data (FIXED for metadata)
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -46,27 +46,85 @@ class LineMatching:
             logger.error(f"Failed to connect to Google Sheets: {e}")
             raise
     
+    def read_sheet_with_metadata_skip(self, worksheet, sheet_name, expected_columns=None):
+        """
+        Robust function to read Google Sheets data while skipping metadata headers
+        """
+        try:
+            print(f"📋 Reading {sheet_name} with metadata handling...")
+            
+            # Get all data from sheet
+            all_data = worksheet.get_all_values()
+            
+            if not all_data:
+                print(f"❌ {sheet_name} sheet is empty")
+                return pd.DataFrame()
+            
+            print(f"📊 Total rows in {sheet_name}: {len(all_data)}")
+            
+            # Find the header row (contains actual column names)
+            header_row_index = -1
+            
+            # Look for common header patterns
+            header_indicators = ['Name', 'Player', 'Market', 'Line', 'Odds', 'Book', 'Team']
+            
+            for i, row in enumerate(all_data):
+                # Check if this row contains header-like values
+                if any(indicator in row for indicator in header_indicators):
+                    print(f"✅ Found header row at index {i} in {sheet_name}: {row[:5]}...")
+                    header_row_index = i
+                    break
+            
+            # If no header found, assume it starts at row 0 (no metadata)
+            if header_row_index == -1:
+                print(f"📋 No metadata detected in {sheet_name}, using row 0 as headers")
+                header_row_index = 0
+            
+            # Extract headers and data
+            headers = all_data[header_row_index]
+            data_rows = all_data[header_row_index + 1:]
+            
+            # Filter out empty rows
+            data_rows = [row for row in data_rows if any(cell.strip() if cell else '' for cell in row)]
+            
+            print(f"📈 Data rows found in {sheet_name}: {len(data_rows)}")
+            print(f"🏷️ Columns: {headers}")
+            
+            # Create DataFrame
+            df = pd.DataFrame(data_rows, columns=headers)
+            
+            # Remove completely empty rows
+            df = df.dropna(how='all')
+            
+            # Remove empty string columns that might cause issues
+            df = df.loc[:, df.columns != '']
+            
+            print(f"✅ Successfully read {len(df)} rows from {sheet_name}")
+            return df
+            
+        except Exception as e:
+            print(f"❌ Error reading {sheet_name}: {e}")
+            return pd.DataFrame()
+    
     def read_splash_data(self, client):
         """Read Splash Sports data from SPLASH_MLB sheet"""
         try:
-            print("📋 Reading Splash data from SPLASH_MLB sheet...")
             spreadsheet = client.open("MLB_Splash_Data")
             splash_worksheet = spreadsheet.worksheet("SPLASH_MLB")
-            splash_data = splash_worksheet.get_all_records()
-            splash_df = pd.DataFrame(splash_data)
+            
+            expected_columns = ['Name', 'Market', 'Line']
+            splash_df = self.read_sheet_with_metadata_skip(splash_worksheet, "SPLASH_MLB", expected_columns)
             
             if splash_df.empty:
                 print("❌ No Splash data found - make sure SPLASH_MLB sheet is populated")
                 return pd.DataFrame()
-            
-            print(f"✅ Successfully read {len(splash_df)} rows of Splash data")
             
             # Show breakdown
             if not splash_df.empty and 'Market' in splash_df.columns:
                 unique_players = splash_df['Name'].nunique() if 'Name' in splash_df.columns else 0
                 market_counts = splash_df['Market'].value_counts()
                 print(f"📊 Splash: {unique_players} players, {len(market_counts)} markets")
-                print(f"   Markets: {dict(market_counts)}")
+                print(f"   Top markets: {dict(market_counts.head(3))}")
             
             return splash_df
             
@@ -76,20 +134,18 @@ class LineMatching:
             return pd.DataFrame()
     
     def read_odds_data(self, client):
-        """Read Odds API data from ODDS_API sheet (populated externally)"""
+        """Read Odds API data from ODDS_API sheet"""
         try:
-            print("📋 Reading Odds data from ODDS_API sheet...")
             spreadsheet = client.open("MLB_Splash_Data")
             odds_worksheet = spreadsheet.worksheet("ODDS_API")
-            odds_data = odds_worksheet.get_all_records()
-            odds_df = pd.DataFrame(odds_data)
+            
+            expected_columns = ['Name', 'Market', 'Line', 'Odds', 'Book']
+            odds_df = self.read_sheet_with_metadata_skip(odds_worksheet, "ODDS_API", expected_columns)
             
             if odds_df.empty:
                 print("❌ No Odds data found - make sure ODDS_API sheet is populated")
                 print("   💡 Run your fetch_odds_data.py script first to populate this sheet")
                 return pd.DataFrame()
-            
-            print(f"✅ Successfully read {len(odds_df)} rows of Odds data")
             
             # Show breakdown
             if not odds_df.empty:
@@ -97,7 +153,7 @@ class LineMatching:
                 unique_books = odds_df['Book'].nunique() if 'Book' in odds_df.columns else 0
                 market_counts = odds_df['Market'].value_counts() if 'Market' in odds_df.columns else {}
                 print(f"📊 Odds: {unique_players} players, {unique_books} books")
-                print(f"   Markets: {dict(market_counts.head())}")
+                print(f"   Top markets: {dict(market_counts.head(3))}")
             
             return odds_df
             
@@ -301,18 +357,18 @@ def main():
         # Connect to Google Sheets
         client = matcher.connect_to_sheets()
         
-        # Read data from both sheets
+        # Read data from both sheets using robust reading
         splash_df = matcher.read_splash_data(client)
         odds_df = matcher.read_odds_data(client)
         
         if splash_df.empty:
             print("❌ Missing Splash data from SPLASH_MLB sheet")
-            print("   💡 Populate this sheet externally first")
+            print("   💡 Make sure Step 3 completed successfully")
             return
             
         if odds_df.empty:
             print("❌ Missing Odds data from ODDS_API sheet") 
-            print("   💡 Run your fetch_odds_data.py script first")
+            print("   💡 Make sure Step 2 completed successfully")
             return
         
         # Preprocess odds data for matching

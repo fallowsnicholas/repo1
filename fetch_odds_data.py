@@ -1,36 +1,150 @@
-# fetch_odds_data.py - Step 2: Fetch odds using Step 1 matchup data and include player teams
-import requests
-import time
+# process_splash_data.py - Step 3B: Process raw JSON and save to Google Sheets
+import json
 import pandas as pd
 import gspread
+from gspread_dataframe import set_with_dataframe
 from google.oauth2.service_account import Credentials
-import json
-from datetime import datetime
 import os
+from datetime import datetime
+import logging
 
-class MLBOddsFetcher:
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.odds_base_url = "https://api.the-odds-api.com/v4"
-        self.api_call_count = 0
-        self.todays_matchups = []
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-    # Markets to fetch
-    MARKETS = [
-        'pitcher_strikeouts', 'pitcher_hits_allowed', 'pitcher_outs',
-        'pitcher_earned_runs', 'batter_total_bases', 'batter_hits',
-        'batter_runs_scored', 'batter_rbis', 'batter_singles'
-    ]
-
-    # Bookmakers to include
-    BOOKS = [
-        'fanduel', 'draftkings', 'betmgm', 'caesars', 'pointsbetus','betrivers',
-        'unibet', 'bovada', 'mybookieag', 'betus', 'william_us', 'fanatics', 'lowvig'
-    ]
-
-    def read_todays_matchups_from_step1(self):
-        """Read today's matchups from Step 1 instead of calling ESPN again"""
-        print("📋 Reading today's matchups from Step 1...")
+class SplashDataProcessor:
+    """Process raw JSON data and save to Google Sheets"""
+    
+    def __init__(self):
+        self.input_file = "splash_raw_data.json"
+        self.processed_data = []
+        
+    def load_raw_json(self):
+        """Load raw JSON data from fetch script"""
+        try:
+            print("📂 Loading raw JSON data...")
+            
+            if not os.path.exists(self.input_file):
+                print(f"❌ Raw data file not found: {self.input_file}")
+                print("💡 Make sure to run fetch_splash_json.py first")
+                return None
+            
+            with open(self.input_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Validate data structure
+            if 'fetch_metadata' not in data or 'raw_batches' not in data:
+                print("❌ Invalid JSON structure in raw data file")
+                return None
+            
+            metadata = data['fetch_metadata']
+            batches = data['raw_batches']
+            
+            print("✅ Raw JSON loaded successfully")
+            print(f"📊 Fetch Summary:")
+            print(f"   • Fetch time: {metadata['fetch_timestamp']}")
+            print(f"   • Total requests: {metadata['total_requests_made']}")
+            print(f"   • Total props: {metadata['total_props_collected']}")
+            print(f"   • Services used: {list(metadata['services_used'].keys())}")
+            print(f"   • Batches to process: {len(batches)}")
+            
+            return data
+            
+        except Exception as e:
+            print(f"❌ Failed to load raw JSON: {e}")
+            return None
+    
+    def process_raw_data(self, raw_data):
+        """Process raw JSON into structured DataFrame"""
+        print("\n🔄 STEP 3B: PROCESSING RAW SPLASH DATA")
+        print("=" * 60)
+        
+        responses = raw_data['raw_api_responses']
+        all_props = []
+        
+        # Extract all props from all API responses
+        for response_info in responses:
+            raw_response = response_info['complete_raw_response']
+            request_num = response_info['request_number']
+            
+            # Extract props from the response (now we analyze the structure)
+            if isinstance(raw_response, dict) and 'data' in raw_response:
+                response_props = raw_response['data']
+                print(f"   Processing response {request_num}: {len(response_props)} items")
+                all_props.extend(response_props)
+            else:
+                print(f"   ⚠️ Response {request_num}: Unexpected structure")
+                continue
+        
+        print(f"📊 Total raw props: {len(all_props)}")
+        
+        # Filter for MLB only
+        mlb_props = [prop for prop in all_props if prop.get('league') == 'mlb']
+        print(f"⚾ MLB props: {len(mlb_props)}")
+        
+        if not mlb_props:
+            print("❌ No MLB props found in raw data")
+            return pd.DataFrame()
+        
+        # Process into structured format
+        processed_props = []
+        
+        for prop in mlb_props:
+            try:
+                # Extract relevant fields
+                processed_prop = {
+                    'Name': prop.get('entity_name', '').strip(),
+                    'Market': prop.get('type', '').strip(),
+                    'Line': prop.get('line', ''),
+                    'Entity_ID': prop.get('entity_id', ''),
+                    'Prop_ID': prop.get('id', ''),
+                    'League': prop.get('league', ''),
+                    'Sport': prop.get('sport', ''),
+                    'Status': prop.get('status', ''),
+                    'Created_At': prop.get('created_at', ''),
+                    'Updated_At': prop.get('updated_at', ''),
+                    'Raw_Data': json.dumps(prop)  # Keep full raw data for debugging
+                }
+                
+                # Only include props with essential data
+                if processed_prop['Name'] and processed_prop['Market']:
+                    processed_props.append(processed_prop)
+                    
+            except Exception as e:
+                logger.warning(f"Failed to process prop: {e}")
+                continue
+        
+        print(f"✅ Processed props: {len(processed_props)}")
+        
+        # Create DataFrame
+        df = pd.DataFrame(processed_props)
+        
+        if df.empty:
+            print("❌ No valid props after processing")
+            return df
+        
+        # Data quality checks
+        print(f"📋 Data Quality Summary:")
+        print(f"   • Unique players: {df['Name'].nunique()}")
+        print(f"   • Unique markets: {df['Market'].nunique()}")
+        print(f"   • Missing names: {df['Name'].isna().sum()}")
+        print(f"   • Missing markets: {df['Market'].isna().sum()}")
+        
+        # Show market breakdown
+        market_counts = df['Market'].value_counts()
+        print(f"📊 Top markets:")
+        for market, count in market_counts.head(10).items():
+            print(f"   • {market}: {count}")
+        
+        return df
+    
+    def save_to_google_sheets(self, df, raw_metadata):
+        """Save processed data to Google Sheets"""
+        if df.empty:
+            print("❌ No data to save to Google Sheets")
+            return False
+        
+        print(f"\n💾 SAVING TO GOOGLE SHEETS")
+        print("=" * 40)
         
         try:
             # Connect to Google Sheets
@@ -44,364 +158,106 @@ class MLBOddsFetcher:
             client = gspread.authorize(credentials)
             
             spreadsheet = client.open("MLB_Splash_Data")
-            matchups_worksheet = spreadsheet.worksheet("MATCHUPS")
             
-            # Get all data and find header row
-            all_data = matchups_worksheet.get_all_values()
+            # Get or create SPLASH_MLB worksheet
+            try:
+                worksheet = spreadsheet.worksheet("SPLASH_MLB")
+                print("📋 Using existing SPLASH_MLB worksheet")
+            except:
+                worksheet = spreadsheet.add_worksheet(title="SPLASH_MLB", rows=5000, cols=15)
+                print("📋 Created new SPLASH_MLB worksheet")
             
-            header_row = -1
-            for i, row in enumerate(all_data):
-                if any(col in row for col in ['Game_ID', 'Away_Team', 'Home_Team']):
-                    header_row = i
-                    break
-            
-            if header_row == -1:
-                print("❌ Could not find header row in MATCHUPS sheet")
-                return []
-            
-            headers = all_data[header_row]
-            data_rows = all_data[header_row + 1:]
-            
-            if not data_rows:
-                print("❌ No matchup data found")
-                return []
-            
-            matchups_df = pd.DataFrame(data_rows, columns=headers)
-            matchups_df = matchups_df[matchups_df['Game_ID'].notna() & (matchups_df['Game_ID'] != '')]
-            
-            # Convert to list of matchup dictionaries
-            matchups = []
-            for _, row in matchups_df.iterrows():
-                matchup = {
-                    'game_id': row['Game_ID'],
-                    'home_team': row.get('Home_Team', ''),
-                    'away_team': row.get('Away_Team', ''),
-                    'home_abbr': row.get('Home_Abbr', ''),
-                    'away_abbr': row.get('Away_Abbr', ''),
-                    'venue': row.get('Venue', ''),
-                    'status': row.get('Status', '')
-                }
-                matchups.append(matchup)
-            
-            self.todays_matchups = matchups
-            print(f"✅ Loaded {len(matchups)} matchups from Step 1:")
-            
-            for matchup in matchups:
-                away = matchup['away_abbr'] or matchup['away_team']
-                home = matchup['home_abbr'] or matchup['home_team']
-                print(f"   {away} @ {home}")
-            
-            return matchups
-            
-        except Exception as e:
-            print(f"❌ Error reading matchups from Step 1: {e}")
-            return []
-
-    def _make_odds_api_request(self, endpoint: str, params: dict):
-        """Helper to make Odds API requests with error handling and timeout"""
-        url = f"{self.odds_base_url}{endpoint}"
-        params['apiKey'] = self.api_key
-        self.api_call_count += 1
-        try:
-            response = requests.get(url, params=params, timeout=15)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.Timeout:
-            print(f"❌ Odds API request timed out for {url}")
-            return None
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Odds API request failed for {url}: {e}")
-            return None
-
-    def get_odds_api_games(self):
-        """Get today's games from Odds API for mapping to our Step 1 matchups"""
-        print("🔗 Getting Odds API games for mapping...")
-        
-        endpoint = "/sports/baseball_mlb/events"
-        params = {
-            'regions': 'us',
-            'markets': 'h2h',
-            'oddsFormat': 'american'
-        }
-        return self._make_odds_api_request(endpoint, params)
-
-    def map_step1_to_odds_api_games(self):
-        """Map Step 1 matchups to Odds API game IDs"""
-        print("🔗 Mapping Step 1 matchups to Odds API games...")
-
-        if not self.todays_matchups:
-            print("❌ No Step 1 matchups to map")
-            return []
-
-        odds_games = self.get_odds_api_games()
-        if not odds_games:
-            print("❌ Failed to retrieve Odds API games for mapping")
-            return []
-
-        # Team name mapping for better matching
-        team_mapping = {
-            'Arizona Diamondbacks': ['Arizona Diamondbacks', 'Diamondbacks', 'ARI'],
-            'Atlanta Braves': ['Atlanta Braves', 'Braves', 'ATL'],
-            'Baltimore Orioles': ['Baltimore Orioles', 'Orioles', 'BAL'],
-            'Boston Red Sox': ['Boston Red Sox', 'Red Sox', 'BOS'],
-            'Chicago Cubs': ['Chicago Cubs', 'Cubs', 'CHC'],
-            'Chicago White Sox': ['Chicago White Sox', 'White Sox', 'CHW'],
-            'Cincinnati Reds': ['Cincinnati Reds', 'Reds', 'CIN'],
-            'Cleveland Guardians': ['Cleveland Guardians', 'Guardians', 'CLE'],
-            'Colorado Rockies': ['Colorado Rockies', 'Rockies', 'COL'],
-            'Detroit Tigers': ['Detroit Tigers', 'Tigers', 'DET'],
-            'Houston Astros': ['Houston Astros', 'Astros', 'HOU'],
-            'Kansas City Royals': ['Kansas City Royals', 'Royals', 'KC'],
-            'Los Angeles Angels': ['Los Angeles Angels', 'LA Angels', 'Angels', 'LAA'],
-            'Los Angeles Dodgers': ['Los Angeles Dodgers', 'LA Dodgers', 'Dodgers', 'LAD'],
-            'Miami Marlins': ['Miami Marlins', 'Marlins', 'MIA'],
-            'Milwaukee Brewers': ['Milwaukee Brewers', 'Brewers', 'MIL'],
-            'Minnesota Twins': ['Minnesota Twins', 'Twins', 'MIN'],
-            'New York Mets': ['New York Mets', 'NY Mets', 'Mets', 'NYM'],
-            'New York Yankees': ['New York Yankees', 'NY Yankees', 'Yankees', 'NYY'],
-            'Oakland Athletics': ['Oakland Athletics', 'Oakland A\'s', 'Athletics', 'A\'s', 'ATH'],
-            'Philadelphia Phillies': ['Philadelphia Phillies', 'Phillies', 'PHI'],
-            'Pittsburgh Pirates': ['Pittsburgh Pirates', 'Pirates', 'PIT'],
-            'San Diego Padres': ['San Diego Padres', 'Padres', 'SD'],
-            'San Francisco Giants': ['San Francisco Giants', 'SF Giants', 'Giants', 'SF'],
-            'Seattle Mariners': ['Seattle Mariners', 'Mariners', 'SEA'],
-            'St. Louis Cardinals': ['St. Louis Cardinals', 'St Louis Cardinals', 'Cardinals', 'STL'],
-            'Tampa Bay Rays': ['Tampa Bay Rays', 'Rays', 'TB'],
-            'Texas Rangers': ['Texas Rangers', 'Rangers', 'TEX'],
-            'Toronto Blue Jays': ['Toronto Blue Jays', 'Blue Jays', 'TOR'],
-            'Washington Nationals': ['Washington Nationals', 'Nationals', 'WSH']
-        }
-
-        def normalize_team_name(name):
-            return name.lower().strip().replace('.', '').replace('\'', '')
-
-        def find_team_match(name1, name2):
-            norm1 = normalize_team_name(name1)
-            norm2 = normalize_team_name(name2)
-
-            if norm1 == norm2:
-                return True
-
-            for canonical, variations in team_mapping.items():
-                canonical_norm = normalize_team_name(canonical)
-                all_norms = {normalize_team_name(v) for v in variations} | {canonical_norm}
-
-                if norm1 in all_norms and norm2 in all_norms:
-                    return True
-
-            return False
-
-        matched_games = []
-
-        for step1_matchup in self.todays_matchups:
-            step1_home = step1_matchup['home_team']
-            step1_away = step1_matchup['away_team']
-
-            found_match = False
-            for odds_game in odds_games:
-                odds_home = odds_game.get('home_team', '')
-                odds_away = odds_game.get('away_team', '')
-
-                if (find_team_match(step1_home, odds_home) and
-                    find_team_match(step1_away, odds_away)):
-
-                    matched_game = {
-                        'odds_api_id': odds_game['id'],
-                        'home_team': odds_game['home_team'],
-                        'away_team': odds_game['away_team'],
-                        'commence_time': odds_game.get('commence_time'),
-                        'step1_matchup': step1_matchup
-                    }
-                    matched_games.append(matched_game)
-                    found_match = True
-                    break
-
-        print(f"🎯 Successfully matched {len(matched_games)}/{len(self.todays_matchups)} games")
-        return matched_games
-
-    def get_player_props_with_teams(self, game_id: str, market: str, home_team: str, away_team: str):
-        """Get player props for a specific game and market, including team information"""
-        endpoint = f"/sports/baseball_mlb/events/{game_id}/odds"
-        params = {
-            'regions': 'us',
-            'markets': market,
-            'oddsFormat': 'american'
-        }
-        
-        data = self._make_odds_api_request(endpoint, params)
-        if not data or not data.get('bookmakers'):
-            return []
-        
-        props_with_teams = []
-        
-        for bookmaker in data['bookmakers']:
-            if bookmaker['key'] in self.BOOKS:
-                for market_data in bookmaker.get('markets', []):
-                    for outcome in market_data.get('outcomes', []):
-                        player_name = outcome.get('description', outcome.get('name', ''))
-                        selection = outcome.get('name', '')
-                        point = outcome.get('point', 0)
-                        odds = outcome.get('price', 0)
-
-                        if (player_name and
-                            player_name not in ['Over', 'Under'] and
-                            selection in ['Over', 'Under'] and
-                            point and odds):
-
-                            # Determine player's team based on market type and player name
-                            player_team = self._determine_player_team(player_name, market, home_team, away_team)
-                            
-                            props_with_teams.append({
-                                'Name': player_name.strip(),
-                                'Team': player_team,
-                                'Market': market,
-                                'Line': f"{selection} {point}",
-                                'Odds': f"{odds:+d}",
-                                'Book': bookmaker['title'],
-                                'Game': f"{away_team} @ {home_team}",
-                                'Game_ID': game_id,
-                                'Home_Team': home_team,
-                                'Away_Team': away_team
-                            })
-        
-        return props_with_teams
-
-    def _determine_player_team(self, player_name, market, home_team, away_team):
-        """
-        Determine which team a player belongs to.
-        For now, we'll use a simple heuristic - in a real implementation, 
-        you'd have roster data or use more sophisticated matching.
-        """
-        # This is a simplified approach - in reality you'd want roster data
-        # For pitcher markets, we could try to match pitcher names to teams
-        # For batter markets, it's harder without roster data
-        
-        # For demo purposes, we'll alternate or use some basic logic
-        # In production, you'd want to maintain team rosters or use additional API calls
-        
-        if 'pitcher' in market.lower():
-            # Pitchers - we could maintain a pitcher-to-team mapping
-            # For now, we'll just assign alternately or use some heuristic
-            return home_team if hash(player_name) % 2 == 0 else away_team
-        else:
-            # Batters - same issue, need roster data
-            return away_team if hash(player_name) % 2 == 0 else home_team
-
-    def fetch_all_odds_with_teams(self):
-        """Main method: Fetch odds for Step 1 games with team information"""
-        print("🚀 Starting Step 2: Fetch odds with team data...")
-
-        # Read matchups from Step 1
-        step1_matchups = self.read_todays_matchups_from_step1()
-        if not step1_matchups:
-            print("❌ No Step 1 matchups found - aborting odds fetch")
-            return []
-
-        # Map to Odds API games
-        matched_games = self.map_step1_to_odds_api_games()
-        if not matched_games:
-            print("❌ No games could be mapped to Odds API - aborting odds fetch")
-            return []
-
-        print(f"📈 Fetching odds with team data for {len(matched_games)} matched games...")
-        all_odds = []
-
-        for i, game in enumerate(matched_games, 1):
-            odds_api_id = game['odds_api_id']
-            home_team = game['home_team']
-            away_team = game['away_team']
-
-            print(f"\n({i}/{len(matched_games)}) Processing game: {away_team} @ {home_team}")
-
-            for market in self.MARKETS:
-                props_with_teams = self.get_player_props_with_teams(
-                    odds_api_id, market, home_team, away_team
-                )
-
-                if props_with_teams:
-                    all_odds.extend(props_with_teams)
-                    print(f"      Found {len(props_with_teams)} props for {market}")
-
-                time.sleep(0.2)  # Rate limiting
-
-            time.sleep(0.5)  # Rate limiting between games
-
-        print(f"\n🎉 Collected {len(all_odds)} total player props with team data!")
-        return all_odds
-
-    def write_to_google_sheets(self, df, spreadsheet_name: str = "MLB_Splash_Data", worksheet_name: str = "ODDS_API"):
-        """Write DataFrame to Google Sheets using a service account"""
-        if df.empty:
-            print("❌ No data to write to Google Sheets")
-            return
-
-        try:
-            print("\n🔐 Authenticating with Google Service Account...")
-            SCOPES = [
-                'https://www.googleapis.com/auth/spreadsheets',
-                'https://www.googleapis.com/auth/drive'
-            ]
-            
-            credentials_info = json.loads(os.environ['GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'])
-            creds = Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
-            gc = gspread.authorize(creds)
-
-            print(f"📊 Connecting to Google Sheets: {spreadsheet_name} -> {worksheet_name}...")
-            spreadsheet = gc.open(spreadsheet_name)
-            worksheet = spreadsheet.worksheet(worksheet_name)
-
+            # Clear existing data
             print("🧹 Clearing existing data...")
             worksheet.clear()
-
-            print("✍️ Writing new data with team information...")
             
-            # Add metadata
-            metadata = [
-                ['Odds API Data with Team Information', ''],
-                ['Fetched At', datetime.now().isoformat()],
+            # Prepare data with metadata header
+            metadata = raw_metadata['fetch_metadata']
+            
+            header_info = [
+                ['Splash Sports MLB Data', ''],
+                ['Processed At', datetime.now().isoformat()],
+                ['Original Fetch', metadata['fetch_timestamp']],
                 ['Total Props', len(df)],
-                ['API Calls Used', self.api_call_count],
-                ['Data Source', 'Step 1 Matchups + Odds API'],
-                ['']
+                ['Unique Players', df['Name'].nunique()],
+                ['Services Used', ', '.join(metadata['services_used'].keys())],
+                ['API Requests Made', metadata['total_requests_made']],
+                ['']  # Empty row for spacing
             ]
             
-            # Combine metadata and data
-            all_data = metadata + [df.columns.tolist()] + df.values.tolist()
+            # Sort data by market then by player name
+            df_sorted = df.sort_values(['Market', 'Name']).reset_index(drop=True)
+            
+            # Combine header info, column names, and data
+            all_data = header_info + [df_sorted.columns.tolist()] + df_sorted.values.tolist()
+            
+            # Write to sheet
+            print("✍️ Writing data to sheet...")
             worksheet.update(range_name='A1', values=all_data)
-
-            print(f"✅ Successfully wrote {len(df)} rows to Google Sheets!")
-
+            
+            print("✅ Successfully saved to Google Sheets!")
+            print(f"📊 Saved {len(df)} props to SPLASH_MLB worksheet")
+            
+            # Show final summary
+            print(f"\n📈 FINAL SUMMARY:")
+            print(f"   • Sheet: MLB_Splash_Data → SPLASH_MLB")
+            print(f"   • Total rows: {len(df)}")
+            print(f"   • Players: {df['Name'].nunique()}")
+            print(f"   • Markets: {df['Market'].nunique()}")
+            print(f"   • Data source: {list(metadata['services_used'].keys())}")
+            
+            return True
+            
         except Exception as e:
-            print(f"❌ Error writing to Google Sheets: {e}")
-            raise
-
-def run_odds_fetcher():
-    """Main function"""
-    api_key = os.environ.get('ODDS_API_KEY')
-    if not api_key:
-        print("❌ ODDS_API_KEY environment variable not set!")
-        return
-
-    fetcher = MLBOddsFetcher(api_key)
-    odds = fetcher.fetch_all_odds_with_teams()
+            logger.error(f"Google Sheets error: {e}")
+            print(f"❌ Failed to save to Google Sheets: {e}")
+            return False
     
-    if odds:
-        df = pd.DataFrame(odds)
-        df = df.drop_duplicates(subset=['Name', 'Market', 'Line', 'Book', 'Game'], keep='first')
-        print(f"📊 Final DataFrame: {len(df)} rows after deduplication")
-        
-        # Show team breakdown
-        if 'Team' in df.columns:
-            team_counts = df['Team'].value_counts()
-            print(f"📊 Props by team: {dict(team_counts.head(10))}")
-        
-        fetcher.write_to_google_sheets(df)
-    else:
-        print("❌ No odds data collected")
-        raise Exception("No odds data retrieved")
+    def cleanup_files(self):
+        """Clean up temporary files"""
+        try:
+            if os.path.exists(self.input_file):
+                os.remove(self.input_file)
+                print(f"🗑️ Cleaned up temporary file: {self.input_file}")
+        except Exception as e:
+            print(f"⚠️ Could not clean up {self.input_file}: {e}")
 
-    print(f"\nTotal API calls made: {fetcher.api_call_count}")
+def main():
+    """Main processing execution"""
+    print(f"⚙️ Starting data processing at: {datetime.now()}")
+    
+    processor = SplashDataProcessor()
+    
+    try:
+        # Load raw JSON data
+        raw_data = processor.load_raw_json()
+        if not raw_data:
+            print("❌ Cannot proceed without raw data")
+            exit(1)
+        
+        # Process raw data
+        df = processor.process_raw_data(raw_data)
+        if df.empty:
+            print("❌ No valid data after processing")
+            exit(1)
+        
+        # Save to Google Sheets
+        success = processor.save_to_google_sheets(df, raw_data)
+        if not success:
+            print("❌ Failed to save to Google Sheets")
+            exit(1)
+        
+        # Cleanup temporary files
+        processor.cleanup_files()
+        
+        print(f"\n🎉 PROCESSING COMPLETE!")
+        print(f"✅ Data successfully processed and saved to Google Sheets")
+        print(f"🔄 Ready for Step 4: match_lines.py")
+        
+    except Exception as e:
+        logger.error(f"Processing failed: {e}")
+        print(f"❌ Processing failed: {e}")
+        exit(1)
 
 if __name__ == "__main__":
-    print("⚾ Starting Step 2: MLB Odds Collection with Team Data")
-    run_odds_fetcher()
+    main()

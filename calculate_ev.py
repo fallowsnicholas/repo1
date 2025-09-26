@@ -1,4 +1,4 @@
-# calculate_ev.py - Step 5: Calculate Expected Value from matched lines
+# calculate_ev.py - Step 5: Calculate Expected Value from matched lines (UPDATED with team data)
 import pandas as pd
 import numpy as np
 import gspread
@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class EVCalculator:
-    """Step 5: Calculate Expected Value for matched Splash/Odds lines"""
+    """Step 5: Calculate Expected Value for matched Splash/Odds lines with team data preservation"""
     
     def __init__(self):
         self.ev_results = []
@@ -35,19 +35,19 @@ class EVCalculator:
             raise
     
     def read_matched_lines(self, client):
-        """Read matched lines from Step 4"""
+        """Read matched lines from Step 4 with robust metadata handling"""
         try:
             print("📋 Reading matched lines from Step 4...")
             spreadsheet = client.open("MLB_Splash_Data")
             matched_worksheet = spreadsheet.worksheet("MATCHED_LINES")
             
-            # Get all data and skip metadata rows
+            # Use robust reading to handle metadata
             all_data = matched_worksheet.get_all_values()
             
             # Find where the actual data starts (after metadata)
             data_start_row = 0
             for i, row in enumerate(all_data):
-                if row and row[0] in ['Name', 'Player']:  # Look for header row
+                if row and any(col in row for col in ['Name', 'Player', 'Market']):  # Look for header row
                     data_start_row = i
                     break
             
@@ -62,8 +62,9 @@ class EVCalculator:
             # Create DataFrame
             matched_df = pd.DataFrame(data_rows, columns=headers)
             
-            # Remove empty rows
+            # Remove empty rows and empty columns
             matched_df = matched_df[matched_df['Name'].notna() & (matched_df['Name'] != '')]
+            matched_df = matched_df.loc[:, matched_df.columns != '']
             
             print(f"✅ Successfully read {len(matched_df)} matched lines")
             
@@ -71,10 +72,16 @@ class EVCalculator:
                 print("❌ No matched lines data found")
                 return pd.DataFrame()
             
+            # Check for team columns
+            team_columns = ['Team', 'Home_Team', 'Away_Team']
+            available_team_columns = [col for col in team_columns if col in matched_df.columns]
+            print(f"🏟️ Team columns found: {available_team_columns}")
+            
             # Show sample of data
             print(f"📊 Sample matched lines:")
             for i, row in matched_df.head(3).iterrows():
-                print(f"   • {row['Name']} {row['Market']} {row['Line']} @ {row['Book']}: {row['Odds']}")
+                team_info = f" [{row.get('Team', 'N/A')}]" if 'Team' in matched_df.columns else ""
+                print(f"   • {row['Name']}{team_info} {row['Market']} {row['Line']} @ {row['Book']}: {row['Odds']}")
             
             return matched_df
             
@@ -178,7 +185,8 @@ class EVCalculator:
                     best_book_row = group.loc[group['Odds'].idxmin()]  # Closest to 0 for negative odds
                     best_odds = group['Odds'].min()
                 
-                results.append({
+                # Preserve team information from the matched data
+                result_dict = {
                     'Player': player,
                     'Market': market,
                     'Line': line,
@@ -191,7 +199,15 @@ class EVCalculator:
                     'Best_Odds': best_odds,
                     'Avg_Implied_Prob': avg_implied_prob,
                     'Calculation_Time': datetime.now().isoformat()
-                })
+                }
+                
+                # Add team columns if they exist in the data
+                team_columns = ['Team', 'Home_Team', 'Away_Team']
+                for team_col in team_columns:
+                    if team_col in best_book_row:
+                        result_dict[team_col] = best_book_row[team_col]
+                        
+                results.append(result_dict)
         
         print(f"⚡ Processed {processed_groups} prop groups")
         
@@ -201,16 +217,25 @@ class EVCalculator:
             
             print(f"✅ Calculated EVs for {len(ev_df)} profitable opportunities!")
             
+            # Check if team data was preserved
+            team_columns = ['Team', 'Home_Team', 'Away_Team']
+            preserved_team_cols = [col for col in team_columns if col in ev_df.columns]
+            if preserved_team_cols:
+                print(f"🏟️ Team data preserved: {preserved_team_cols}")
+            else:
+                print(f"⚠️ No team data found in results")
+            
             # Show summary statistics
             print(f"\n📈 EV SUMMARY:")
             print(f"   Best EV: {ev_df['Splash_EV_Percentage'].max():.3f} ({ev_df['Splash_EV_Percentage'].max():.1%})")
             print(f"   Average EV: {ev_df['Splash_EV_Percentage'].mean():.3f} ({ev_df['Splash_EV_Percentage'].mean():.1%})")
             print(f"   Average books per prop: {ev_df['Num_Books_Used'].mean():.1f}")
             
-            # Show top EVs
+            # Show top EVs with team info
             print(f"\n🏆 Top 5 EV Opportunities:")
             for i, row in ev_df.head(5).iterrows():
-                print(f"   {i+1}. {row['Player']} - {row['Market']} {row['Line']} ({row['Bet_Type']})")
+                team_info = f" ({row.get('Team', 'N/A')})" if 'Team' in row else ""
+                print(f"   {i+1}. {row['Player']}{team_info} - {row['Market']} {row['Line']} ({row['Bet_Type']})")
                 print(f"      EV: {row['Splash_EV_Percentage']:.3f} ({row['Splash_EV_Percentage']:.1%}) | Books: {row['Num_Books_Used']} | Best: {row['Best_Odds']:+.0f}")
             
             # Show market breakdown
@@ -240,18 +265,22 @@ class EVCalculator:
             try:
                 worksheet = spreadsheet.worksheet("EV_RESULTS")
             except:
-                worksheet = spreadsheet.add_worksheet(title="EV_RESULTS", rows=1000, cols=15)
+                worksheet = spreadsheet.add_worksheet(title="EV_RESULTS", rows=1000, cols=20)
             
             # Clear existing data
             worksheet.clear()
             
-            # Add metadata
+            # Add metadata including team info status
+            team_columns = ['Team', 'Home_Team', 'Away_Team']
+            preserved_team_cols = [col for col in team_columns if col in ev_df.columns]
+            
             metadata = [
                 ['Expected Value Results', ''],
                 ['Calculated At', datetime.now().isoformat()],
                 ['Total Opportunities', len(ev_df)],
                 ['Best EV', f"{ev_df['Splash_EV_Percentage'].max():.1%}"],
                 ['Average EV', f"{ev_df['Splash_EV_Percentage'].mean():.1%}"],
+                ['Team Data Preserved', ', '.join(preserved_team_cols) if preserved_team_cols else 'None'],
                 ['']  # Empty row for spacing
             ]
             
@@ -262,6 +291,8 @@ class EVCalculator:
             worksheet.update(range_name='A1', values=all_data)
             
             print("✅ Successfully saved EV results to EV_RESULTS sheet")
+            if preserved_team_cols:
+                print(f"🏟️ Team data included: {preserved_team_cols}")
             
         except Exception as e:
             logger.error(f"Error saving EV results: {e}")

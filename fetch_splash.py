@@ -15,35 +15,115 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def get_brightdata_proxy():
-    """Get Bright Data proxy configuration with exact dashboard credentials"""
-    # Use exact credentials from dashboard screenshot
-    proxy_username = "brd-customer-hl_41883af7-zone-residential_proxy1"
-    proxy_password = "i874o85in443"
+    """Get Bright Data datacenter proxy configuration"""
+    # Use datacenter proxy credentials
+    proxy_username = "brd-customer-hl_41883af7-zone-datacenter_proxy1"
+    proxy_password = "2dg88246f4tn"
     
-    print(f"🔑 Using exact dashboard credentials:")
+    print(f"🏢 Using Bright Data datacenter proxy:")
     print(f"   Username: {proxy_username}")
     print(f"   Password: {proxy_password}")
     
-    # Add session ID to username (alphanumeric only per Bright Data requirements)
-    import random
-    session_id = f"session{random.randint(1000, 9999)}"  # sessionXXXX format
-    username_with_session = f"{proxy_username}-{session_id}"
-    
-    # Use the exact endpoint from your Bright Data dashboard
+    # Datacenter proxy endpoint
     proxy_endpoint = "brd.superproxy.io:33335"
     
     print(f"🌐 Using endpoint: {proxy_endpoint}")
-    print(f"🆔 Full username with session: {username_with_session}")
+    print(f"📊 Proxy type: Datacenter (no IP allowlisting required)")
     
-    # Bright Data proxy URL with session
-    proxy_url = f"http://{username_with_session}:{proxy_password}@{proxy_endpoint}"
+    # Simple proxy format for datacenter proxies
+    proxy_url = f"http://{proxy_username}:{proxy_password}@{proxy_endpoint}"
     
     proxies = {
         'http': proxy_url,
         'https': proxy_url
     }
     
-    return proxies
+    return proxies, proxy_username, proxy_password
+
+def test_proxy_connection_advanced(proxies, username, password):
+    """Test proxy connection with advanced authentication methods"""
+    test_url = "http://httpbin.org/ip"  # Use HTTP first, not HTTPS
+    
+    print("🔍 Testing proxy connection with multiple methods...")
+    
+    # Method 1: Standard proxy format
+    try:
+        print("   📡 Method 1: Standard proxy format")
+        response = requests.get(test_url, proxies=proxies, timeout=30, verify=False)
+        
+        if response.status_code == 200:
+            ip_info = response.json()
+            current_ip = ip_info.get('origin', 'Unknown')
+            print(f"   ✅ SUCCESS! Current IP: {current_ip}")
+            return True
+        else:
+            print(f"   ❌ Status {response.status_code}: {response.text[:100]}")
+    except Exception as e:
+        print(f"   ❌ Method 1 failed: {str(e)[:100]}")
+    
+    # Method 2: Using requests.auth explicitly
+    try:
+        print("   📡 Method 2: Explicit authentication")
+        from requests.auth import HTTPProxyAuth
+        
+        proxy_auth = HTTPProxyAuth(username, password)
+        simple_proxies = {
+            'http': f'http://brd.superproxy.io:33335',
+            'https': f'http://brd.superproxy.io:33335'
+        }
+        
+        response = requests.get(
+            test_url, 
+            proxies=simple_proxies, 
+            auth=proxy_auth, 
+            timeout=30, 
+            verify=False
+        )
+        
+        if response.status_code == 200:
+            ip_info = response.json()
+            current_ip = ip_info.get('origin', 'Unknown')
+            print(f"   ✅ SUCCESS with Method 2! Current IP: {current_ip}")
+            return True
+        else:
+            print(f"   ❌ Status {response.status_code}: {response.text[:100]}")
+    except Exception as e:
+        print(f"   ❌ Method 2 failed: {str(e)[:100]}")
+    
+    # Method 3: Session-based with explicit headers
+    try:
+        print("   📡 Method 3: Session with custom headers")
+        import base64
+        
+        # Create basic auth header
+        credentials = f"{username}:{password}"
+        b64_credentials = base64.b64encode(credentials.encode()).decode()
+        
+        session = requests.Session()
+        session.headers.update({
+            'Proxy-Authorization': f'Basic {b64_credentials}'
+        })
+        
+        simple_proxies = {
+            'http': f'http://brd.superproxy.io:33335',
+            'https': f'http://brd.superproxy.io:33335'
+        }
+        session.proxies.update(simple_proxies)
+        
+        response = session.get(test_url, timeout=30, verify=False)
+        
+        if response.status_code == 200:
+            ip_info = response.json()
+            current_ip = ip_info.get('origin', 'Unknown')
+            print(f"   ✅ SUCCESS with Method 3! Current IP: {current_ip}")
+            return True
+        else:
+            print(f"   ❌ Status {response.status_code}: {response.text[:100]}")
+    except Exception as e:
+        print(f"   ❌ Method 3 failed: {str(e)[:100]}")
+    
+    print("   ❌ All authentication methods failed")
+    return False
 
 def test_proxy_connection(proxies):
     """Test if the proxy connection is working with better error handling"""
@@ -169,15 +249,16 @@ def fetch_splash_data_with_residential_proxy():
     
     # Get proxy configuration
     try:
-        proxies = get_brightdata_proxy()
+        proxies, username, password = get_brightdata_proxy()
         print("🌐 Bright Data residential proxy configured")
     except ValueError as e:
         print(f"❌ {e}")
         return []
     
-    # Test proxy connection
-    if not test_proxy_connection(proxies):
-        print("❌ Proxy connection failed, aborting...")
+    # Test proxy connection with advanced methods
+    if not test_proxy_connection_advanced(proxies, username, password):
+        print("❌ All proxy authentication methods failed")
+        print("💡 This may be an Immediate Access mode integration issue")
         return []
     
     # Create session with proxy

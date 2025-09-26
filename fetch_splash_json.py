@@ -136,78 +136,97 @@ class SplashJSONFetcher:
         
         all_raw_responses = []
         offset = 0
-        limit = 100
-        max_requests = 25  # Conservative for free tiers
+        
+        # Try larger batch sizes first to minimize API calls
+        batch_sizes_to_try = [1000, 500, 250, 100]  # Start big, fall back if needed
+        max_requests = 10  # Conservative for free tiers
         requests_made = 0
         
-        print(f"🔄 Starting pagination fetch (max {max_requests} requests)")
+        print(f"🔄 Smart fetching: trying large batches first to minimize API calls")
         
-        while requests_made < max_requests:
-            params = {
-                'league': 'mlb',
-                'limit': limit,
-                'offset': offset
-            }
+        for limit in batch_sizes_to_try:
+            print(f"\n🎯 Attempting batch size: {limit}")
             
-            print(f"\n📊 Request {requests_made + 1}/{max_requests}: offset={offset}, limit={limit}")
-            
-            # Try each API service in priority order
-            response_received = False
-            service_used = None
-            
-            for service_name, service_func in api_services:
-                print(f"   🔍 Trying {service_name}...")
+            while requests_made < max_requests:
+                params = {
+                    'league': 'mlb',
+                    'limit': limit,
+                    'offset': offset
+                }
                 
-                raw_json_response, used_service = service_func(self.base_url, params)
+                print(f"📊 Request {requests_made + 1}/{max_requests}: offset={offset}, limit={limit}")
                 
-                if raw_json_response:
-                    print(f"   ✅ Raw JSON received via {used_service}")
+                # Try each API service in priority order
+                response_received = False
+                service_used = None
+                
+                for service_name, service_func in api_services:
+                    print(f"   🔍 Trying {service_name}...")
                     
-                    # Store the COMPLETE raw response with minimal metadata
-                    response_info = {
-                        'request_number': requests_made + 1,
-                        'offset': offset,
-                        'limit': limit,
-                        'service_used': used_service,
-                        'timestamp': datetime.now().isoformat(),
-                        'complete_raw_response': raw_json_response  # Store everything as-is
-                    }
+                    raw_json_response, used_service = service_func(self.base_url, params)
                     
-                    all_raw_responses.append(response_info)
-                    response_received = True
-                    service_used = used_service
-                    
-                    # Track service usage
-                    if used_service not in self.services_used:
-                        self.services_used.append(used_service)
-                    
-                    # Check for pagination end WITHOUT analyzing content
-                    # Just check if response has data field and if it's empty
-                    if isinstance(raw_json_response, dict) and 'data' in raw_json_response:
-                        if not raw_json_response['data']:  # Empty data array
-                            print(f"   🏁 API returned empty data array - pagination complete")
-                            return self._save_raw_responses(all_raw_responses)
-                        elif len(raw_json_response['data']) < limit:
-                            print(f"   🏁 API returned partial batch - end of data")
-                            return self._save_raw_responses(all_raw_responses)
-                    
-                    break
-                else:
-                    print(f"   ❌ {service_name}: No response received")
+                    if raw_json_response:
+                        print(f"   ✅ Raw JSON received via {used_service}")
+                        
+                        # Store the COMPLETE raw response with minimal metadata
+                        response_info = {
+                            'request_number': requests_made + 1,
+                            'offset': offset,
+                            'limit': limit,
+                            'service_used': used_service,
+                            'timestamp': datetime.now().isoformat(),
+                            'complete_raw_response': raw_json_response  # Store everything as-is
+                        }
+                        
+                        all_raw_responses.append(response_info)
+                        response_received = True
+                        service_used = used_service
+                        
+                        # Track service usage
+                        if used_service not in self.services_used:
+                            self.services_used.append(used_service)
+                        
+                        # Check for pagination end WITHOUT analyzing content
+                        # Just check if response has data field and if it's empty
+                        if isinstance(raw_json_response, dict) and 'data' in raw_json_response:
+                            data_length = len(raw_json_response['data']) if raw_json_response['data'] else 0
+                            
+                            if data_length == 0:  # Empty data array
+                                print(f"   🏁 API returned empty data array - pagination complete")
+                                return self._save_raw_responses(all_raw_responses)
+                            elif data_length < limit:
+                                print(f"   🏁 API returned {data_length}/{limit} items - end of data reached")
+                                return self._save_raw_responses(all_raw_responses)
+                            else:
+                                print(f"   📊 Full batch received: {data_length}/{limit} items")
+                        
+                        break
+                    else:
+                        print(f"   ❌ {service_name}: No response received")
+                
+                if not response_received:
+                    print(f"   ❌ All API services failed for limit={limit}")
+                    print(f"   🔄 Trying smaller batch size...")
+                    break  # Try next (smaller) batch size
+                
+                offset += limit
+                requests_made += 1
+                
+                # Rate limiting for free services
+                if requests_made < max_requests:
+                    delay = 3 + (requests_made * 0.5)  # Progressive delay
+                    print(f"   ⏱️ Rate limiting delay: {delay:.1f}s")
+                    time.sleep(delay)
             
-            if not response_received:
-                print(f"   ❌ All API services failed for request {requests_made + 1}")
-                print("   🛑 Stopping fetch due to service failures")
+            # If we successfully got data with this batch size, we're done
+            if all_raw_responses:
+                print(f"   ✅ Successfully collected data with batch size: {limit}")
                 break
-            
-            offset += limit
-            requests_made += 1
-            
-            # Rate limiting for free services
-            if requests_made < max_requests:
-                delay = 3 + (requests_made * 0.5)  # Progressive delay
-                print(f"   ⏱️ Rate limiting delay: {delay:.1f}s")
-                time.sleep(delay)
+            else:
+                print(f"   ❌ Batch size {limit} failed, trying smaller...")
+                # Reset for next batch size attempt
+                offset = 0
+                requests_made = 0
         
         return self._save_raw_responses(all_raw_responses)
     

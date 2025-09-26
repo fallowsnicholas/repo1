@@ -19,13 +19,24 @@ class SplashDataProcessor:
         self.processed_data = []
         
     def load_raw_json(self):
-        """Load raw JSON data from fetch script"""
+        """Load raw JSON data from fetch script or artifacts"""
         try:
             print("📂 Loading raw JSON data...")
             
             if not os.path.exists(self.input_file):
                 print(f"❌ Raw data file not found: {self.input_file}")
-                print("💡 Make sure to run fetch_splash_json.py first")
+                print("💡 This usually means:")
+                print("   • Step 3A and 3B ran in separate workflow runs")
+                print("   • Use 'test-step-3' to run both together")
+                print("   • Or check artifacts from previous Step 3A run")
+                
+                # Try to find any JSON files that might be the data
+                import glob
+                json_files = glob.glob("*.json")
+                if json_files:
+                    print(f"📁 Found other JSON files: {json_files}")
+                    print("💡 Try downloading artifacts from Step 3A run")
+                
                 return None
             
             with open(self.input_file, 'r', encoding='utf-8') as f:

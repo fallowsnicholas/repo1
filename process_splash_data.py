@@ -217,7 +217,7 @@ class RobustSplashDataProcessor:
         return df
     
     def save_to_google_sheets(self, df):
-        """Save processed data to Google Sheets"""
+        """Save processed data to Google Sheets - Clean data only, no metadata"""
         if df.empty:
             print("❌ No data to save to Google Sheets")
             return False
@@ -250,28 +250,24 @@ class RobustSplashDataProcessor:
             print("🧹 Clearing existing data...")
             worksheet.clear()
             
-            # Prepare data with metadata header
-            header_info = [
-                ['Splash Sports MLB Data (Robust Processing)', ''],
-                ['Processed At', datetime.now().isoformat()],
-                ['Total Props', len(df)],
-                ['Unique Players', df['Name'].nunique()],
-                ['Processing Method', 'Robust structure detection'],
-                ['']  # Empty row for spacing
-            ]
-            
-            # Sort data by market then by player name
+            # Sort data by market then by player name for consistency
             df_sorted = df.sort_values(['Market', 'Name']).reset_index(drop=True)
             
-            # Combine header info, column names, and data
-            all_data = header_info + [df_sorted.columns.tolist()] + df_sorted.values.tolist()
-            
-            # Write to sheet
-            print("✍️ Writing data to sheet...")
+            # Write clean data directly - headers + data only
+            print("✍️ Writing clean data to sheet...")
+            all_data = [df_sorted.columns.tolist()] + df_sorted.values.tolist()
             worksheet.update(range_name='A1', values=all_data)
             
             print("✅ Successfully saved to Google Sheets!")
             print(f"📊 Saved {len(df)} props to SPLASH_MLB worksheet")
+            print(f"📋 Format: Headers in row 1, data starts row 2")
+            
+            # Show final summary in logs (metadata visible in workflow)
+            print(f"\n📈 SUMMARY (visible in workflow logs):")
+            print(f"   • Total Props: {len(df)}")
+            print(f"   • Unique Players: {df['Name'].nunique()}")
+            print(f"   • Unique Markets: {df['Market'].nunique()}")
+            print(f"   • Processed At: {datetime.now().isoformat()}")
             
             return True
             

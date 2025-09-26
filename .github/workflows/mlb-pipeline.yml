@@ -1,4 +1,4 @@
-# .github/workflows/mlb-pipeline.yml - Updated with split Splash data steps
+# .github/workflows/mlb-pipeline.yml - Cleaned up version
 name: MLB Pitcher-Batter Correlation Pipeline
 
 on:
@@ -74,7 +74,7 @@ jobs:
         python fetch_odds_data.py
         echo "✅ Step 2 complete"
     
-    # STEP 3A: Fetch Splash Sports JSON (new split step)
+    # STEP 3A: Fetch Splash Sports JSON
     - name: "Step 3A: Fetch Splash Sports JSON"
       if: |
         github.event.inputs.pipeline == 'full-pipeline' || 
@@ -88,11 +88,10 @@ jobs:
         ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
       run: |
         echo "🎯 Starting Step 3A: Fetch Splash Sports JSON"
-        echo "📥 This step only fetches raw JSON data"
         python fetch_splash_json.py
         echo "✅ Step 3A complete - JSON data collected"
     
-    # STEP 3B: Process Splash JSON and Save to Sheets (new split step)
+    # STEP 3B: Process Splash JSON and Save to Sheets
     - name: "Step 3B: Process Splash Data to Sheets"
       if: |
         github.event.inputs.pipeline == 'full-pipeline' || 
@@ -104,7 +103,6 @@ jobs:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
         echo "🎯 Starting Step 3B: Process Splash Data"
-        echo "⚙️ Processing raw JSON and saving to Google Sheets"
         python process_splash_data.py
         echo "✅ Step 3B complete - Data processed and saved"
     
@@ -187,13 +185,8 @@ jobs:
         echo "📊 Check Google Sheets for results:"
         echo "   • MATCHUPS: Today's games and matchups"
         echo "   • ODDS_API: Odds data from multiple sportsbooks"  
-        echo "   • SPLASH_MLB: Splash Sports props (processed via free APIs)"
+        echo "   • SPLASH_MLB: Splash Sports props"
         echo "   • MATCHED_LINES: Matched props between sources"
         echo "   • EV_RESULTS: Expected value opportunities"
         echo "   • PITCHER_ANCHORS: Pitcher-based parlay anchors"
         echo "   • CORRELATION_PARLAYS: Final pitcher vs batter parlays"
-        echo ""
-        echo "🆕 NEW SPLIT APPROACH:"
-        echo "   • Step 3A: Fetch JSON via free APIs (ScraperAPI, ScrapFly, ZenRows)"
-        echo "   • Step 3B: Process JSON and save to Google Sheets"
-        echo "   • Benefits: Better debugging, modularity, reusability"

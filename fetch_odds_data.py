@@ -8,6 +8,109 @@ import json
 from datetime import datetime
 import os
 
+def read_sheet_with_metadata_skip(worksheet, sheet_name):
+    """
+    Robust function to read Google Sheets data while skipping metadata headers
+    """
+    try:
+        # Get all data from sheet
+        all_data = worksheet.get_all_values()
+        
+        if not all_data:
+            print(f"❌ {sheet_name} sheet is empty")
+            return None
+        
+        print(f"📊 Reading {sheet_name}: {len(all_data)} total rows")
+        
+        # Find the header row (contains actual column names)
+        header_row_index = -1
+        
+        # Look for common header patterns
+        header_indicators = ['Game_ID', 'Away_Team', 'Home_Team', 'Team', 'Name', 'Matchup']
+        
+        for i, row in enumerate(all_data):
+            # Check if this row contains header-like values
+            if any(indicator in row for indicator in header_indicators):
+                print(f"✅ Found header row at row {i+1} in {sheet_name}")
+                header_row_index = i
+                break
+        
+        # If no header found, try another approach - look for rows with multiple non-empty cells
+        if header_row_index == -1:
+            for i, row in enumerate(all_data):
+                non_empty = sum(1 for cell in row if cell and str(cell).strip())
+                if non_empty >= 5:  # At least 5 columns
+                    print(f"📋 Using row {i+1} as headers (fallback detection)")
+                    header_row_index = i
+                    break
+        
+        if header_row_index == -1:
+            print(f"❌ Could not find header row in {sheet_name}")
+            return None
+        
+        # Extract headers and data
+        headers = all_data[header_row_index]
+        data_rows = all_data[header_row_index + 1:]
+        
+        # Filter out empty rows
+        data_rows = [row for row in data_rows if any(cell and str(cell).strip() for cell in row)]
+        
+        print(f"📈 Found {len(data_rows)} data rows in {sheet_name}")
+        
+        if not data_rows:
+            print(f"❌ No data rows found in {sheet_name}")
+            return None
+        
+        # Create DataFrame
+        import pandas as pd
+        df = pd.DataFrame(data_rows, columns=headers)
+        
+        # Remove completely empty rows and columns
+        df = df.dropna(how='all')
+        df = df.loc[:, df.columns != '']
+        
+        print(f"✅ Successfully read {len(df)} rows from {sheet_name}")
+        return df
+        
+    except Exception as e:
+        print(f"❌ Error reading {sheet_name}: {e}")
+        return None
+
+
+# Then update the read_matchups function in your OddsDataFetcher class to use this helper:
+
+def read_matchups(self, client):
+    """Read today's matchups from Step 1 with robust metadata handling"""
+    try:
+        print("📋 Reading today's matchups from Step 1...")
+        spreadsheet = client.open("MLB_Splash_Data")
+        matchups_worksheet = spreadsheet.worksheet("MATCHUPS")
+        
+        # Use robust reading
+        matchups_df = read_sheet_with_metadata_skip(matchups_worksheet, "MATCHUPS")
+        
+        if matchups_df is None or matchups_df.empty:
+            print("❌ No Step 1 matchups found - aborting odds fetch")
+            print("💡 Make sure Step 1 (fetch_matchups.py) ran successfully")
+            return None
+        
+        # Show what we found
+        print(f"🏟️ Found matchups for {len(matchups_df)} games")
+        
+        # Display sample matchups
+        if 'Away_Team' in matchups_df.columns and 'Home_Team' in matchups_df.columns:
+            print(f"📊 Sample matchups:")
+            for i, row in matchups_df.head(3).iterrows():
+                away = row.get('Away_Abbr', row.get('Away_Team', 'N/A'))
+                home = row.get('Home_Abbr', row.get('Home_Team', 'N/A'))
+                print(f"   • {away} @ {home}")
+        
+        return matchups_df
+        
+    except Exception as e:
+        print(f"❌ Error reading matchups: {e}")
+        return None
+
 class MLBOddsFetcher:
     def __init__(self, api_key: str):
         self.api_key = api_key

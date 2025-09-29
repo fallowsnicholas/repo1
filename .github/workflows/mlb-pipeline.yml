@@ -27,6 +27,11 @@ on:
         - test-step-6
         - test-step-7
         - parlays-only
+      days_offset:
+        description: 'Days offset for game date (0=today, 1=tomorrow, -1=yesterday)'
+        required: false
+        default: '0'
+        type: string
 
 jobs:
   mlb-pipeline:
@@ -54,8 +59,10 @@ jobs:
         github.event_name == 'repository_dispatch' && (github.event.action == 'full-pipeline' || github.event.action == 'test-step-1' || github.event.action == 'data-only')
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+        DAYS_OFFSET: ${{ github.event.inputs.days_offset || '0' }}
       run: |
         echo "🎯 Starting Step 1: Fetch MLB Matchups"
+        echo "⚙️ Date offset: $DAYS_OFFSET days"
         python fetch_matchups.py
         echo "✅ Step 1 complete"
     

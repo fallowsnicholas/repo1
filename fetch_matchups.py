@@ -1,8 +1,8 @@
-# fetch_matchups.py - Step 1: Get today's game matchups from ESPN
+# fetch_matchups.py - Step 1: Get MLB matchups from ESPN with configurable date
 import requests
 import json
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import gspread
 from google.oauth2.service_account import Credentials
@@ -12,23 +12,37 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class MatchupFetcher:
-    """Step 1: Fetch today's MLB matchups - matchups only"""
+    """Step 1: Fetch MLB matchups - configurable date offset"""
     
     def __init__(self):
         self.espn_base_url = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
+        # Get days offset from environment variable (default: 0 = today)
+        self.days_offset = int(os.environ.get('DAYS_OFFSET', '0'))
         
     def fetch_todays_games(self):
-        """Get today's games with teams and basic info"""
-        print("⚾ STEP 1: FETCHING TODAY'S MLB MATCHUPS")
+        """Get games with configurable date offset"""
+        print("⚾ STEP 1: FETCHING MLB MATCHUPS")
         print("=" * 60)
         
         try:
-            today = datetime.now().strftime('%Y%m%d')
+            # Calculate target date with offset
+            target_date = datetime.now() + timedelta(days=self.days_offset)
+            today = target_date.strftime('%Y%m%d')
+            date_display = target_date.strftime('%B %d, %Y')
+            
+            # Show what date we're fetching
+            if self.days_offset == 0:
+                print(f"📅 Fetching games for TODAY: {date_display}")
+            elif self.days_offset == 1:
+                print(f"📅 Fetching games for TOMORROW: {date_display}")
+            elif self.days_offset > 0:
+                print(f"📅 Fetching games for {self.days_offset} days from now: {date_display}")
+            else:
+                print(f"📅 Fetching games for {abs(self.days_offset)} days ago: {date_display}")
+            
             url = f"{self.espn_base_url}/scoreboard"
             
             params = {'dates': today, 'limit': 50}
-            print(f"📅 Fetching games for: {datetime.now().strftime('%B %d, %Y')}")
-            
             response = requests.get(url, params=params, timeout=15)
             response.raise_for_status()
             
@@ -36,7 +50,7 @@ class MatchupFetcher:
             matchups = []
             
             if 'events' in data and data['events']:
-                print(f"🏟️ Found {len(data['events'])} games scheduled for today:")
+                print(f"🏟️ Found {len(data['events'])} games scheduled for {date_display}:")
                 print()
                 
                 for i, event in enumerate(data['events'], 1):
@@ -72,7 +86,9 @@ class MatchupFetcher:
                         continue
                         
             else:
-                print("⚠️ No games found for today")
+                print(f"⚠️ No games found for {date_display}")
+                print("💡 This is normal during off-season or off-days")
+                print(f"💡 Try adjusting DAYS_OFFSET environment variable")
             
             print(f"✅ Successfully parsed {len(matchups)} game matchups")
             return matchups
@@ -160,6 +176,10 @@ class MatchupFetcher:
         worksheet.clear()
         
         if matchups:
+            # Calculate target date for display
+            target_date = datetime.now() + timedelta(days=self.days_offset)
+            date_display = target_date.strftime('%B %d, %Y')
+            
             # Create headers
             headers = [
                 'Game_ID', 'Date', 'Game_Time', 
@@ -200,10 +220,21 @@ class MatchupFetcher:
                 ])
             
             # Add metadata at top
+            offset_text = ""
+            if self.days_offset == 0:
+                offset_text = "Today"
+            elif self.days_offset == 1:
+                offset_text = "Tomorrow"
+            elif self.days_offset > 0:
+                offset_text = f"{self.days_offset} days from now"
+            else:
+                offset_text = f"{abs(self.days_offset)} days ago"
+            
             metadata = [
-                ['MLB Matchups for ' + datetime.now().strftime('%B %d, %Y')],
-                ['Total Games: ' + str(len(matchups))],
-                ['Fetched At: ' + datetime.now().isoformat()],
+                [f'MLB Matchups for {date_display}'],
+                [f'Date Offset: {offset_text} (DAYS_OFFSET={self.days_offset})'],
+                [f'Total Games: {len(matchups)}'],
+                [f'Fetched At: {datetime.now().isoformat()}'],
                 ['']  # Empty row
             ]
             
@@ -217,30 +248,41 @@ class MatchupFetcher:
             
         else:
             # Add a note if no games found
+            target_date = datetime.now() + timedelta(days=self.days_offset)
+            date_display = target_date.strftime('%B %d, %Y')
+            
             worksheet.update(range_name='A1', values=[
-                ['No games found for ' + datetime.now().strftime('%B %d, %Y')],
-                ['Fetched At: ' + datetime.now().isoformat()]
+                [f'No games found for {date_display}'],
+                [f'Date Offset: DAYS_OFFSET={self.days_offset}'],
+                [f'Fetched At: {datetime.now().isoformat()}'],
+                [''],
+                ['💡 Try adjusting DAYS_OFFSET in workflow settings']
             ])
             print("📝 Saved 'no games' notice to MATCHUPS sheet")
 
 def main():
-    """Main execution for Step 1 - matchups only"""
+    """Main execution for Step 1 - configurable date"""
     try:
         fetcher = MatchupFetcher()
         
-        # Fetch today's games
+        # Show configuration
+        if fetcher.days_offset != 0:
+            print(f"⚙️ Configuration: DAYS_OFFSET = {fetcher.days_offset}")
+        
+        # Fetch games for configured date
         matchups = fetcher.fetch_todays_games()
         
         # Save to Google Sheets
         fetcher.save_to_google_sheets(matchups)
         
+        target_date = datetime.now() + timedelta(days=fetcher.days_offset)
         print(f"\n🎯 STEP 1 COMPLETE:")
-        print(f"   📅 Date: {datetime.now().strftime('%B %d, %Y')}")
+        print(f"   📅 Date: {target_date.strftime('%B %d, %Y')}")
         print(f"   🏟️ Games Found: {len(matchups)}")
         print(f"   💾 Data saved to Google Sheets (MATCHUPS tab)")
         
         if matchups:
-            print(f"\n📋 SUMMARY OF TODAY'S MATCHUPS:")
+            print(f"\n📋 SUMMARY OF MATCHUPS:")
             for i, game in enumerate(matchups, 1):
                 away = game['away_team']['abbreviation']
                 home = game['home_team']['abbreviation']

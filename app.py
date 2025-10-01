@@ -100,8 +100,8 @@ class MLBDashboard:
         self.client = None
         self.spreadsheet = None
         
-    @st.cache_data(ttl=300)  # Cache for 5 minutes
-    def connect_to_sheets(_self):
+    # Remove caching decorator - keep only connection caching
+    def connect_to_sheets(self):
         """Connect to Google Sheets with caching"""
         try:
             # Check if credentials are available
@@ -133,8 +133,8 @@ class MLBDashboard:
             st.error(f"Error details: {str(e)}")
             return None
     
-    @st.cache_data(ttl=300)
-    def read_sheet_with_metadata_skip(_self, _client, sheet_name):
+    # Remove caching decorator to fix gspread session issues
+    def read_sheet_with_metadata_skip(self, _client, sheet_name):
         """Read Google Sheets data while skipping metadata headers"""
         try:
             spreadsheet = _client.open("MLB_Splash_Data")
@@ -260,7 +260,7 @@ def main():
     # Initialize dashboard
     dashboard = MLBDashboard()
     
-    # Connect to Google Sheets
+    # Connect to Google Sheets (fresh connection each time)
     with st.spinner("Connecting to data source..."):
         client = dashboard.connect_to_sheets()
     

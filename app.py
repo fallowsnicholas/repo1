@@ -105,8 +105,8 @@ class MLBDashboard:
         """Connect to Google Sheets with caching"""
         try:
             # Check if credentials are available
-            if 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS' not in os.environ:
-                st.error("Google Service Account credentials not found in environment variables")
+            if 'GOOGLE_SERVICE_ACCOUNT_CREDENTIALS' not in st.secrets:
+                st.error("Google Service Account credentials not found in Streamlit secrets")
                 return None
                 
             scopes = [
@@ -114,7 +114,8 @@ class MLBDashboard:
                 'https://www.googleapis.com/auth/drive'
             ]
             
-            service_account_info = json.loads(os.environ['GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'])
+            # Use Streamlit secrets instead of environment variables
+            service_account_info = dict(st.secrets["GOOGLE_SERVICE_ACCOUNT_CREDENTIALS"])
             credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
             client = gspread.authorize(credentials)
             
@@ -125,10 +126,10 @@ class MLBDashboard:
             return None
     
     @st.cache_data(ttl=300)
-    def read_sheet_with_metadata_skip(_self, client, sheet_name):
+    def read_sheet_with_metadata_skip(_self, _client, sheet_name):
         """Read Google Sheets data while skipping metadata headers"""
         try:
-            spreadsheet = client.open("MLB_Splash_Data")
+            spreadsheet = _client.open("MLB_Splash_Data")
             worksheet = spreadsheet.worksheet(sheet_name)
             
             # Get all data
@@ -257,7 +258,7 @@ def main():
     
     if not client:
         st.error("Unable to connect to Google Sheets. Please check your credentials.")
-        st.info("Make sure GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable is set.")
+        st.info("Make sure GOOGLE_SERVICE_ACCOUNT_CREDENTIALS is set in Streamlit secrets.")
         return
     
     # League and View Selection

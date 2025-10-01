@@ -114,8 +114,15 @@ class MLBDashboard:
                 'https://www.googleapis.com/auth/drive'
             ]
             
-            # Use Streamlit secrets instead of environment variables
-            service_account_info = dict(st.secrets["GOOGLE_SERVICE_ACCOUNT_CREDENTIALS"])
+            # Handle credentials stored as JSON string in Streamlit secrets
+            creds_raw = st.secrets["GOOGLE_SERVICE_ACCOUNT_CREDENTIALS"]
+            
+            # Parse JSON string if needed
+            if isinstance(creds_raw, str):
+                service_account_info = json.loads(creds_raw)
+            else:
+                service_account_info = dict(creds_raw)
+            
             credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
             client = gspread.authorize(credentials)
             
@@ -123,6 +130,7 @@ class MLBDashboard:
             
         except Exception as e:
             st.error(f"Failed to connect to Google Sheets: {e}")
+            st.error(f"Error details: {str(e)}")
             return None
     
     @st.cache_data(ttl=300)

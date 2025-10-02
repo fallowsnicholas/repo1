@@ -408,11 +408,31 @@ def show_individual_evs(dashboard, client):
     else:
         st.info("No opportunities match your current filters.")
 
+def parse_compressed_batter(batter_string):
+    """Parse compressed batter string: 'Name, Market, Line, Bet_Type, EV, Best_Odds'"""
+    if not batter_string or str(batter_string).strip() == '':
+        return None
+    
+    try:
+        parts = [part.strip() for part in str(batter_string).split(',')]
+        if len(parts) >= 6:
+            return {
+                'name': parts[0],
+                'market': parts[1], 
+                'line': parts[2],
+                'bet_type': parts[3],
+                'ev': float(parts[4]) if parts[4] != 'N/A' else 0,
+                'best_odds': parts[5]
+            }
+    except:
+        pass
+    return None
+
 def show_correlation_parlays(dashboard, client):
-    """Display correlation parlays"""
+    """Display correlation parlays from compressed single-cell format"""
     
     with st.spinner("Loading correlation parlays..."):
-        parlay_df = dashboard.get_correlation_parlays(client)
+        parlay_df = dashboard.read_sheet_with_metadata_skip(client, "CORRELATION_PARLAYS")
     
     if parlay_df.empty:
         st.warning("No correlation parlays found. Make sure Step 7 (build_parlays.py) has been run.")
@@ -430,7 +450,7 @@ def show_correlation_parlays(dashboard, client):
     
     with col2:
         if 'Estimated_Parlay_EV' in parlay_df.columns:
-            best_parlay_ev = parlay_df['Estimated_Parlay_EV'].max()
+            best_parlay_ev = pd.to_numeric(parlay_df['Estimated_Parlay_EV'], errors='coerce').max()
             st.metric(
                 label="Best Parlay EV",
                 value=f"{best_parlay_ev:.1%}" if not pd.isna(best_parlay_ev) else "N/A"
@@ -438,7 +458,7 @@ def show_correlation_parlays(dashboard, client):
     
     with col3:
         if 'Total_Legs' in parlay_df.columns:
-            avg_legs = parlay_df['Total_Legs'].mean()
+            avg_legs = pd.to_numeric(parlay_df['Total_Legs'], errors='coerce').mean()
             st.metric(
                 label="Avg Legs/Parlay",
                 value=f"{avg_legs:.1f}" if not pd.isna(avg_legs) else "N/A"
@@ -446,18 +466,28 @@ def show_correlation_parlays(dashboard, client):
     
     st.markdown("---")
     
-    # Display parlays as cards
+    # Find compressed batter columns
+    batter_columns = [col for col in parlay_df.columns if col.startswith('Batter_') and col.replace('Batter_', '').isdigit()]
+    batter_columns.sort(key=lambda x: int(x.replace('Batter_', '')))  # Sort numerically
+    
+    # Display each parlay with parsed batter information
     for idx, row in parlay_df.iterrows():
         parlay_id = row.get('Parlay_ID', f'Parlay {idx+1}')
         pitcher_name = row.get('Pitcher_Name', 'Unknown Pitcher')
-        pitcher_prop = row.get('Pitcher_Prop', 'Unknown Prop')
+        pitcher_team = row.get('Pitcher_Team', 'Unknown Team')
+        pitcher_market = row.get('Pitcher_Market', 'Unknown Market')
+        pitcher_line = row.get('Pitcher_Line', 'N/A')
+        pitcher_bet_type = row.get('Pitcher_Bet_Type', 'N/A')
+        pitcher_ev = row.get('Pitcher_EV', 0)
         opposing_team = row.get('Opposing_Team', 'Unknown Team')
         num_batters = row.get('Num_Batters', 0)
-        estimated_ev = row.get('Estimated_Parlay_EV', 0)
         correlation_type = row.get('Correlation_Type', 'Unknown')
+        estimated_ev = pd.to_numeric(row.get('Estimated_Parlay_EV', 0), errors='coerce')
         total_legs = row.get('Total_Legs', 0)
+        correlation_strength = row.get('Correlation_Strength', 'N/A')
+        bet_logic = row.get('Bet_Logic', 'N/A')
         
-        # Create parlay card
+        # Create enhanced parlay card
         with st.container():
             st.markdown(f"""
             <div class="parlay-card">
@@ -470,19 +500,42 @@ def show_correlation_parlays(dashboard, client):
             col1, col2 = st.columns([3, 1])
             
             with col1:
-                st.write(f"**Anchor:** {pitcher_name} - {pitcher_prop}")
-                st.write(f"**Opposing Team:** {opposing_team} ({num_batters} batters)")
+                # Pitcher anchor information
+                st.write(f"**🎯 Pitcher Anchor:** {pitcher_name} ({pitcher_team})")
+                st.write(f"**📊 Prop:** {pitcher_market} {pitcher_line} ({pitcher_bet_type}) - EV: {pitcher_ev:.3f}")
+                st.write(f"**⚔️ vs {opposing_team}** ({num_batters} correlated batters)")
                 
-                # Show batter props summary if available
-                batter_summary = row.get('Batter_Props_Summary', '')
-                if batter_summary:
-                    st.write(f"**Correlated Props:** {batter_summary}")
+                # Parse and display compressed batter information
+                st.write("**🏏 Correlated Batters:**")
+                batters_displayed = 0
+                
+                for batter_col in batter_columns:
+                    if batter_col in row:
+                        batter_data = parse_compressed_batter(row[batter_col])
+                        
+                        if batter_data:
+                            st.write(f"   • **{batter_data['name']}** ({opposing_team}) - {batter_data['market']} {batter_data['line']} ({batter_data['bet_type']})")
+                            st.write(f"     EV: {batter_data['ev']:.3f} | Best Odds: {batter_data['best_odds']}")
+                            batters_displayed += 1
+                
+                if batters_displayed == 0:
+                    st.write("   ⚠️ No batter data found in compressed format")
+                    
+                    # Show raw data for debugging
+                    st.write("**Debug - Available batter columns:**")
+                    for batter_col in batter_columns[:3]:  # Show first 3 for debugging
+                        if batter_col in row and row[batter_col]:
+                            st.write(f"   {batter_col}: {row[batter_col]}")
             
             with col2:
                 if estimated_ev > 0:
-                    st.markdown(f'<div class="ev-positive">EV: {estimated_ev:.1%}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="ev-positive">Total EV: {estimated_ev:.1%}</div>', unsafe_allow_html=True)
                 else:
-                    st.write(f"EV: {estimated_ev:.1%}")
+                    st.write(f"Total EV: {estimated_ev:.1%}")
+                
+                # Show correlation details
+                st.write(f"**Correlation:** {correlation_strength}")
+                st.write(f"**Logic:** {bet_logic}")
         
         st.markdown("---")
 

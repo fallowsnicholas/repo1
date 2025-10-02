@@ -88,7 +88,28 @@ st.markdown("""
         display: none !important;
     }
 
+    /* Override Streamlit's default tab indicator color */
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        border-bottom: 2px solid #111827 !important;
+        color: #111827 !important;
+    }
+
     /* Custom button styling for filter buttons */
+    .filter-button-container {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.125rem !important;
+        margin-top: 0.5rem !important;
+        flex: 1 !important;
+        justify-content: flex-start !important;
+        margin-left: 1rem !important;
+    }
+
+    .filter-button-container .stButton {
+        margin: 0 !important;
+        flex: none !important;
+    }
+
     .filter-button-container .stButton > button {
         background-color: white !important;
         color: #6b7280 !important;
@@ -97,8 +118,9 @@ st.markdown("""
         padding: 0.25rem 0.75rem !important;
         font-size: 0.875rem !important;
         font-weight: 500 !important;
-        margin-right: 0.5rem !important;
+        margin: 0 !important;
         height: 32px !important;
+        min-width: auto !important;
     }
 
     .filter-button-container .stButton > button[data-testid="baseButton-primary"] {
@@ -115,14 +137,6 @@ st.markdown("""
     .filter-button-container .stButton > button[data-testid="baseButton-primary"]:hover {
         background-color: #374151 !important;
         border-color: #374151 !important;
-    }
-
-    /* Align filter buttons with text */
-    .filter-button-container {
-        display: flex !important;
-        align-items: center !important;
-        gap: 0.25rem !important;
-        margin-top: 0.5rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -191,35 +205,35 @@ with tab1:
     all_markets = list(set([ev['Market'] for ev in individualEVs]))
     
     # Header row with title and filter buttons
-    header_col1, header_col2 = st.columns([2, 3])
-    
-    with header_col1:
-        st.markdown("## Individual EV Opportunities")
-    
-    with header_col2:
-        # Create filter buttons in a row with custom styling
-        st.markdown('<div class="filter-button-container">', unsafe_allow_html=True)
+    header_container = st.container()
+    with header_container:
+        st.markdown("""
+        <div style="display: flex; align-items: center; width: 100%;">
+            <h2 style="margin: 0; flex-shrink: 0;">Individual EV Opportunities</h2>
+            <div class="filter-button-container" style="flex: 1; margin-left: 1rem;">
+        """, unsafe_allow_html=True)
         
-        filter_cols = st.columns(len(all_markets) + 1)  # +1 for "All" button
+        # Create filter buttons spanning the remaining width
+        button_cols = st.columns(len(all_markets) + 1)  # +1 for "All" button
         
         # Initialize session state for market filter
         if 'market_filter' not in st.session_state:
             st.session_state.market_filter = 'All'
         
-        with filter_cols[0]:
+        with button_cols[0]:
             if st.button("All", key="filter_all", 
                         type="primary" if st.session_state.market_filter == 'All' else "secondary"):
                 st.session_state.market_filter = 'All'
                 st.rerun()
         
         for i, market in enumerate(all_markets):
-            with filter_cols[i + 1]:
+            with button_cols[i + 1]:
                 if st.button(market, key=f"filter_{market.replace(' ', '_')}", 
                             type="primary" if st.session_state.market_filter == market else "secondary"):
                     st.session_state.market_filter = market
                     st.rerun()
         
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div></div>', unsafe_allow_html=True)
     
     # Filter the data based on selected market
     if st.session_state.market_filter == 'All':

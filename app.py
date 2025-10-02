@@ -94,7 +94,43 @@ st.markdown("""
         color: #111827 !important;
     }
 
-    /* Custom button styling for filter buttons */
+    /* Custom button styling for filter buttons - More aggressive override */
+    div[data-testid="column"] .stButton > button[kind="primary"],
+    div[data-testid="column"] .stButton > button[data-testid="baseButton-primary"],
+    .filter-button-container .stButton > button[kind="primary"],
+    .filter-button-container .stButton > button[data-testid="baseButton-primary"],
+    .stButton > button[kind="primary"],
+    .stButton > button[data-testid="baseButton-primary"] {
+        background-color: #111827 !important;
+        background: #111827 !important;
+        color: white !important;
+        border-color: #111827 !important;
+        border: 1px solid #111827 !important;
+    }
+
+    div[data-testid="column"] .stButton > button[kind="primary"]:hover,
+    div[data-testid="column"] .stButton > button[data-testid="baseButton-primary"]:hover,
+    .filter-button-container .stButton > button[kind="primary"]:hover,
+    .filter-button-container .stButton > button[data-testid="baseButton-primary"]:hover,
+    .stButton > button[kind="primary"]:hover,
+    .stButton > button[data-testid="baseButton-primary"]:hover {
+        background-color: #374151 !important;
+        background: #374151 !important;
+        border-color: #374151 !important;
+        border: 1px solid #374151 !important;
+    }
+
+    /* Override any focus states too */
+    div[data-testid="column"] .stButton > button[kind="primary"]:focus,
+    div[data-testid="column"] .stButton > button[data-testid="baseButton-primary"]:focus,
+    .filter-button-container .stButton > button[kind="primary"]:focus,
+    .filter-button-container .stButton > button[data-testid="baseButton-primary"]:focus {
+        background-color: #111827 !important;
+        background: #111827 !important;
+        border-color: #111827 !important;
+        box-shadow: none !important;
+    }
+
     .filter-button-container .stButton > button {
         background-color: white !important;
         color: #6b7280 !important;
@@ -107,20 +143,9 @@ st.markdown("""
         height: 32px !important;
     }
 
-    .filter-button-container .stButton > button[data-testid="baseButton-primary"] {
-        background-color: #111827 !important;
-        color: white !important;
-        border-color: #111827 !important;
-    }
-
     .filter-button-container .stButton > button:hover {
         background-color: #f9fafb !important;
         border-color: #9ca3af !important;
-    }
-
-    .filter-button-container .stButton > button[data-testid="baseButton-primary"]:hover {
-        background-color: #374151 !important;
-        border-color: #374151 !important;
     }
 
     /* Align filter buttons with text */

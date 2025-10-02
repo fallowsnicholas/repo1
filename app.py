@@ -447,19 +447,23 @@ class MLBDashboard:
         return status_data
 
 def main():
-    """Main Streamlit app with exact Honda-inspired design"""
+    """Main Streamlit app with working Honda-inspired design"""
+    
+    # Initialize session state for navigation
+    if 'active_view' not in st.session_state:
+        st.session_state.active_view = "Individual EVs"
     
     # Header Navigation
-    st.markdown("""
+    st.markdown(f"""
     <div class="header-nav">
         <div class="header-content">
             <div class="logo">EV Sports</div>
-            <div class="last-updated">Last Updated: 2 hours ago</div>
+            <div class="last-updated">Last Updated: {datetime.now().strftime('%H:%M:%S')}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # League Selection Ribbon
+    # League Selection Ribbon (visual only for now)
     st.markdown("""
     <div class="league-ribbon">
         <div class="league-content">
@@ -470,39 +474,79 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # View Selection Ribbon with working tabs
-    view_options = ["Individual EVs", "Correlation Parlays", "Pipeline Status"]
-    
-    # Use session state to track active view
-    if 'active_view' not in st.session_state:
-        st.session_state.active_view = "Individual EVs"
-    
-    # Create clickable view tabs
-    col1, col2, col3, col_spacer = st.columns([2, 2, 2, 6])
-    
-    with col1:
-        if st.button("Individual EVs", key="view_individual", help="Individual EV Opportunities"):
-            st.session_state.active_view = "Individual EVs"
-    
-    with col2:
-        if st.button("Correlation Parlays", key="view_parlays", help="Correlation Parlays"):
-            st.session_state.active_view = "Correlation Parlays"
-    
-    with col3:
-        if st.button("Pipeline Status", key="view_status", help="Pipeline Status"):
-            st.session_state.active_view = "Pipeline Status"
-    
-    # Style the active tab
+    # View Selection with working navigation
     active_view = st.session_state.active_view
+    
+    # Create the visual ribbon
+    individual_active = "active" if active_view == "Individual EVs" else ""
+    parlays_active = "active" if active_view == "Correlation Parlays" else ""
+    status_active = "active" if active_view == "Pipeline Status" else ""
+    
     st.markdown(f"""
     <div class="view-ribbon">
         <div class="view-content">
-            <div class="view-tab {'active' if active_view == 'Individual EVs' else ''}">Individual EVs</div>
-            <div class="view-tab {'active' if active_view == 'Correlation Parlays' else ''}">Correlation Parlays</div>
-            <div class="view-tab {'active' if active_view == 'Pipeline Status' else ''}">Pipeline Status</div>
+            <div class="view-tab {individual_active}">Individual EVs</div>
+            <div class="view-tab {parlays_active}">Correlation Parlays</div>
+            <div class="view-tab {status_active}">Pipeline Status</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Hidden buttons for navigation (styled to be invisible)
+    st.markdown("""
+    <style>
+    .nav-buttons {
+        position: fixed;
+        top: 112px; /* Position over the view ribbon */
+        left: 0;
+        right: 0;
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+        display: flex;
+        height: 3.5rem;
+        z-index: 1000;
+    }
+    
+    .stButton > button {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        height: 3.5rem !important;
+        width: auto !important;
+        margin-right: 2rem !important;
+        border-radius: 0 !important;
+        color: transparent !important;
+        cursor: pointer !important;
+    }
+    
+    .stButton > button:hover {
+        background: rgba(0,0,0,0.05) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Navigation buttons overlaid on the ribbon
+    with st.container():
+        st.markdown('<div class="nav-buttons">', unsafe_allow_html=True)
+        col1, col2, col3, col_spacer = st.columns([2, 2.5, 2, 5.5])
+        
+        with col1:
+            if st.button("Individual EVs", key="nav_individual"):
+                st.session_state.active_view = "Individual EVs"
+                st.rerun()
+        
+        with col2:
+            if st.button("Correlation Parlays", key="nav_parlays"):
+                st.session_state.active_view = "Correlation Parlays"
+                st.rerun()
+        
+        with col3:
+            if st.button("Pipeline Status", key="nav_status"):
+                st.session_state.active_view = "Pipeline Status"
+                st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Main Content Area
     st.markdown('<div class="main-content">', unsafe_allow_html=True)
@@ -517,6 +561,7 @@ def main():
     if not client:
         st.error("Unable to connect to Google Sheets. Please check your credentials.")
         st.info("Make sure GOOGLE_SERVICE_ACCOUNT_CREDENTIALS is set in Streamlit secrets.")
+        st.markdown('</div>', unsafe_allow_html=True)
         return
     
     # Display content based on active view
@@ -524,8 +569,59 @@ def main():
         show_individual_evs_clean(dashboard, client)
     elif active_view == "Correlation Parlays":
         show_correlation_parlays_clean(dashboard, client)
-    elif active_view == "Pipeline Status":
-        show_pipeline_status(dashboard, client)
+def show_pipeline_status_clean(dashboard, client):
+    """Display pipeline status with clean design"""
+    
+    # Content header
+    st.markdown("""
+    <div class="content-header">
+        <h1 class="page-title">Pipeline Status</h1>
+        <span class="result-count">Monitor your pipeline</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    with st.spinner("Checking pipeline status..."):
+        status_data = dashboard.get_pipeline_status(client)
+    
+    # Create clean status cards
+    for status_info in status_data:
+        step = status_info['Step']
+        status = status_info['Status']
+        color = status_info['Color']
+        
+        # Determine status styling
+        if color == "success":
+            status_style = "color: #059669; font-weight: 600;"
+        elif color == "warning":
+            status_style = "color: #d97706; font-weight: 600;"
+        else:
+            status_style = "color: #dc2626; font-weight: 600;"
+        
+        st.markdown(f"""
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 0.125rem; padding: 1.5rem; margin-bottom: 1rem;">
+            <h4 style="margin: 0 0 0.5rem 0; color: #111827; font-size: 1.125rem; font-weight: 500;">{step}</h4>
+            <span style="{status_style}">{status}</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Pipeline instructions
+    st.markdown("""
+    <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.125rem; padding: 1.5rem; margin-top: 2rem;">
+        <h3 style="margin: 0 0 1rem 0; color: #111827; font-size: 1.125rem; font-weight: 500;">Pipeline Execution</h3>
+        <p style="margin: 0 0 1rem 0; color: #6b7280; font-size: 0.875rem;">To run the complete pipeline:</p>
+        <ol style="margin: 0; padding-left: 1.5rem; color: #6b7280; font-size: 0.875rem;">
+            <li><strong>Step 1:</strong> python fetch_matchups.py - Get today's MLB matchups</li>
+            <li><strong>Step 2:</strong> python fetch_odds_data.py - Fetch odds from multiple sportsbooks</li>
+            <li><strong>Step 3A:</strong> python fetch_splash_json.py - Get Splash Sports data</li>
+            <li><strong>Step 3B:</strong> python process_splash_data.py - Process and save to sheets</li>
+            <li><strong>Step 4:</strong> python match_lines.py - Match Splash props to odds</li>
+            <li><strong>Step 5:</strong> python calculate_ev.py - Calculate expected values</li>
+            <li><strong>Step 6:</strong> python find_pitcher_anchors.py - Find pitcher anchors</li>
+            <li><strong>Step 7:</strong> python build_parlays.py - Build correlation parlays</li>
+        </ol>
+        <p style="margin: 1rem 0 0 0; color: #6b7280; font-size: 0.875rem;">Or use the GitHub Actions workflow for automated execution.</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
 

@@ -51,13 +51,11 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] {
         gap: 0px;
         background-color: white;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: none !important;
         height: 56px;
         display: flex;
         align-items: center;
-        padding-left: 24px;
-        max-width: 1280px;
-        margin: 0 auto;
+        padding-left: 0px;
     }
 
     .stTabs [data-baseweb="tab"] {
@@ -79,6 +77,15 @@ st.markdown("""
     /* Remove the underlines */
     .stTabs [aria-selected="true"]::after {
         display: none;
+    }
+
+    /* Remove any additional tab indicators */
+    .stTabs [data-baseweb="tab-border"] {
+        display: none !important;
+    }
+
+    .stTabs [data-baseweb="tab-highlight"] {
+        display: none !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -128,13 +135,13 @@ st.markdown('<hr style="margin: 1rem 0; border: none; border-top: 1px solid #e5e
 # League Selection (visual only)
 league_col1, league_col2, league_col3, league_col4 = st.columns([1, 1, 1, 7])
 with league_col1:
-    st.markdown('<div style="color: #111827; font-weight: 500; border-bottom: 2px solid #111827; padding-bottom: 8px; font-size: 14px;">MLB</div>', unsafe_allow_html=True)
+    st.markdown('<div style="color: #111827; font-weight: 500; padding-bottom: 8px; font-size: 14px;">MLB</div>', unsafe_allow_html=True)
 with league_col2:
     st.markdown('<div style="color: #9ca3af; font-size: 14px; padding-bottom: 8px;">NFL</div>', unsafe_allow_html=True)
 with league_col3:
     st.markdown('<div style="color: #9ca3af; font-size: 14px; padding-bottom: 8px;">NBA</div>', unsafe_allow_html=True)
 
-st.markdown('<hr style="margin: 1rem 0; border: none; border-top: 1px solid #e5e7eb;">', unsafe_allow_html=True)
+st.markdown('<div style="margin: 1rem 0;"></div>', unsafe_allow_html=True)
 
 # Navigation using Streamlit tabs (styled to look like ribbon)
 tab1, tab2 = st.tabs(["Individual EVs", "Correlation Parlays"])

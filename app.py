@@ -439,6 +439,38 @@ def show_correlation_parlays(dashboard, client):
         st.info("💡 Run your pipeline to generate parlay data: `python build_parlays.py`")
         return
     
+    # Check if this is an empty status sheet
+    if 'Status' in parlay_df.columns or len(parlay_df.columns) < 5:
+        st.info("📋 **Pipeline Status Update**")
+        
+        # Show the status information from the sheet
+        if not parlay_df.empty:
+            for idx, row in parlay_df.iterrows():
+                if len(row) >= 2 and row.iloc[0] and row.iloc[1]:
+                    st.write(f"**{row.iloc[0]}:** {row.iloc[1]}")
+                    if idx >= 8:  # Limit to first few rows
+                        break
+        
+        st.info("🎯 This usually means no games are scheduled today. The pipeline ran successfully but found no parlays to build.")
+        return
+    
+    # Check if we have actual parlay data
+    required_columns = ['Parlay_ID', 'Pitcher_Name', 'Estimated_Parlay_EV']
+    if not all(col in parlay_df.columns for col in required_columns):
+        st.warning("📊 Sheet structure doesn't match expected format.")
+        st.write("**Available columns:**", list(parlay_df.columns))
+        return
+    
+    # Filter out rows that don't have parlay data (metadata rows)
+    parlay_df = parlay_df[
+        (parlay_df['Parlay_ID'].notna()) & 
+        (parlay_df['Parlay_ID'].str.contains('PARLAY_', na=False))
+    ]
+    
+    if parlay_df.empty:
+        st.info("📊 No parlay data found in sheet - likely no games today.")
+        return
+    
     # Summary metrics
     col1, col2, col3 = st.columns(3)
     
@@ -466,9 +498,11 @@ def show_correlation_parlays(dashboard, client):
     
     st.markdown("---")
     
-    # Find compressed batter columns
-    batter_columns = [col for col in parlay_df.columns if col.startswith('Batter_') and col.replace('Batter_', '').isdigit()]
-    batter_columns.sort(key=lambda x: int(x.replace('Batter_', '')))  # Sort numerically
+    # Find compressed batter columns dynamically
+    batter_columns = [col for col in parlay_df.columns if col.startswith('Batter_') and col.replace('Batter_', '').replace('_', '').isdigit()]
+    batter_columns.sort(key=lambda x: int(''.join(filter(str.isdigit, x))))  # Sort numerically
+    
+    st.write(f"🔍 **Debug Info:** Found {len(batter_columns)} batter columns: {batter_columns[:5]}...")
     
     # Display each parlay with parsed batter information
     for idx, row in parlay_df.iterrows():
@@ -478,12 +512,12 @@ def show_correlation_parlays(dashboard, client):
         pitcher_market = row.get('Pitcher_Market', 'Unknown Market')
         pitcher_line = row.get('Pitcher_Line', 'N/A')
         pitcher_bet_type = row.get('Pitcher_Bet_Type', 'N/A')
-        pitcher_ev = row.get('Pitcher_EV', 0)
+        pitcher_ev = pd.to_numeric(row.get('Pitcher_EV', 0), errors='coerce')
         opposing_team = row.get('Opposing_Team', 'Unknown Team')
-        num_batters = row.get('Num_Batters', 0)
+        num_batters = pd.to_numeric(row.get('Num_Batters', 0), errors='coerce')
         correlation_type = row.get('Correlation_Type', 'Unknown')
         estimated_ev = pd.to_numeric(row.get('Estimated_Parlay_EV', 0), errors='coerce')
-        total_legs = row.get('Total_Legs', 0)
+        total_legs = pd.to_numeric(row.get('Total_Legs', 0), errors='coerce')
         correlation_strength = row.get('Correlation_Strength', 'N/A')
         bet_logic = row.get('Bet_Logic', 'N/A')
         
@@ -510,7 +544,7 @@ def show_correlation_parlays(dashboard, client):
                 batters_displayed = 0
                 
                 for batter_col in batter_columns:
-                    if batter_col in row:
+                    if batter_col in row and row[batter_col]:
                         batter_data = parse_compressed_batter(row[batter_col])
                         
                         if batter_data:
@@ -522,10 +556,18 @@ def show_correlation_parlays(dashboard, client):
                     st.write("   ⚠️ No batter data found in compressed format")
                     
                     # Show raw data for debugging
-                    st.write("**Debug - Available batter columns:**")
+                    st.write("**Debug - Available batter columns with data:**")
                     for batter_col in batter_columns[:3]:  # Show first 3 for debugging
                         if batter_col in row and row[batter_col]:
-                            st.write(f"   {batter_col}: {row[batter_col]}")
+                            st.write(f"   {batter_col}: `{row[batter_col]}`")
+                        elif batter_col in row:
+                            st.write(f"   {batter_col}: (empty)")
+                    
+                    # Show all non-empty columns for debugging
+                    st.write("**All non-empty columns in this row:**")
+                    for col in row.index:
+                        if row[col] and str(row[col]).strip():
+                            st.write(f"   {col}: `{row[col]}`")
             
             with col2:
                 if estimated_ev > 0:

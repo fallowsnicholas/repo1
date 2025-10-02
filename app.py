@@ -87,6 +87,43 @@ st.markdown("""
     .stTabs [data-baseweb="tab-highlight"] {
         display: none !important;
     }
+
+    /* Custom button styling for filter buttons */
+    .filter-button-container .stButton > button {
+        background-color: white !important;
+        color: #6b7280 !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 4px !important;
+        padding: 0.25rem 0.75rem !important;
+        font-size: 0.875rem !important;
+        font-weight: 500 !important;
+        margin-right: 0.5rem !important;
+        height: 32px !important;
+    }
+
+    .filter-button-container .stButton > button[data-testid="baseButton-primary"] {
+        background-color: #111827 !important;
+        color: white !important;
+        border-color: #111827 !important;
+    }
+
+    .filter-button-container .stButton > button:hover {
+        background-color: #f9fafb !important;
+        border-color: #9ca3af !important;
+    }
+
+    .filter-button-container .stButton > button[data-testid="baseButton-primary"]:hover {
+        background-color: #374151 !important;
+        border-color: #374151 !important;
+    }
+
+    /* Align filter buttons with text */
+    .filter-button-container {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.25rem !important;
+        margin-top: 0.5rem !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -160,7 +197,9 @@ with tab1:
         st.markdown("## Individual EV Opportunities")
     
     with header_col2:
-        # Create filter buttons in a row
+        # Create filter buttons in a row with custom styling
+        st.markdown('<div class="filter-button-container">', unsafe_allow_html=True)
+        
         filter_cols = st.columns(len(all_markets) + 1)  # +1 for "All" button
         
         # Initialize session state for market filter
@@ -179,6 +218,8 @@ with tab1:
                             type="primary" if st.session_state.market_filter == market else "secondary"):
                     st.session_state.market_filter = market
                     st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Filter the data based on selected market
     if st.session_state.market_filter == 'All':

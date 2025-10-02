@@ -95,21 +95,6 @@ st.markdown("""
     }
 
     /* Custom button styling for filter buttons */
-    .filter-button-container {
-        display: flex !important;
-        align-items: center !important;
-        gap: 0.125rem !important;
-        margin-top: 0.5rem !important;
-        flex: 1 !important;
-        justify-content: flex-start !important;
-        margin-left: 1rem !important;
-    }
-
-    .filter-button-container .stButton {
-        margin: 0 !important;
-        flex: none !important;
-    }
-
     .filter-button-container .stButton > button {
         background-color: white !important;
         color: #6b7280 !important;
@@ -118,9 +103,8 @@ st.markdown("""
         padding: 0.25rem 0.75rem !important;
         font-size: 0.875rem !important;
         font-weight: 500 !important;
-        margin: 0 !important;
+        margin-right: 0.5rem !important;
         height: 32px !important;
-        min-width: auto !important;
     }
 
     .filter-button-container .stButton > button[data-testid="baseButton-primary"] {
@@ -137,6 +121,14 @@ st.markdown("""
     .filter-button-container .stButton > button[data-testid="baseButton-primary"]:hover {
         background-color: #374151 !important;
         border-color: #374151 !important;
+    }
+
+    /* Align filter buttons with text */
+    .filter-button-container {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.25rem !important;
+        margin-top: 0.5rem !important;
     }
 </style>
 """, unsafe_allow_html=True)

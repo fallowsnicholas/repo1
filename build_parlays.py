@@ -289,14 +289,14 @@ class CorrelationParlayBuilder:
             'created_at': datetime.now().isoformat()
         }
     
-    def save_parlays(self, parlays, client):
-        """Save correlation parlays to Google Sheets"""
+    def save_parlays_compressed(self, parlays, client):
+        """Save all parlay data with each batter compressed into a single cell"""
         try:
             if not parlays:
                 print("❌ No parlays to save")
                 return
             
-            print(f"💾 Saving {len(parlays)} correlation parlays...")
+            print(f"💾 Saving {len(parlays)} correlation parlays with compressed batter format...")
             
             spreadsheet = client.open("MLB_Splash_Data")
             
@@ -307,57 +307,81 @@ class CorrelationParlayBuilder:
             
             worksheet.clear()
             
-            # Format parlay data
+            # Find maximum number of batters across all parlays
+            max_batters = max(len(parlay['batter_props']) for parlay in parlays) if parlays else 0
+            print(f"📊 Maximum batters per parlay: {max_batters}")
+            
+            # Build headers with compressed batter format
+            base_headers = [
+                'Parlay_ID', 'Pitcher_Name', 'Pitcher_Team', 'Pitcher_Market', 'Pitcher_Line', 
+                'Pitcher_Bet_Type', 'Pitcher_EV', 'Opposing_Team', 'Num_Batters', 
+                'Correlation_Type', 'Correlation_Strength', 'Bet_Logic', 
+                'Estimated_Parlay_EV', 'Total_Legs', 'Created_At'
+            ]
+            
+            # Add compressed batter columns
+            batter_headers = [f'Batter_{i}' for i in range(1, max_batters + 1)]
+            all_headers = base_headers + batter_headers
+            
+            # Format parlay data with compressed batter cells
             formatted_data = []
-            for i, parlay in enumerate(parlays, 1):
-                # Create batter summary
-                batter_summary = " | ".join([
-                    f"{b['Player']} {b['Market']} {b.get('Line', 'N/A')} ({b.get('Bet_Type', 'N/A')}) EV:{b['Splash_EV_Percentage']:.3f}"
-                    for b in parlay['batter_props'][:3]  # Show first 3 batters
-                ])
-                
-                if len(parlay['batter_props']) > 3:
-                    batter_summary += f" + {len(parlay['batter_props']) - 3} more"
-                
-                formatted_data.append([
+            for parlay in parlays:
+                # Base parlay information
+                row_data = [
                     parlay['parlay_id'],
                     parlay['pitcher_name'],
                     parlay['pitcher_team'],
-                    f"{parlay['pitcher_market']} {parlay['pitcher_line']} ({parlay['pitcher_bet_type']})",
+                    parlay['pitcher_market'],
+                    parlay['pitcher_line'],
+                    parlay['pitcher_bet_type'],
                     parlay['pitcher_ev'],
                     parlay['opposing_team'],
                     parlay['num_batters'],
-                    batter_summary,
                     parlay['correlation_type'],
                     parlay['correlation_strength'],
                     parlay['bet_logic'],
                     parlay['estimated_parlay_ev'],
                     parlay['total_legs'],
                     parlay['created_at']
-                ])
+                ]
+                
+                # Add compressed batter data for each batter slot
+                for i in range(max_batters):
+                    if i < len(parlay['batter_props']):
+                        # Batter exists - compress all data into single cell
+                        batter = parlay['batter_props'][i]
+                        
+                        # Format: "Name, Market, Line, Bet_Type, EV, Best_Odds"
+                        compressed_batter = f"{batter['Player']}, {batter['Market']}, {batter.get('Line', 'N/A')}, {batter.get('Bet_Type', 'N/A')}, {batter['Splash_EV_Percentage']:.3f}, {batter.get('Best_Odds', 'N/A')}"
+                        
+                        row_data.append(compressed_batter)
+                    else:
+                        # No batter for this slot - add empty value
+                        row_data.append('')
+                
+                formatted_data.append(row_data)
             
-            headers = [
-                'Parlay_ID', 'Pitcher_Name', 'Pitcher_Team', 'Pitcher_Prop', 'Pitcher_EV', 'Opposing_Team',
-                'Num_Batters', 'Batter_Props_Summary', 'Correlation_Type', 'Correlation_Strength',
-                'Bet_Logic', 'Estimated_Parlay_EV', 'Total_Legs', 'Created_At'
-            ]
-            
+            # Add metadata with format explanation
             metadata = [
-                ['Pitcher vs Batter Correlation Parlays (Team-Based)', ''],
+                ['Pitcher vs Batter Correlation Parlays (Compressed Format)', ''],
                 ['Created At', datetime.now().isoformat()],
                 ['Total Parlays', len(parlays)],
+                ['Max Batters Per Parlay', max_batters],
+                ['Batter Format', 'Name, Market, Line, Bet_Type, EV, Best_Odds'],
+                ['Example', 'Jose Altuve, Hits, 1.5, Under, 0.031, +125'],
                 ['Correlation Logic', 'Negative=Opposite Bets, Positive=Same Bets'],
-                ['Team Matching', 'Uses Team data from Step 2 odds fetch'],
                 ['']
             ]
             
-            all_data = metadata + [headers] + formatted_data
+            all_data = metadata + [all_headers] + formatted_data
             worksheet.update(range_name='A1', values=all_data)
             
-            print("✅ Successfully saved correlation parlays!")
+            print("✅ Successfully saved compressed parlays to CORRELATION_PARLAYS sheet!")
+            print(f"📊 Format: {max_batters} batter columns with compressed data")
+            print(f"🔧 Batter format: Name, Market, Line, Bet_Type, EV, Best_Odds")
             
         except Exception as e:
-            logger.error(f"Error saving parlays: {e}")
+            logger.error(f"Error saving compressed parlays: {e}")
             print(f"❌ Failed to save parlays: {e}")
             raise
 

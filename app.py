@@ -205,35 +205,35 @@ with tab1:
     all_markets = list(set([ev['Market'] for ev in individualEVs]))
     
     # Header row with title and filter buttons
-    header_container = st.container()
-    with header_container:
-        st.markdown("""
-        <div style="display: flex; align-items: center; width: 100%;">
-            <h2 style="margin: 0; flex-shrink: 0;">Individual EV Opportunities</h2>
-            <div class="filter-button-container" style="flex: 1; margin-left: 1rem;">
-        """, unsafe_allow_html=True)
+    header_col1, header_col2 = st.columns([2, 3])
+    
+    with header_col1:
+        st.markdown("## Individual EV Opportunities")
+    
+    with header_col2:
+        # Create filter buttons in a row with custom styling
+        st.markdown('<div class="filter-button-container">', unsafe_allow_html=True)
         
-        # Create filter buttons spanning the remaining width
-        button_cols = st.columns(len(all_markets) + 1)  # +1 for "All" button
+        filter_cols = st.columns(len(all_markets) + 1)  # +1 for "All" button
         
         # Initialize session state for market filter
         if 'market_filter' not in st.session_state:
             st.session_state.market_filter = 'All'
         
-        with button_cols[0]:
+        with filter_cols[0]:
             if st.button("All", key="filter_all", 
                         type="primary" if st.session_state.market_filter == 'All' else "secondary"):
                 st.session_state.market_filter = 'All'
                 st.rerun()
         
         for i, market in enumerate(all_markets):
-            with button_cols[i + 1]:
+            with filter_cols[i + 1]:
                 if st.button(market, key=f"filter_{market.replace(' ', '_')}", 
                             type="primary" if st.session_state.market_filter == market else "secondary"):
                     st.session_state.market_filter = market
                     st.rerun()
         
-        st.markdown('</div></div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     
     # Filter the data based on selected market
     if st.session_state.market_filter == 'All':

@@ -16,36 +16,232 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for clean, Honda-inspired design
+# Custom CSS for exact Honda-inspired design match
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2rem;
-        font-weight: 300;
-        color: #1f2937;
-        margin-bottom: 0;
+    /* Hide Streamlit default elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display:none;}
+    header[data-testid="stHeader"] {display: none;}
+    
+    /* Main container */
+    .main .block-container {
+        padding-top: 0rem;
+        padding-left: 0rem;
+        padding-right: 0rem;
+        max-width: none;
     }
     
-    .sub-header {
-        font-size: 1.1rem;
-        color: #6b7280;
-        margin-bottom: 2rem;
-    }
-    
-    .metric-card {
+    /* Header Navigation */
+    .header-nav {
         background: white;
-        padding: 1.5rem;
-        border-radius: 0.375rem;
-        border: 1px solid #e5e7eb;
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        border-bottom: 1px solid #e5e7eb;
+        padding: 0;
+        margin: 0;
     }
     
+    .header-content {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 4rem;
+    }
+    
+    .logo {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #111827;
+    }
+    
+    .last-updated {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+    
+    /* Ribbon 1: League Selection */
+    .league-ribbon {
+        background: #f9fafb;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .league-content {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+        display: flex;
+        height: 3.5rem;
+        align-items: center;
+    }
+    
+    .league-tab {
+        padding: 0 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        align-items: center;
+        height: 100%;
+        text-decoration: none;
+        border: none;
+        background: none;
+    }
+    
+    .league-tab.active {
+        color: #111827;
+    }
+    
+    .league-tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #111827;
+    }
+    
+    .league-tab.disabled {
+        color: #9ca3af;
+        cursor: not-allowed;
+    }
+    
+    /* Ribbon 2: View Selection */
+    .view-ribbon {
+        background: white;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .view-content {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 0 1.5rem;
+        display: flex;
+        height: 3.5rem;
+        align-items: center;
+    }
+    
+    .view-tab {
+        padding: 0 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #6b7280;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        align-items: center;
+        height: 100%;
+        text-decoration: none;
+        border: none;
+        background: none;
+        margin-right: 2rem;
+    }
+    
+    .view-tab:hover {
+        color: #111827;
+    }
+    
+    .view-tab.active {
+        color: #111827;
+    }
+    
+    .view-tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #111827;
+    }
+    
+    /* Main Content Area */
+    .main-content {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 3rem 1.5rem;
+    }
+    
+    .content-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+    }
+    
+    .page-title {
+        font-size: 1.875rem;
+        font-weight: 300;
+        color: #111827;
+        margin: 0;
+    }
+    
+    .result-count {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+    
+    /* Clean Table Styles */
+    .clean-table {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.125rem;
+        overflow: hidden;
+        margin-top: 1.5rem;
+    }
+    
+    .clean-table table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .clean-table thead {
+        background: #f9fafb;
+    }
+    
+    .clean-table th {
+        padding: 1rem 1.5rem;
+        text-align: left;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .clean-table th:last-child {
+        text-align: right;
+    }
+    
+    .clean-table td {
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 0.875rem;
+    }
+    
+    .clean-table td:last-child {
+        text-align: right;
+        font-weight: 600;
+        color: #059669;
+    }
+    
+    .clean-table tr:hover {
+        background: #f9fafb;
+    }
+    
+    /* Parlay Cards */
     .parlay-card {
         background: white;
         border: 1px solid #e5e7eb;
-        border-radius: 0.375rem;
-        margin-bottom: 1.5rem;
+        border-radius: 0.125rem;
         overflow: hidden;
+        margin-bottom: 1.5rem;
     }
     
     .parlay-header {
@@ -59,37 +255,28 @@ st.markdown("""
         letter-spacing: 0.05em;
     }
     
-    .ev-positive {
-        color: #059669;
-        font-weight: 600;
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
     }
     
-    .status-indicator {
-        padding: 0.25rem 0.75rem;
-        border-radius: 9999px;
-        font-size: 0.75rem;
+    .action-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
         font-weight: 500;
+        color: #374151;
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: 0.125rem;
+        cursor: pointer;
+        transition: background-color 0.15s;
     }
     
-    .status-success {
-        background: #dcfce7;
-        color: #166534;
+    .action-btn:hover {
+        background: #f9fafb;
     }
-    
-    .status-warning {
-        background: #fef3c7;
-        color: #92400e;
-    }
-    
-    .status-error {
-        background: #fee2e2;
-        color: #dc2626;
-    }
-    
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stDeployButton {display:none;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -260,15 +447,70 @@ class MLBDashboard:
         return status_data
 
 def main():
-    """Main Streamlit app"""
+    """Main Streamlit app with exact Honda-inspired design"""
     
-    # Header
-    st.markdown('<h1 class="main-header">⚾ EV Sports - MLB Dashboard</h1>', unsafe_allow_html=True)
+    # Header Navigation
+    st.markdown("""
+    <div class="header-nav">
+        <div class="header-content">
+            <div class="logo">EV Sports</div>
+            <div class="last-updated">Last Updated: 2 hours ago</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # League Selection Ribbon
+    st.markdown("""
+    <div class="league-ribbon">
+        <div class="league-content">
+            <div class="league-tab active">MLB</div>
+            <div class="league-tab disabled">NFL</div>
+            <div class="league-tab disabled">NBA</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # View Selection Ribbon with working tabs
+    view_options = ["Individual EVs", "Correlation Parlays", "Pipeline Status"]
+    
+    # Use session state to track active view
+    if 'active_view' not in st.session_state:
+        st.session_state.active_view = "Individual EVs"
+    
+    # Create clickable view tabs
+    col1, col2, col3, col_spacer = st.columns([2, 2, 2, 6])
+    
+    with col1:
+        if st.button("Individual EVs", key="view_individual", help="Individual EV Opportunities"):
+            st.session_state.active_view = "Individual EVs"
+    
+    with col2:
+        if st.button("Correlation Parlays", key="view_parlays", help="Correlation Parlays"):
+            st.session_state.active_view = "Correlation Parlays"
+    
+    with col3:
+        if st.button("Pipeline Status", key="view_status", help="Pipeline Status"):
+            st.session_state.active_view = "Pipeline Status"
+    
+    # Style the active tab
+    active_view = st.session_state.active_view
+    st.markdown(f"""
+    <div class="view-ribbon">
+        <div class="view-content">
+            <div class="view-tab {'active' if active_view == 'Individual EVs' else ''}">Individual EVs</div>
+            <div class="view-tab {'active' if active_view == 'Correlation Parlays' else ''}">Correlation Parlays</div>
+            <div class="view-tab {'active' if active_view == 'Pipeline Status' else ''}">Pipeline Status</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Main Content Area
+    st.markdown('<div class="main-content">', unsafe_allow_html=True)
     
     # Initialize dashboard
     dashboard = MLBDashboard()
     
-    # Connect to Google Sheets (fresh connection each time)
+    # Connect to Google Sheets
     with st.spinner("Connecting to data source..."):
         client = dashboard.connect_to_sheets()
     
@@ -277,142 +519,95 @@ def main():
         st.info("Make sure GOOGLE_SERVICE_ACCOUNT_CREDENTIALS is set in Streamlit secrets.")
         return
     
-    # League and View Selection
-    col1, col2, col3 = st.columns([1, 1, 8])
-    
-    with col1:
-        league = st.selectbox("League", ["MLB"], index=0, key="league_select")
-    
-    with col2:
-        view = st.selectbox("View", ["Individual EVs", "Correlation Parlays", "Pipeline Status"], 
-                           index=0, key="view_select")
-    
-    # Add refresh button
-    col_refresh = st.columns([10, 1, 1])
-    with col_refresh[-1]:
-        if st.button("🔄 Refresh", help="Refresh data from Google Sheets"):
-            st.cache_data.clear()
-            st.rerun()
-    
-    # Last updated info
-    st.markdown(f'<p class="sub-header">Last refreshed: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</p>', 
-                unsafe_allow_html=True)
-    
-    # Main content based on selected view
-    if view == "Individual EVs":
-        show_individual_evs(dashboard, client)
-    elif view == "Correlation Parlays":
-        show_correlation_parlays(dashboard, client)
-    elif view == "Pipeline Status":
+    # Display content based on active view
+    if active_view == "Individual EVs":
+        show_individual_evs_clean(dashboard, client)
+    elif active_view == "Correlation Parlays":
+        show_correlation_parlays_clean(dashboard, client)
+    elif active_view == "Pipeline Status":
         show_pipeline_status(dashboard, client)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
-def show_individual_evs(dashboard, client):
-    """Display individual EV opportunities"""
+def show_individual_evs_clean(dashboard, client):
+    """Display individual EV opportunities with clean table design"""
     
     with st.spinner("Loading EV opportunities..."):
         ev_df = dashboard.get_ev_opportunities(client)
     
     if ev_df.empty:
+        st.markdown("""
+        <div class="content-header">
+            <h1 class="page-title">Individual EV Opportunities</h1>
+            <span class="result-count">0 opportunities found</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
         st.warning("No EV opportunities found. Make sure Step 5 (calculate_ev.py) has been run.")
-        st.info("💡 Run your pipeline to generate EV data: `python calculate_ev.py`")
+        st.info("💡 Run your pipeline to generate EV data")
         return
     
-    # Summary metrics
-    col1, col2, col3, col4 = st.columns(4)
+    # Format the dataframe for display
+    display_df = ev_df.copy()
     
-    with col1:
-        st.metric(
-            label="Total Opportunities",
-            value=len(ev_df)
-        )
-    
-    with col2:
-        if 'Splash_EV_Percentage' in ev_df.columns:
-            best_ev = ev_df['Splash_EV_Percentage'].max()
-            st.metric(
-                label="Best EV",
-                value=f"{best_ev:.1%}" if not pd.isna(best_ev) else "N/A"
-            )
-    
-    with col3:
-        if 'Num_Books_Used' in ev_df.columns:
-            avg_books = ev_df['Num_Books_Used'].mean()
-            st.metric(
-                label="Avg Books/Prop",
-                value=f"{avg_books:.1f}" if not pd.isna(avg_books) else "N/A"
-            )
-    
-    with col4:
-        if 'Market' in ev_df.columns:
-            unique_markets = ev_df['Market'].nunique()
-            st.metric(
-                label="Markets Covered",
-                value=unique_markets
-            )
-    
-    st.markdown("---")
-    
-    # Filters
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if 'Market' in ev_df.columns:
-            markets = ['All'] + sorted(ev_df['Market'].unique().tolist())
-            selected_market = st.selectbox("Filter by Market", markets)
-            if selected_market != 'All':
-                ev_df = ev_df[ev_df['Market'] == selected_market]
-    
-    with col2:
-        if 'Splash_EV_Percentage' in ev_df.columns:
-            min_ev = st.slider("Minimum EV %", 0.0, 20.0, 0.0, 0.1)
-            ev_df = ev_df[ev_df['Splash_EV_Percentage'] >= min_ev/100]
-    
-    # Display the table
-    if not ev_df.empty:
-        # Format the dataframe for display
-        display_df = ev_df.copy()
+    # Select and rename columns for display
+    display_columns = {}
+    if 'Player' in display_df.columns:
+        display_columns['Player'] = 'Player'
+    elif 'Name' in display_df.columns:
+        display_columns['Name'] = 'Player'
         
-        # Select and rename columns for display
-        display_columns = {}
-        if 'Player' in display_df.columns:
-            display_columns['Player'] = 'Player'
-        elif 'Name' in display_df.columns:
-            display_columns['Name'] = 'Player'
-            
-        if 'Market' in display_df.columns:
-            display_columns['Market'] = 'Market'
-        if 'Line' in display_df.columns:
-            display_columns['Line'] = 'Line'
-        if 'Bet_Type' in display_df.columns:
-            display_columns['Bet_Type'] = 'Bet Type'
-        if 'Splash_EV_Percentage' in display_df.columns:
-            display_columns['Splash_EV_Percentage'] = 'EV %'
-        if 'Num_Books_Used' in display_df.columns:
-            display_columns['Num_Books_Used'] = 'Books'
-        if 'Best_Sportsbook' in display_df.columns:
-            display_columns['Best_Sportsbook'] = 'Best Book'
-        if 'Best_Odds' in display_df.columns:
-            display_columns['Best_Odds'] = 'Best Odds'
-        if 'Team' in display_df.columns:
-            display_columns['Team'] = 'Team'
+    if 'Market' in display_df.columns:
+        display_columns['Market'] = 'Market'
+    if 'Line' in display_df.columns:
+        display_columns['Line'] = 'Line'
+    if 'Splash_EV_Percentage' in display_df.columns:
+        display_columns['Splash_EV_Percentage'] = 'EV %'
+    
+    # Select only available columns
+    available_columns = {k: v for k, v in display_columns.items() if k in display_df.columns}
+    display_df = display_df[list(available_columns.keys())].rename(columns=available_columns)
+    
+    # Format EV percentage
+    if 'EV %' in display_df.columns:
+        display_df['EV %'] = display_df['EV %'].apply(lambda x: f"{x:.1%}" if pd.notna(x) else "N/A")
+    
+    # Content header
+    st.markdown(f"""
+    <div class="content-header">
+        <h1 class="page-title">Individual EV Opportunities</h1>
+        <span class="result-count">{len(display_df)} opportunities found</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Clean table
+    if not display_df.empty:
+        # Create HTML table
+        table_html = '<div class="clean-table"><table>'
         
-        # Select only available columns
-        available_columns = {k: v for k, v in display_columns.items() if k in display_df.columns}
-        display_df = display_df[list(available_columns.keys())].rename(columns=available_columns)
+        # Header
+        table_html += '<thead><tr>'
+        for col in display_df.columns:
+            table_html += f'<th>{col}</th>'
+        table_html += '</tr></thead>'
         
-        # Format percentage columns
-        if 'EV %' in display_df.columns:
-            display_df['EV %'] = display_df['EV %'].apply(lambda x: f"{x:.1%}" if pd.notna(x) else "N/A")
+        # Body
+        table_html += '<tbody>'
+        for _, row in display_df.iterrows():
+            table_html += '<tr>'
+            for col in display_df.columns:
+                value = row[col]
+                if col == 'Player':
+                    table_html += f'<td style="font-weight: 500; color: #111827;">{value}</td>'
+                elif col == 'EV %':
+                    table_html += f'<td style="text-align: right; font-weight: 600; color: #059669;">{value}</td>'
+                else:
+                    table_html += f'<td style="color: #6b7280;">{value}</td>'
+            table_html += '</tr>'
         
-        # Format odds columns
-        if 'Best Odds' in display_df.columns:
-            display_df['Best Odds'] = display_df['Best Odds'].apply(lambda x: f"{x:+.0f}" if pd.notna(x) else "N/A")
+        table_html += '</tbody></table></div>'
         
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            hide_index=True
-        )
+        st.markdown(table_html, unsafe_allow_html=True)
     else:
         st.info("No opportunities match your current filters.")
 
@@ -436,32 +631,40 @@ def parse_compressed_batter(batter_string):
         pass
     return None
 
-def show_correlation_parlays(dashboard, client):
-    """Display correlation parlays from compressed single-cell format"""
+def show_correlation_parlays_clean(dashboard, client):
+    """Display correlation parlays with clean card design"""
     
     with st.spinner("Loading correlation parlays..."):
         parlay_df = dashboard.read_sheet_with_metadata_skip(client, "CORRELATION_PARLAYS")
     
     if parlay_df.empty:
+        st.markdown("""
+        <div class="content-header">
+            <h1 class="page-title">Correlation Parlays</h1>
+            <span class="result-count">0 parlays found</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
         st.warning("No correlation parlays found. Make sure Step 7 (build_parlays.py) has been run.")
-        st.info("💡 Run your pipeline to generate parlay data: `python build_parlays.py`")
+        st.info("💡 Run your pipeline to generate parlay data")
         return
     
     # Check if this is an empty status sheet or has parlays
     if 'Parlay_ID' not in parlay_df.columns:
-        # This might be a status-only sheet
+        st.markdown("""
+        <div class="content-header">
+            <h1 class="page-title">Correlation Parlays</h1>
+            <span class="result-count">Status Update</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
         st.info("📋 **Pipeline Status Update**")
         
         # Try to find status information
-        status_found = False
         for idx, row in parlay_df.head(10).iterrows():
             row_values = [str(val) for val in row.values if val and str(val).strip()]
             if len(row_values) >= 2:
                 st.write(f"**{row_values[0]}:** {row_values[1]}")
-                status_found = True
-        
-        if not status_found:
-            st.write("Sheet exists but no clear status found.")
         return
     
     # Filter out rows that don't have parlay data (metadata rows)
@@ -471,130 +674,110 @@ def show_correlation_parlays(dashboard, client):
     ]
     
     if parlay_df.empty:
+        st.markdown("""
+        <div class="content-header">
+            <h1 class="page-title">Correlation Parlays</h1>
+            <span class="result-count">0 parlays found</span>
+        </div>
+        """, unsafe_allow_html=True)
         st.info("📊 No parlay data found in sheet - likely no games today.")
         return
     
-    # Summary metrics
-    col1, col2, col3 = st.columns(3)
+    # Content header
+    st.markdown(f"""
+    <div class="content-header">
+        <h1 class="page-title">Correlation Parlays</h1>
+        <span class="result-count">{len(parlay_df)} parlays found</span>
+    </div>
+    """, unsafe_allow_html=True)
     
-    with col1:
-        st.metric(
-            label="Total Parlays",
-            value=len(parlay_df)
-        )
-    
-    with col2:
-        if 'Estimated_Parlay_EV' in parlay_df.columns:
-            evs = pd.to_numeric(parlay_df['Estimated_Parlay_EV'], errors='coerce')
-            best_parlay_ev = evs.max() if not evs.isna().all() else 0
-            st.metric(
-                label="Best Parlay EV",
-                value=f"{best_parlay_ev:.1%}" if best_parlay_ev > 0 else "N/A"
-            )
-    
-    with col3:
-        if 'Total_Legs' in parlay_df.columns:
-            legs = pd.to_numeric(parlay_df['Total_Legs'], errors='coerce')
-            avg_legs = legs.mean() if not legs.isna().all() else 0
-            st.metric(
-                label="Avg Legs/Parlay",
-                value=f"{avg_legs:.1f}" if avg_legs > 0 else "N/A"
-            )
-    
-    st.markdown("---")
+    # Action buttons
+    st.markdown("""
+    <div class="action-buttons">
+        <button class="action-btn">Refresh</button>
+        <button class="action-btn">Filter</button>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Find compressed batter columns dynamically
     batter_columns = [col for col in parlay_df.columns if 'Batter_' in col]
     
-    # Display each parlay with parsed batter information
+    # Display each parlay as a card
     for idx, row in parlay_df.iterrows():
         parlay_id = row.get('Parlay_ID', f'Parlay {idx+1}')
         pitcher_name = row.get('Pitcher_Name', 'Unknown Pitcher')
-        pitcher_team = row.get('Pitcher_Team', 'Unknown Team')
         pitcher_market = row.get('Pitcher_Market', 'Unknown Market')
         pitcher_line = row.get('Pitcher_Line', 'N/A')
         pitcher_bet_type = row.get('Pitcher_Bet_Type', 'N/A')
         
         # Handle pitcher EV
-        pitcher_ev_raw = row.get('Pitcher_EV', 0)
         try:
-            pitcher_ev = float(pitcher_ev_raw)
+            pitcher_ev = float(row.get('Pitcher_EV', 0))
         except (ValueError, TypeError):
             pitcher_ev = 0
         
-        opposing_team = row.get('Opposing_Team', 'Unknown Team')
-        
-        # Handle num batters
-        num_batters_raw = row.get('Num_Batters', 0)
-        try:
-            num_batters = int(float(num_batters_raw))
-        except (ValueError, TypeError):
-            num_batters = 0
-        
-        correlation_type = row.get('Correlation_Type', 'Unknown')
-        
-        # Handle estimated EV
-        estimated_ev_raw = row.get('Estimated_Parlay_EV', 0)
-        try:
-            estimated_ev = float(estimated_ev_raw)
-        except (ValueError, TypeError):
-            estimated_ev = 0
-        
         # Handle total legs
-        total_legs_raw = row.get('Total_Legs', 0)
         try:
-            total_legs = int(float(total_legs_raw))
+            total_legs = int(float(row.get('Total_Legs', 0)))
         except (ValueError, TypeError):
             total_legs = 0
         
-        correlation_strength = row.get('Correlation_Strength', 'N/A')
-        bet_logic = row.get('Bet_Logic', 'N/A')
-        
-        # Create enhanced parlay card
-        with st.container():
-            st.markdown(f"""
-            <div class="parlay-card">
-                <div class="parlay-header">
-                    {parlay_id} • {total_legs} Legs • {correlation_type.title()} Correlation
-                </div>
+        # Create parlay card HTML
+        st.markdown(f"""
+        <div class="parlay-card">
+            <div class="parlay-header">
+                {parlay_id} • {total_legs} Legs
             </div>
-            """, unsafe_allow_html=True)
-            
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                # Pitcher anchor information
-                st.write(f"**🎯 Pitcher Anchor:** {pitcher_name} ({pitcher_team})")
-                st.write(f"**📊 Prop:** {pitcher_market} {pitcher_line} ({pitcher_bet_type}) - EV: {pitcher_ev:.3f}")
-                st.write(f"**⚔️ vs {opposing_team}** ({num_batters} correlated batters)")
-                
-                # Parse and display compressed batter information
-                st.write("**🏏 Correlated Batters:**")
-                batters_displayed = 0
-                
-                for batter_col in batter_columns:
-                    if batter_col in row and row[batter_col]:
-                        batter_data = parse_compressed_batter(row[batter_col])
-                        
-                        if batter_data:
-                            st.write(f"   • **{batter_data['name']}** ({opposing_team}) - {batter_data['market']} {batter_data['line']} ({batter_data['bet_type']})")
-                            st.write(f"     EV: {batter_data['ev']:.3f} | Best Odds: {batter_data['best_odds']}")
-                            batters_displayed += 1
-                
-                if batters_displayed == 0:
-                    st.write("   ⚠️ No batter data found")
-            
-            with col2:
-                if estimated_ev > 0:
-                    st.markdown(f'<div class="ev-positive">Total EV: {estimated_ev:.1%}</div>', unsafe_allow_html=True)
-                else:
-                    st.write(f"Total EV: {estimated_ev:.1%}")
-                
-                # Show correlation details
-                st.write(f"**Correlation:** {correlation_strength}")
-                st.write(f"**Logic:** {bet_logic}")
+        </div>
+        """, unsafe_allow_html=True)
         
-        st.markdown("---")
+        # Create table for parlay legs
+        table_html = '<div class="clean-table"><table>'
+        
+        # Header
+        table_html += '''
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Market</th>
+                <th>Line</th>
+                <th>EV %</th>
+            </tr>
+        </thead>
+        <tbody>
+        '''
+        
+        # Pitcher row
+        table_html += f'''
+        <tr>
+            <td style="font-weight: 500; color: #111827;">{pitcher_name}</td>
+            <td style="color: #6b7280;">{pitcher_market}</td>
+            <td style="color: #6b7280;">{pitcher_line}</td>
+            <td style="text-align: right; color: #6b7280;">{pitcher_ev:.1%}</td>
+        </tr>
+        '''
+        
+        # Batter rows
+        for batter_col in batter_columns:
+            if batter_col in row and row[batter_col]:
+                batter_data = parse_compressed_batter(row[batter_col])
+                
+                if batter_data:
+                    table_html += f'''
+                    <tr>
+                        <td style="font-weight: 500; color: #111827;">{batter_data['name']}</td>
+                        <td style="color: #6b7280;">{batter_data['market']}</td>
+                        <td style="color: #6b7280;">{batter_data['line']}</td>
+                        <td style="text-align: right; color: #6b7280;">{batter_data['ev']:.1%}</td>
+                    </tr>
+                    '''
+        
+        table_html += '</tbody></table></div>'
+        
+        st.markdown(table_html, unsafe_allow_html=True)
+        
+        # Add spacing between cards
+        st.markdown('<br>', unsafe_allow_html=True)
 
 def show_pipeline_status(dashboard, client):
     """Display pipeline status"""

@@ -40,7 +40,7 @@ st.markdown("""
     }
     
     .stDataFrame tr:nth-child(even) {
-        background-color: #000000 !important;
+        background-color: #111827 !important;
     }
     
     .stDataFrame tr:hover {

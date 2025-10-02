@@ -25,18 +25,67 @@ st.markdown("""
         padding-bottom: 0rem;
     }
     
+    /* Hide the actual Streamlit buttons */
+    .stButton > button {
+        display: none !important;
+    }
+    
     /* Custom table styling */
-    .stDataFrame {
-        width: 100%;
+    .stDataFrame th {
+        background-color: #f9fafb !important;
+        color: #6b7280 !important;
+        font-weight: 500 !important;
+        text-transform: uppercase !important;
+        font-size: 12px !important;
+        letter-spacing: 0.5px !important;
     }
     
-    .stDataFrame > div {
-        width: 100%;
+    .stDataFrame td {
+        font-size: 14px !important;
     }
     
-    /* Hide default streamlit buttons when not needed */
-    .row-widget.stButton {
-        text-align: center;
+    .stDataFrame tr:nth-child(even) {
+        background-color: #ffffff !important;
+    }
+    
+    .stDataFrame tr:hover {
+        background-color: #f9fafb !important;
+    }
+    
+    /* Clickable ribbon styling */
+    .ribbon-button {
+        padding: 16px;
+        font-size: 14px;
+        font-weight: 500;
+        position: relative;
+        cursor: pointer;
+        display: inline-block;
+        text-decoration: none;
+        border: none;
+        background: none;
+        transition: color 0.2s ease;
+    }
+    
+    .ribbon-button:hover {
+        color: #374151 !important;
+    }
+    
+    .ribbon-button.active {
+        color: #111827 !important;
+    }
+    
+    .ribbon-button.inactive {
+        color: #6b7280 !important;
+    }
+    
+    .ribbon-button.active::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #111827;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -76,33 +125,93 @@ parlays = [
 
 # Header
 st.markdown("""
-<div style="background: white; border-bottom: 1px solid #e5e7eb; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center;">
-    <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #111827;">EV Sports</h1>
-    <span style="font-size: 14px; color: #6b7280;">Last Updated: 2 hours ago</span>
+<div style="background: white; border-bottom: 1px solid #e5e7eb; height: 64px; display: flex; align-items: center;">
+    <div style="max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; width: 100%;">
+        <span style="font-size: 24px; font-weight: 700; color: #111827;">EV Sports</span>
+        <span style="font-size: 14px; color: #6b7280;">Last Updated: 2 hours ago</span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# League Selection
+# League Selection Ribbon (non-functional, just like yours)
 st.markdown("""
-<div style="background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 0.5rem 2rem;">
-    <span style="color: #111827; font-weight: 500; border-bottom: 2px solid #111827; padding-bottom: 0.5rem;">MLB</span>
-    <span style="color: #9ca3af; margin-left: 2rem;">NFL</span>
-    <span style="color: #9ca3af; margin-left: 2rem;">NBA</span>
+<div style="background: #f9fafb; border-bottom: 1px solid #e5e7eb; height: 56px; display: flex; align-items: center;">
+    <div style="max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; gap: 32px; width: 100%;">
+        <div style="padding: 16px; font-size: 14px; font-weight: 500; color: #111827; position: relative;">
+            MLB
+            <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #111827;"></div>
+        </div>
+        <div style="padding: 16px; font-size: 14px; font-weight: 500; color: #9ca3af; cursor: not-allowed;">NFL</div>
+        <div style="padding: 16px; font-size: 14px; font-weight: 500; color: #9ca3af; cursor: not-allowed;">NBA</div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Navigation
-col1, col2, col3 = st.columns([2, 2, 6])
+# Hidden navigation buttons (functional but invisible)
+col1, col2, col3 = st.columns([1, 1, 8])
 
 with col1:
-    if st.button("📊 Individual EVs", use_container_width=True):
+    if st.button("nav_individual", key="nav1"):
         st.session_state.activeView = 'individual'
         st.rerun()
 
 with col2:
-    if st.button("🎯 Correlation Parlays", use_container_width=True):
+    if st.button("nav_parlays", key="nav2"):
         st.session_state.activeView = 'parlays'
         st.rerun()
+
+# View Selection Ribbon (looks identical to league ribbon but functional)
+individual_class = "active" if st.session_state.activeView == 'individual' else "inactive"
+parlays_class = "active" if st.session_state.activeView == 'parlays' else "inactive"
+individual_underline = '<div style="position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #111827;"></div>' if st.session_state.activeView == 'individual' else ''
+parlays_underline = '<div style="position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #111827;"></div>' if st.session_state.activeView == 'parlays' else ''
+
+st.markdown(f"""
+<div style="background: white; border-bottom: 1px solid #e5e7eb; height: 56px; display: flex; align-items: center;">
+    <div style="max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; gap: 32px; width: 100%;">
+        <div class="ribbon-button {individual_class}" onclick="document.querySelector('[data-testid=\\\"column\\\"] button').click()" 
+             style="padding: 16px; font-size: 14px; font-weight: 500; color: {'#111827' if st.session_state.activeView == 'individual' else '#6b7280'}; position: relative; cursor: pointer;">
+            Individual EVs
+            {individual_underline}
+        </div>
+        <div class="ribbon-button {parlays_class}" onclick="document.querySelectorAll('[data-testid=\\\"column\\\"] button')[1].click()"
+             style="padding: 16px; font-size: 14px; font-weight: 500; color: {'#111827' if st.session_state.activeView == 'parlays' else '#6b7280'}; position: relative; cursor: pointer;">
+            Correlation Parlays
+            {parlays_underline}
+        </div>
+    </div>
+</div>
+
+<script>
+// Add click handlers after the page loads
+document.addEventListener('DOMContentLoaded', function() {{
+    // Find all ribbon buttons
+    const ribbonButtons = document.querySelectorAll('.ribbon-button');
+    const streamlitButtons = document.querySelectorAll('[data-testid="column"] button');
+    
+    if (ribbonButtons.length >= 2 && streamlitButtons.length >= 2) {{
+        ribbonButtons[0].addEventListener('click', function() {{
+            streamlitButtons[0].click();
+        }});
+        
+        ribbonButtons[1].addEventListener('click', function() {{
+            streamlitButtons[1].click();
+        }});
+    }}
+}});
+
+// Also try immediate binding
+setTimeout(function() {{
+    const ribbonButtons = document.querySelectorAll('.ribbon-button');
+    const streamlitButtons = document.querySelectorAll('[data-testid="column"] button');
+    
+    if (ribbonButtons.length >= 2 && streamlitButtons.length >= 2) {{
+        ribbonButtons[0].onclick = function() {{ streamlitButtons[0].click(); }};
+        ribbonButtons[1].onclick = function() {{ streamlitButtons[1].click(); }};
+    }}
+}}, 100);
+</script>
+""", unsafe_allow_html=True)
 
 # Add some spacing
 st.markdown("<br>", unsafe_allow_html=True)
@@ -118,32 +227,6 @@ if st.session_state.activeView == 'individual':
     
     # Convert to DataFrame and display
     df = pd.DataFrame(individualEVs)
-    
-    # Custom styling for the dataframe
-    st.markdown("""
-    <style>
-    .stDataFrame th {
-        background-color: #f9fafb !important;
-        color: #6b7280 !important;
-        font-weight: 500 !important;
-        text-transform: uppercase !important;
-        font-size: 12px !important;
-        letter-spacing: 0.5px !important;
-    }
-    
-    .stDataFrame td {
-        font-size: 14px !important;
-    }
-    
-    .stDataFrame tr:nth-child(even) {
-        background-color: #ffffff !important;
-    }
-    
-    .stDataFrame tr:hover {
-        background-color: #f9fafb !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
     
     st.dataframe(
         df, 

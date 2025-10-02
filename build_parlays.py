@@ -39,7 +39,47 @@ class CorrelationParlayBuilder:
         
         self.MIN_BATTER_EV = 0.005  # 0.5% minimum EV for batters
         self.MAX_BATTERS_PER_PARLAY = 5
-    
+        
+    def save_empty_parlays_sheet(self, client, reason):
+        """Update the sheet even when no parlays are found"""
+        try:
+            print(f"💾 Updating CORRELATION_PARLAYS sheet with status: {reason}")
+            
+            spreadsheet = client.open("MLB_Splash_Data")
+            
+            try:
+                worksheet = spreadsheet.worksheet("CORRELATION_PARLAYS")
+            except:
+                worksheet = spreadsheet.add_worksheet(title="CORRELATION_PARLAYS", rows=1000, cols=25)
+            
+            worksheet.clear()
+            
+            # Create empty sheet with status info
+            metadata = [
+                ['Pitcher vs Batter Correlation Parlays', ''],
+                ['Last Updated', datetime.now().isoformat()],
+                ['Status', reason],
+                ['Total Parlays', 0],
+                ['Next Check', 'Run pipeline when games are scheduled'],
+                [''],
+                ['Pipeline Step 7 Status: No parlays generated'],
+                ['Reason:', reason],
+                [''],
+                ['Headers for when data is available:'],
+                ['Parlay_ID', 'Pitcher_Name', 'Pitcher_Team', 'Pitcher_Market', 'Pitcher_Line', 
+                 'Pitcher_Bet_Type', 'Pitcher_EV', 'Opposing_Team', 'Num_Batters', 
+                 'Correlation_Type', 'Correlation_Strength', 'Bet_Logic', 
+                 'Estimated_Parlay_EV', 'Total_Legs', 'Created_At', 'Batter_1', 'Batter_2', '...']
+            ]
+            
+            worksheet.update(range_name='A1', values=metadata)
+            
+            print(f"✅ Sheet updated with status: {reason}")
+            
+        except Exception as e:
+            logger.error(f"Error updating empty parlays sheet: {e}")
+            print(f"❌ Failed to update empty sheet: {e}")
+            
     def connect_to_sheets(self):
         """Establish connection to Google Sheets"""
         try:

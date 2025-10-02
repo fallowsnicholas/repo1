@@ -274,7 +274,7 @@ with tab2:
         st.markdown(f"**{len(parlays)} parlays found**")
     
     # Action buttons
-    col1, col2, col3 = st.columns([1, 1, 8])
+    col1, col2, col3 = st.columns([1, 1, 18])
     with col1:
         if st.button("🔄 Refresh"):
             st.success("Data refreshed!")

@@ -135,7 +135,7 @@ class MLBDashboard:
     
     # Remove caching decorator to fix gspread session issues
     def read_sheet_with_metadata_skip(self, _client, sheet_name):
-        """Read Google Sheets data while skipping metadata headers"""
+        """Read Google Sheets data while skipping metadata headers with enhanced debugging"""
         try:
             spreadsheet = _client.open("MLB_Splash_Data")
             worksheet = spreadsheet.worksheet(sheet_name)
@@ -146,37 +146,65 @@ class MLBDashboard:
             if not all_data:
                 return pd.DataFrame()
             
-            # Find header row
-            header_indicators = ['Player', 'Name', 'Market', 'Line', 'Odds', 'Book', 'Team', 'EV']
+            print(f"📊 Total rows in {sheet_name}: {len(all_data)}")
+            print(f"📋 First 5 rows preview:")
+            for i, row in enumerate(all_data[:5]):
+                print(f"   Row {i}: {row[:5]}...")  # Show first 5 columns
+            
+            # Find header row - look for "Parlay_ID" specifically
             header_row_index = -1
             
             for i, row in enumerate(all_data):
-                if any(indicator in row for indicator in header_indicators):
+                # Check if this row contains "Parlay_ID"
+                if any('Parlay_ID' in str(cell) for cell in row):
+                    print(f"✅ Found 'Parlay_ID' in row {i}: {row}")
                     header_row_index = i
                     break
             
             if header_row_index == -1:
-                return pd.DataFrame()
+                # Fallback: look for any header-like indicators
+                header_indicators = ['Player', 'Name', 'Market', 'Line', 'Odds', 'Book', 'Team', 'EV', 'Pitcher']
+                for i, row in enumerate(all_data):
+                    if any(indicator in str(row) for indicator in header_indicators):
+                        print(f"🔍 Found header indicators in row {i}: {row}")
+                        header_row_index = i
+                        break
+            
+            if header_row_index == -1:
+                print("❌ No header row found, using row 0")
+                header_row_index = 0
             
             # Extract headers and data
             headers = all_data[header_row_index]
             data_rows = all_data[header_row_index + 1:]
             
+            print(f"📋 Using headers from row {header_row_index}: {headers}")
+            print(f"📊 Data rows available: {len(data_rows)}")
+            
             # Filter out empty rows
             data_rows = [row for row in data_rows if any(cell.strip() if cell else '' for cell in row)]
             
             if not data_rows:
+                print("❌ No data rows after filtering")
                 return pd.DataFrame()
+            
+            print(f"📈 Data rows after filtering: {len(data_rows)}")
+            print(f"📋 First data row: {data_rows[0]}")
             
             # Create DataFrame
             df = pd.DataFrame(data_rows, columns=headers)
             df = df.dropna(how='all')
             df = df.loc[:, df.columns != '']
             
+            print(f"✅ Final DataFrame: {df.shape}")
+            print(f"📋 Final columns: {list(df.columns)}")
+            
             return df
             
         except Exception as e:
-            st.error(f"Error reading {sheet_name}: {e}")
+            print(f"❌ Error reading {sheet_name}: {e}")
+            import traceback
+            traceback.print_exc()
             return pd.DataFrame()
     
     def get_ev_opportunities(self, client):
@@ -429,27 +457,41 @@ def parse_compressed_batter(batter_string):
     return None
 
 def show_correlation_parlays(dashboard, client):
-    """Display correlation parlays from compressed single-cell format"""
+    """Display correlation parlays from compressed single-cell format with enhanced debugging"""
     
     with st.spinner("Loading correlation parlays..."):
+        st.write("🔍 **Debug: Starting to read CORRELATION_PARLAYS sheet...**")
         parlay_df = dashboard.read_sheet_with_metadata_skip(client, "CORRELATION_PARLAYS")
+        st.write(f"📊 **Read result:** {parlay_df.shape} rows x {len(parlay_df.columns) if not parlay_df.empty else 0} columns")
     
     if parlay_df.empty:
-        st.warning("No correlation parlays found. Make sure Step 7 (build_parlays.py) has been run.")
-        st.info("💡 Run your pipeline to generate parlay data: `python build_parlays.py`")
+        st.warning("❌ DataFrame is empty after reading")
+        st.info("💡 Check Google Sheets permissions and sheet name")
         return
     
-    # Debug: Show what we actually got
-    st.write("🔍 **Debug - Sheet Structure:**")
-    st.write(f"Shape: {parlay_df.shape}")
-    st.write(f"Columns: {list(parlay_df.columns)}")
+    # Show raw DataFrame info for debugging
+    with st.expander("🔍 Debug: Raw DataFrame Info"):
+        st.write("**Shape:**", parlay_df.shape)
+        st.write("**Columns:**", list(parlay_df.columns))
+        st.write("**First 5 rows:**")
+        st.dataframe(parlay_df.head())
+        
+        if not parlay_df.empty:
+            st.write("**Sample data from first row:**")
+            first_row = parlay_df.iloc[0]
+            for col, val in first_row.items():
+                if val and str(val).strip():
+                    st.write(f"   {col}: `{val}`")
     
     # Check if this is an empty status sheet or has parlays
     if 'Parlay_ID' not in parlay_df.columns:
-        # This might be a status-only sheet
-        st.info("📋 **Pipeline Status Update**")
+        st.warning("❌ No 'Parlay_ID' column found")
+        st.write("**Available columns:**", list(parlay_df.columns))
         
-        # Try to find status information in the first few rows
+        # This might be a status-only sheet
+        st.info("📋 **Treating as Pipeline Status Update**")
+        
+        # Try to find status information
         status_found = False
         for idx, row in parlay_df.head(10).iterrows():
             row_values = [str(val) for val in row.values if val and str(val).strip()]
@@ -459,21 +501,35 @@ def show_correlation_parlays(dashboard, client):
         
         if not status_found:
             st.write("Sheet exists but no clear status found.")
-        
-        st.info("🎯 This usually means no games are scheduled today or the pipeline found no parlays to build.")
         return
     
+    st.write("✅ **Found 'Parlay_ID' column!**")
+    
+    # Show all data before filtering
+    st.write(f"📊 **Before filtering:** {len(parlay_df)} rows")
+    
     # Filter out rows that don't have parlay data (metadata rows)
+    original_count = len(parlay_df)
     parlay_df = parlay_df[
         (parlay_df['Parlay_ID'].notna()) & 
         (parlay_df['Parlay_ID'].astype(str).str.contains('PARLAY_', na=False))
     ]
     
+    st.write(f"📊 **After filtering for PARLAY_ IDs:** {len(parlay_df)} rows (filtered out {original_count - len(parlay_df)})")
+    
     if parlay_df.empty:
-        st.info("📊 No parlay data found in sheet - metadata only.")
+        st.warning("❌ No rows contain 'PARLAY_' in Parlay_ID")
+        st.write("**All Parlay_ID values found:**")
+        all_parlay_ids = dashboard.read_sheet_with_metadata_skip(client, "CORRELATION_PARLAYS")['Parlay_ID'].dropna().unique()
+        for pid in all_parlay_ids:
+            st.write(f"   - `{pid}`")
         return
     
-    st.write(f"✅ **Found {len(parlay_df)} parlays!**")
+    st.success(f"🎉 **Found {len(parlay_df)} valid parlays!**")
+    
+    # Show the actual parlay data
+    with st.expander("📊 Debug: Parlay Data"):
+        st.dataframe(parlay_df)
     
     # Summary metrics
     col1, col2, col3 = st.columns(3)
@@ -576,6 +632,7 @@ def show_correlation_parlays(dashboard, client):
                 
                 for batter_col in batter_columns:
                     if batter_col in row and row[batter_col]:
+                        st.write(f"🔍 **Raw batter data in {batter_col}:** `{row[batter_col]}`")
                         batter_data = parse_compressed_batter(row[batter_col])
                         
                         if batter_data:
@@ -583,18 +640,11 @@ def show_correlation_parlays(dashboard, client):
                             st.write(f"     EV: {batter_data['ev']:.3f} | Best Odds: {batter_data['best_odds']}")
                             batters_displayed += 1
                         else:
-                            # Show raw data if parsing failed
-                            st.write(f"   ⚠️ Raw batter data: `{row[batter_col]}`")
+                            # Show why parsing failed
+                            st.write(f"   ❌ Failed to parse: `{row[batter_col]}`")
                 
                 if batters_displayed == 0:
                     st.write("   ⚠️ No parseable batter data found")
-                    
-                    # Show raw data for debugging
-                    st.write("**Debug - Batter column contents:**")
-                    for batter_col in batter_columns:
-                        if batter_col in row:
-                            content = row[batter_col]
-                            st.write(f"   {batter_col}: `{content}`")
             
             with col2:
                 if estimated_ev > 0:

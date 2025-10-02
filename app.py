@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 # Page configuration
 st.set_page_config(
@@ -24,9 +25,18 @@ st.markdown("""
         padding-bottom: 0rem;
     }
     
-    /* Hide the navigation buttons */
-    .stButton > button {
-        display: none;
+    /* Custom table styling */
+    .stDataFrame {
+        width: 100%;
+    }
+    
+    .stDataFrame > div {
+        width: 100%;
+    }
+    
+    /* Hide default streamlit buttons when not needed */
+    .row-widget.stButton {
+        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -35,208 +45,166 @@ st.markdown("""
 if 'activeView' not in st.session_state:
     st.session_state.activeView = 'individual'
 
-# Static data - exactly from your original
+# Static data
 individualEVs = [
-    {'player': 'Shohei Ohtani', 'market': 'Total Bases', 'line': '2.5', 'ev': '8.4%'},
-    {'player': 'Aaron Judge', 'market': 'Hits', 'line': '1.5', 'ev': '7.2%'},
-    {'player': 'Mookie Betts', 'market': 'Runs Scored', 'line': '0.5', 'ev': '6.8%'},
-    {'player': 'Juan Soto', 'market': 'RBIs', 'line': '1.5', 'ev': '5.9%'},
-    {'player': 'Ronald Acuña Jr.', 'market': 'Total Bases', 'line': '1.5', 'ev': '5.3%'},
+    {'Player': 'Shohei Ohtani', 'Market': 'Total Bases', 'Line': '2.5', 'EV %': '8.4%'},
+    {'Player': 'Aaron Judge', 'Market': 'Hits', 'Line': '1.5', 'EV %': '7.2%'},
+    {'Player': 'Mookie Betts', 'Market': 'Runs Scored', 'Line': '0.5', 'EV %': '6.8%'},
+    {'Player': 'Juan Soto', 'Market': 'RBIs', 'Line': '1.5', 'EV %': '5.9%'},
+    {'Player': 'Ronald Acuña Jr.', 'Market': 'Total Bases', 'Line': '1.5', 'EV %': '5.3%'},
 ]
 
 parlays = [
     {
         'id': 'PARLAY_001',
         'legs': [
-            {'player': 'Gerrit Cole', 'market': 'Strikeouts', 'line': '6.5', 'ev': '4.2%'},
-            {'player': 'Pete Alonso', 'market': 'Hits', 'line': '1.5', 'ev': '3.8%'},
-            {'player': 'Francisco Lindor', 'market': 'Total Bases', 'line': '1.5', 'ev': '3.5%'}
+            {'Player': 'Gerrit Cole', 'Market': 'Strikeouts', 'Line': '6.5', 'EV %': '4.2%'},
+            {'Player': 'Pete Alonso', 'Market': 'Hits', 'Line': '1.5', 'EV %': '3.8%'},
+            {'Player': 'Francisco Lindor', 'Market': 'Total Bases', 'Line': '1.5', 'EV %': '3.5%'}
         ],
         'totalEV': '12.1%'
     },
     {
         'id': 'PARLAY_002',
         'legs': [
-            {'player': 'Spencer Strider', 'market': 'Strikeouts', 'line': '7.5', 'ev': '5.1%'},
-            {'player': 'Freddie Freeman', 'market': 'Hits', 'line': '1.5', 'ev': '4.2%'}
+            {'Player': 'Spencer Strider', 'Market': 'Strikeouts', 'Line': '7.5', 'EV %': '5.1%'},
+            {'Player': 'Freddie Freeman', 'Market': 'Hits', 'Line': '1.5', 'EV %': '4.2%'}
         ],
         'totalEV': '9.8%'
     }
 ]
 
-# Header Navigation
+# Header
 st.markdown("""
-<div style="background: white; border-bottom: 1px solid #e5e7eb; height: 64px; display: flex; align-items: center;">
-    <div style="max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; width: 100%;">
-        <span style="font-size: 24px; font-weight: 700; color: #111827;">EV Sports</span>
-        <span style="font-size: 14px; color: #6b7280;">Last Updated: 2 hours ago</span>
-    </div>
+<div style="background: white; border-bottom: 1px solid #e5e7eb; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center;">
+    <h1 style="margin: 0; font-size: 24px; font-weight: 700; color: #111827;">EV Sports</h1>
+    <span style="font-size: 14px; color: #6b7280;">Last Updated: 2 hours ago</span>
 </div>
 """, unsafe_allow_html=True)
 
-# League Selection Ribbon
+# League Selection
 st.markdown("""
-<div style="background: #f9fafb; border-bottom: 1px solid #e5e7eb; height: 56px; display: flex; align-items: center;">
-    <div style="max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; gap: 32px; width: 100%;">
-        <div style="padding: 16px; font-size: 14px; font-weight: 500; color: #111827; position: relative;">
-            MLB
-            <div style="position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #111827;"></div>
-        </div>
-        <div style="padding: 16px; font-size: 14px; font-weight: 500; color: #9ca3af; cursor: not-allowed;">NFL</div>
-        <div style="padding: 16px; font-size: 14px; font-weight: 500; color: #9ca3af; cursor: not-allowed;">NBA</div>
-    </div>
+<div style="background: #f9fafb; border-bottom: 1px solid #e5e7eb; padding: 0.5rem 2rem;">
+    <span style="color: #111827; font-weight: 500; border-bottom: 2px solid #111827; padding-bottom: 0.5rem;">MLB</span>
+    <span style="color: #9ca3af; margin-left: 2rem;">NFL</span>
+    <span style="color: #9ca3af; margin-left: 2rem;">NBA</span>
 </div>
 """, unsafe_allow_html=True)
 
-# View Selection Ribbon with click handlers
-individual_active = "color: #111827;" if st.session_state.activeView == 'individual' else "color: #6b7280;"
-parlays_active = "color: #111827;" if st.session_state.activeView == 'parlays' else "color: #6b7280;"
-individual_underline = '<div style="position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #111827;"></div>' if st.session_state.activeView == 'individual' else ''
-parlays_underline = '<div style="position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #111827;"></div>' if st.session_state.activeView == 'parlays' else ''
+# Navigation
+col1, col2, col3 = st.columns([2, 2, 6])
 
-# Create clickable navigation using Streamlit columns
-nav_col1, nav_col2, nav_col3 = st.columns([1, 1, 8])
-
-with nav_col1:
-    if st.button("Individual EVs", key="nav1", help="Switch to Individual EVs view"):
+with col1:
+    if st.button("📊 Individual EVs", use_container_width=True):
         st.session_state.activeView = 'individual'
         st.rerun()
 
-with nav_col2:
-    if st.button("Correlation Parlays", key="nav2", help="Switch to Correlation Parlays view"):
+with col2:
+    if st.button("🎯 Correlation Parlays", use_container_width=True):
         st.session_state.activeView = 'parlays'
         st.rerun()
 
-# Display the visual navigation ribbon
-st.markdown(f"""
-<div style="background: white; border-bottom: 1px solid #e5e7eb; height: 56px; display: flex; align-items: center; margin-top: -3rem; margin-bottom: 1rem;">
-    <div style="max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; gap: 32px; width: 100%;">
-        <div style="padding: 16px; font-size: 14px; font-weight: 500; {individual_active} position: relative;">
-            Individual EVs
-            {individual_underline}
-        </div>
-        <div style="padding: 16px; font-size: 14px; font-weight: 500; {parlays_active} position: relative;">
-            Correlation Parlays
-            {parlays_underline}
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+# Add some spacing
+st.markdown("<br>", unsafe_allow_html=True)
 
-# Main Content Area
-st.markdown('<div style="max-width: 1280px; margin: 0 auto; padding: 48px 24px;">', unsafe_allow_html=True)
-
-# Individual EVs View
+# Main Content
 if st.session_state.activeView == 'individual':
-    st.markdown(f"""
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h1 style="font-size: 30px; font-weight: 300; color: #111827; margin: 0;">Individual EV Opportunities</h1>
-        <span style="font-size: 14px; color: #6b7280;">{len(individualEVs)} opportunities found</span>
-    </div>
+    # Individual EVs View
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("## Individual EV Opportunities")
+    with col2:
+        st.markdown(f"**{len(individualEVs)} opportunities found**")
+    
+    # Convert to DataFrame and display
+    df = pd.DataFrame(individualEVs)
+    
+    # Custom styling for the dataframe
+    st.markdown("""
+    <style>
+    .stDataFrame th {
+        background-color: #f9fafb !important;
+        color: #6b7280 !important;
+        font-weight: 500 !important;
+        text-transform: uppercase !important;
+        font-size: 12px !important;
+        letter-spacing: 0.5px !important;
+    }
+    
+    .stDataFrame td {
+        font-size: 14px !important;
+    }
+    
+    .stDataFrame tr:nth-child(even) {
+        background-color: #ffffff !important;
+    }
+    
+    .stDataFrame tr:hover {
+        background-color: #f9fafb !important;
+    }
+    </style>
     """, unsafe_allow_html=True)
     
-    # Clean Table
-    table_html = """
-    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 2px; overflow: hidden;">
-        <table style="width: 100%; border-collapse: collapse;">
-            <thead style="background: #f9fafb;">
-                <tr>
-                    <th style="padding: 16px 24px; text-align: left; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb;">Player</th>
-                    <th style="padding: 16px 24px; text-align: left; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb;">Market</th>
-                    <th style="padding: 16px 24px; text-align: left; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb;">Line</th>
-                    <th style="padding: 16px 24px; text-align: right; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #e5e7eb;">EV %</th>
-                </tr>
-            </thead>
-            <tbody style="background: white;">
-    """
-    
-    for i, ev in enumerate(individualEVs):
-        border_style = "border-bottom: 1px solid #e5e7eb;" if i < len(individualEVs) - 1 else ""
-        table_html += f"""
-        <tr style="{border_style}">
-            <td style="padding: 16px 24px; font-size: 14px; font-weight: 500; color: #111827;">{ev['player']}</td>
-            <td style="padding: 16px 24px; font-size: 14px; color: #6b7280;">{ev['market']}</td>
-            <td style="padding: 16px 24px; font-size: 14px; color: #6b7280;">{ev['line']}</td>
-            <td style="padding: 16px 24px; font-size: 14px; text-align: right; font-weight: 600; color: #059669;">{ev['ev']}</td>
-        </tr>
-        """
-    
-    table_html += """
-            </tbody>
-        </table>
-    </div>
-    """
-    
-    st.markdown(table_html, unsafe_allow_html=True)
+    st.dataframe(
+        df, 
+        use_container_width=True, 
+        hide_index=True,
+        column_config={
+            "Player": st.column_config.TextColumn("Player", width="medium"),
+            "Market": st.column_config.TextColumn("Market", width="medium"),
+            "Line": st.column_config.TextColumn("Line", width="small"),
+            "EV %": st.column_config.TextColumn("EV %", width="small")
+        }
+    )
 
-# Parlays View
 elif st.session_state.activeView == 'parlays':
-    st.markdown(f"""
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;">
-        <h1 style="font-size: 30px; font-weight: 300; color: #111827; margin: 0;">Correlation Parlays</h1>
-        <span style="font-size: 14px; color: #6b7280;">{len(parlays)} parlays found</span>
-    </div>
-    """, unsafe_allow_html=True)
+    # Parlays View
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("## Correlation Parlays")
+    with col2:
+        st.markdown(f"**{len(parlays)} parlays found**")
     
-    # Action Buttons
-    button_col1, button_col2, button_col3 = st.columns([1, 1, 8])
-    
-    with button_col1:
-        if st.button("Refresh", key="refresh_btn"):
+    # Action buttons
+    col1, col2, col3 = st.columns([1, 1, 8])
+    with col1:
+        if st.button("🔄 Refresh"):
             st.success("Data refreshed!")
-            
-    with button_col2:
-        if st.button("Filter", key="filter_btn"):
+    with col2:
+        if st.button("🔍 Filter"):
             st.info("Filter options coming soon!")
     
-    # Visual buttons (for styling)
-    st.markdown("""
-    <div style="display: flex; gap: 16px; margin-bottom: 24px; margin-top: -3rem;">
-        <button style="padding: 8px 16px; font-size: 14px; font-weight: 500; color: #374151; background: white; border: 1px solid #d1d5db; border-radius: 2px; cursor: pointer;">Refresh</button>
-        <button style="padding: 8px 16px; font-size: 14px; font-weight: 500; color: #374151; background: white; border: 1px solid #d1d5db; border-radius: 2px; cursor: pointer;">Filter</button>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    # Parlay Cards
+    # Display each parlay
     for parlay in parlays:
-        st.markdown(f"""
-        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 24px;">
-            <div style="background: #f9fafb; padding: 12px 24px; border-bottom: 1px solid #e5e7eb; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
-                {parlay['id']} • {len(parlay['legs'])} Legs • Total EV: {parlay['totalEV']}
+        with st.container():
+            st.markdown(f"""
+            <div style="background: #f9fafb; padding: 0.75rem 1.5rem; border: 1px solid #e5e7eb; border-radius: 4px; margin-bottom: 1rem;">
+                <strong>{parlay['id']}</strong> • {len(parlay['legs'])} Legs • Total EV: <span style="color: #059669; font-weight: 600;">{parlay['totalEV']}</span>
             </div>
-        """, unsafe_allow_html=True)
-        
-        # Parlay Legs Table
-        legs_table = """
-            <table style="width: 100%; border-collapse: collapse;">
-                <thead style="background: #f9fafb;">
-                    <tr>
-                        <th style="padding: 12px 24px; text-align: left; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Player</th>
-                        <th style="padding: 12px 24px; text-align: left; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Market</th>
-                        <th style="padding: 12px 24px; text-align: left; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">Line</th>
-                        <th style="padding: 12px 24px; text-align: right; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">EV %</th>
-                    </tr>
-                </thead>
-                <tbody style="background: white;">
-        """
-        
-        for i, leg in enumerate(parlay['legs']):
-            border_style = "border-bottom: 1px solid #e5e7eb;" if i < len(parlay['legs']) - 1 else ""
-            legs_table += f"""
-            <tr style="{border_style}">
-                <td style="padding: 16px 24px; font-size: 14px; font-weight: 500; color: #111827;">{leg['player']}</td>
-                <td style="padding: 16px 24px; font-size: 14px; color: #6b7280;">{leg['market']}</td>
-                <td style="padding: 16px 24px; font-size: 14px; color: #6b7280;">{leg['line']}</td>
-                <td style="padding: 16px 24px; font-size: 14px; text-align: right; color: #6b7280;">{leg['ev']}</td>
-            </tr>
-            """
-        
-        legs_table += """
-                </tbody>
-            </table>
-        </div>
-        """
-        
-        st.markdown(legs_table, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+            
+            # Convert parlay legs to DataFrame
+            parlay_df = pd.DataFrame(parlay['legs'])
+            
+            st.dataframe(
+                parlay_df, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Player": st.column_config.TextColumn("Player", width="medium"),
+                    "Market": st.column_config.TextColumn("Market", width="medium"),
+                    "Line": st.column_config.TextColumn("Line", width="small"),
+                    "EV %": st.column_config.TextColumn("EV %", width="small")
+                }
+            )
+            
+            st.markdown("<br>", unsafe_allow_html=True)
 
-st.markdown('</div>', unsafe_allow_html=True)
+# Footer
+st.markdown("""
+<div style="margin-top: 3rem; padding: 2rem; text-align: center; color: #6b7280; border-top: 1px solid #e5e7eb;">
+    <small>EV Sports Dashboard • Built with Streamlit</small>
+</div>
+""", unsafe_allow_html=True)

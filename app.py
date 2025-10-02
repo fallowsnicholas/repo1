@@ -133,7 +133,7 @@ with header_col2:
 st.markdown('<hr style="margin: 1rem 0; border: none; border-top: 1px solid #e5e7eb;">', unsafe_allow_html=True)
 
 # League Selection (visual only)
-league_col1, league_col2, league_col3, league_col4 = st.columns([1, 1, 1, 18])
+league_col1, league_col2, league_col3, league_col4 = st.columns([2, 2, 2, 6])
 with league_col1:
     st.markdown('<div style="color: #111827; font-weight: 500; padding-bottom: 8px; font-size: 14px;">MLB</div>', unsafe_allow_html=True)
 with league_col2:
@@ -150,26 +150,63 @@ with tab1:
     # Individual EVs View
     st.markdown("<br>", unsafe_allow_html=True)
     
-    col1, col2 = st.columns([3, 1])
-    with col1:
+    # Get unique markets for filter buttons
+    all_markets = list(set([ev['Market'] for ev in individualEVs]))
+    
+    # Header row with title and filter buttons
+    header_col1, header_col2 = st.columns([2, 3])
+    
+    with header_col1:
         st.markdown("## Individual EV Opportunities")
-    with col2:
-        st.markdown(f"**{len(individualEVs)} opportunities found**")
+    
+    with header_col2:
+        # Create filter buttons in a row
+        filter_cols = st.columns(len(all_markets) + 1)  # +1 for "All" button
+        
+        # Initialize session state for market filter
+        if 'market_filter' not in st.session_state:
+            st.session_state.market_filter = 'All'
+        
+        with filter_cols[0]:
+            if st.button("All", key="filter_all", 
+                        type="primary" if st.session_state.market_filter == 'All' else "secondary"):
+                st.session_state.market_filter = 'All'
+                st.rerun()
+        
+        for i, market in enumerate(all_markets):
+            with filter_cols[i + 1]:
+                if st.button(market, key=f"filter_{market.replace(' ', '_')}", 
+                            type="primary" if st.session_state.market_filter == market else "secondary"):
+                    st.session_state.market_filter = market
+                    st.rerun()
+    
+    # Filter the data based on selected market
+    if st.session_state.market_filter == 'All':
+        filtered_evs = individualEVs
+    else:
+        filtered_evs = [ev for ev in individualEVs if ev['Market'] == st.session_state.market_filter]
+    
+    # Show count
+    st.markdown(f"**{len(filtered_evs)} opportunities found**")
+    st.markdown("<br>", unsafe_allow_html=True)
     
     # Convert to DataFrame and display
-    df = pd.DataFrame(individualEVs)
+    df = pd.DataFrame(filtered_evs)
     
-    st.dataframe(
-        df, 
-        use_container_width=True, 
-        hide_index=True,
-        column_config={
-            "Player": st.column_config.TextColumn("Player", width="medium"),
-            "Market": st.column_config.TextColumn("Market", width="medium"),
-            "Line": st.column_config.TextColumn("Line", width="small"),
-            "EV %": st.column_config.TextColumn("EV %", width="small")
-        }
-    )
+    if len(filtered_evs) > 0:
+        st.dataframe(
+            df, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Player": st.column_config.TextColumn("Player", width="medium"),
+                "Market": st.column_config.TextColumn("Market", width="medium"),
+                "Line": st.column_config.TextColumn("Line", width="small"),
+                "EV %": st.column_config.TextColumn("EV %", width="small")
+            }
+        )
+    else:
+        st.info(f"No opportunities found for {st.session_state.market_filter}");
 
 with tab2:
     # Parlays View

@@ -386,7 +386,7 @@ class CorrelationParlayBuilder:
             raise
 
 def main():
-    """Main function for simplified Step 7"""
+    """Main function for simplified Step 7 - Always updates sheet"""
     try:
         builder = CorrelationParlayBuilder()
         
@@ -398,6 +398,8 @@ def main():
         
         if pitcher_anchors_df.empty:
             print("❌ No pitcher anchors found from Step 6")
+            # Still update sheet to show no data
+            builder.save_empty_parlays_sheet(client, "No pitcher anchors from Step 6")
             return
         
         # Step 2: Read all EV data with team information
@@ -406,6 +408,8 @@ def main():
         if all_ev_df.empty:
             print("❌ No EV data with team info found")
             print("   💡 Make sure Step 2 (fetch_odds_data.py) includes team data")
+            # Still update sheet to show no data
+            builder.save_empty_parlays_sheet(client, "No EV data with team info found")
             return
         
         # Step 3: Build correlation parlays using team data
@@ -413,10 +417,13 @@ def main():
         
         if not parlays:
             print("❌ No correlation parlays could be built")
+            print("   💡 This is normal when there are no games today")
+            # Still update sheet to show no parlays found
+            builder.save_empty_parlays_sheet(client, "No games today - no parlays built")
             return
         
-        # Save results - CHANGED TO USE COMPRESSED FORMAT
-        builder.save_parlays_compressed(parlays, client)  # ← This was the issue!
+        # Save results - with actual parlays
+        builder.save_parlays_compressed(parlays, client)
         
         print(f"\n✅ STEP 7 COMPLETE - SIMPLIFIED PIPELINE!")
         print(f"   🎯 Correlation parlays built: {len(parlays)}")
@@ -426,6 +433,54 @@ def main():
     except Exception as e:
         logger.error(f"Error in Step 7: {e}")
         print(f"❌ Step 7 failed: {e}")
+        
+        # Still update sheet to show the error
+        try:
+            builder = CorrelationParlayBuilder()
+            client = builder.connect_to_sheets()
+            builder.save_empty_parlays_sheet(client, f"Step 7 failed: {str(e)}")
+        except:
+            pass  # If this fails too, just give up
+
+def save_empty_parlays_sheet(self, client, reason):
+    """Update the sheet even when no parlays are found"""
+    try:
+        print(f"💾 Updating CORRELATION_PARLAYS sheet with status: {reason}")
+        
+        spreadsheet = client.open("MLB_Splash_Data")
+        
+        try:
+            worksheet = spreadsheet.worksheet("CORRELATION_PARLAYS")
+        except:
+            worksheet = spreadsheet.add_worksheet(title="CORRELATION_PARLAYS", rows=1000, cols=25)
+        
+        worksheet.clear()
+        
+        # Create empty sheet with status info
+        metadata = [
+            ['Pitcher vs Batter Correlation Parlays', ''],
+            ['Last Updated', datetime.now().isoformat()],
+            ['Status', reason],
+            ['Total Parlays', 0],
+            ['Next Check', 'Run pipeline when games are scheduled'],
+            [''],
+            ['Pipeline Step 7 Status: No parlays generated'],
+            ['Reason:', reason],
+            [''],
+            ['Headers for when data is available:'],
+            ['Parlay_ID', 'Pitcher_Name', 'Pitcher_Team', 'Pitcher_Market', 'Pitcher_Line', 
+             'Pitcher_Bet_Type', 'Pitcher_EV', 'Opposing_Team', 'Num_Batters', 
+             'Correlation_Type', 'Correlation_Strength', 'Bet_Logic', 
+             'Estimated_Parlay_EV', 'Total_Legs', 'Created_At', 'Batter_1', 'Batter_2', '...']
+        ]
+        
+        worksheet.update(range_name='A1', values=metadata)
+        
+        print(f"✅ Sheet updated with status: {reason}")
+        
+    except Exception as e:
+        logger.error(f"Error updating empty parlays sheet: {e}")
+        print(f"❌ Failed to update empty sheet: {e}")
 
 if __name__ == "__main__":
     main()

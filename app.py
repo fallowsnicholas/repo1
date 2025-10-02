@@ -133,7 +133,7 @@ with header_col2:
 st.markdown('<hr style="margin: 1rem 0; border: none; border-top: 1px solid #e5e7eb;">', unsafe_allow_html=True)
 
 # League Selection (visual only)
-league_col1, league_col2, league_col3, league_col4 = st.columns([1, 1, 1, 12])
+league_col1, league_col2, league_col3, league_col4 = st.columns([1, 1, 1, 15])
 with league_col1:
     st.markdown('<div style="color: #111827; font-weight: 500; padding-bottom: 8px; font-size: 14px;">MLB</div>', unsafe_allow_html=True)
 with league_col2:

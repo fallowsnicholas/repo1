@@ -23,6 +23,11 @@ st.markdown("""
         max-width: none;
         padding-bottom: 0rem;
     }
+    
+    /* Hide the navigation buttons */
+    .stButton > button {
+        display: none;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -30,7 +35,7 @@ st.markdown("""
 if 'activeView' not in st.session_state:
     st.session_state.activeView = 'individual'
 
-# Static data - exactly from JavaScript
+# Static data - exactly from your original
 individualEVs = [
     {'player': 'Shohei Ohtani', 'market': 'Total Bases', 'line': '2.5', 'ev': '8.4%'},
     {'player': 'Aaron Judge', 'market': 'Hits', 'line': '1.5', 'ev': '7.2%'},
@@ -83,37 +88,40 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# View Selection Ribbon
+# View Selection Ribbon with click handlers
 individual_active = "color: #111827;" if st.session_state.activeView == 'individual' else "color: #6b7280;"
 parlays_active = "color: #111827;" if st.session_state.activeView == 'parlays' else "color: #6b7280;"
 individual_underline = '<div style="position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #111827;"></div>' if st.session_state.activeView == 'individual' else ''
 parlays_underline = '<div style="position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: #111827;"></div>' if st.session_state.activeView == 'parlays' else ''
 
+# Create clickable navigation using Streamlit columns
+nav_col1, nav_col2, nav_col3 = st.columns([1, 1, 8])
+
+with nav_col1:
+    if st.button("Individual EVs", key="nav1", help="Switch to Individual EVs view"):
+        st.session_state.activeView = 'individual'
+        st.rerun()
+
+with nav_col2:
+    if st.button("Correlation Parlays", key="nav2", help="Switch to Correlation Parlays view"):
+        st.session_state.activeView = 'parlays'
+        st.rerun()
+
+# Display the visual navigation ribbon
 st.markdown(f"""
-<div style="background: white; border-bottom: 1px solid #e5e7eb; height: 56px; display: flex; align-items: center;">
+<div style="background: white; border-bottom: 1px solid #e5e7eb; height: 56px; display: flex; align-items: center; margin-top: -3rem; margin-bottom: 1rem;">
     <div style="max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; gap: 32px; width: 100%;">
-        <div style="padding: 16px; font-size: 14px; font-weight: 500; {individual_active} position: relative; cursor: pointer;">
+        <div style="padding: 16px; font-size: 14px; font-weight: 500; {individual_active} position: relative;">
             Individual EVs
             {individual_underline}
         </div>
-        <div style="padding: 16px; font-size: 14px; font-weight: 500; {parlays_active} position: relative; cursor: pointer;">
+        <div style="padding: 16px; font-size: 14px; font-weight: 500; {parlays_active} position: relative;">
             Correlation Parlays
             {parlays_underline}
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
-
-# Navigation buttons (functional but hidden)
-col1, col2 = st.columns([1, 1])
-with col1:
-    if st.button("Individual EVs", key="nav1"):
-        st.session_state.activeView = 'individual'
-        st.rerun()
-with col2:
-    if st.button("Correlation Parlays", key="nav2"):
-        st.session_state.activeView = 'parlays'
-        st.rerun()
 
 # Main Content Area
 st.markdown('<div style="max-width: 1280px; margin: 0 auto; padding: 48px 24px;">', unsafe_allow_html=True)
@@ -142,9 +150,10 @@ if st.session_state.activeView == 'individual':
             <tbody style="background: white;">
     """
     
-    for ev in individualEVs:
+    for i, ev in enumerate(individualEVs):
+        border_style = "border-bottom: 1px solid #e5e7eb;" if i < len(individualEVs) - 1 else ""
         table_html += f"""
-        <tr style="border-bottom: 1px solid #e5e7eb;">
+        <tr style="{border_style}">
             <td style="padding: 16px 24px; font-size: 14px; font-weight: 500; color: #111827;">{ev['player']}</td>
             <td style="padding: 16px 24px; font-size: 14px; color: #6b7280;">{ev['market']}</td>
             <td style="padding: 16px 24px; font-size: 14px; color: #6b7280;">{ev['line']}</td>
@@ -170,8 +179,19 @@ elif st.session_state.activeView == 'parlays':
     """, unsafe_allow_html=True)
     
     # Action Buttons
+    button_col1, button_col2, button_col3 = st.columns([1, 1, 8])
+    
+    with button_col1:
+        if st.button("Refresh", key="refresh_btn"):
+            st.success("Data refreshed!")
+            
+    with button_col2:
+        if st.button("Filter", key="filter_btn"):
+            st.info("Filter options coming soon!")
+    
+    # Visual buttons (for styling)
     st.markdown("""
-    <div style="display: flex; gap: 16px; margin-bottom: 24px;">
+    <div style="display: flex; gap: 16px; margin-bottom: 24px; margin-top: -3rem;">
         <button style="padding: 8px 16px; font-size: 14px; font-weight: 500; color: #374151; background: white; border: 1px solid #d1d5db; border-radius: 2px; cursor: pointer;">Refresh</button>
         <button style="padding: 8px 16px; font-size: 14px; font-weight: 500; color: #374151; background: white; border: 1px solid #d1d5db; border-radius: 2px; cursor: pointer;">Filter</button>
     </div>
@@ -182,14 +202,12 @@ elif st.session_state.activeView == 'parlays':
         st.markdown(f"""
         <div style="background: white; border: 1px solid #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 24px;">
             <div style="background: #f9fafb; padding: 12px 24px; border-bottom: 1px solid #e5e7eb; font-size: 12px; font-weight: 500; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
-                {parlay['id']} • {len(parlay['legs'])} Legs
+                {parlay['id']} • {len(parlay['legs'])} Legs • Total EV: {parlay['totalEV']}
             </div>
-        </div>
         """, unsafe_allow_html=True)
         
         # Parlay Legs Table
         legs_table = """
-        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 2px; overflow: hidden; margin-bottom: 24px;">
             <table style="width: 100%; border-collapse: collapse;">
                 <thead style="background: #f9fafb;">
                     <tr>
@@ -202,9 +220,10 @@ elif st.session_state.activeView == 'parlays':
                 <tbody style="background: white;">
         """
         
-        for leg in parlay['legs']:
+        for i, leg in enumerate(parlay['legs']):
+            border_style = "border-bottom: 1px solid #e5e7eb;" if i < len(parlay['legs']) - 1 else ""
             legs_table += f"""
-            <tr style="border-bottom: 1px solid #e5e7eb;">
+            <tr style="{border_style}">
                 <td style="padding: 16px 24px; font-size: 14px; font-weight: 500; color: #111827;">{leg['player']}</td>
                 <td style="padding: 16px 24px; font-size: 14px; color: #6b7280;">{leg['market']}</td>
                 <td style="padding: 16px 24px; font-size: 14px; color: #6b7280;">{leg['line']}</td>

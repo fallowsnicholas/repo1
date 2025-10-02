@@ -439,37 +439,41 @@ def show_correlation_parlays(dashboard, client):
         st.info("💡 Run your pipeline to generate parlay data: `python build_parlays.py`")
         return
     
-    # Check if this is an empty status sheet
-    if 'Status' in parlay_df.columns or len(parlay_df.columns) < 5:
+    # Debug: Show what we actually got
+    st.write("🔍 **Debug - Sheet Structure:**")
+    st.write(f"Shape: {parlay_df.shape}")
+    st.write(f"Columns: {list(parlay_df.columns)}")
+    
+    # Check if this is an empty status sheet or has parlays
+    if 'Parlay_ID' not in parlay_df.columns:
+        # This might be a status-only sheet
         st.info("📋 **Pipeline Status Update**")
         
-        # Show the status information from the sheet
-        if not parlay_df.empty:
-            for idx, row in parlay_df.iterrows():
-                if len(row) >= 2 and row.iloc[0] and row.iloc[1]:
-                    st.write(f"**{row.iloc[0]}:** {row.iloc[1]}")
-                    if idx >= 8:  # Limit to first few rows
-                        break
+        # Try to find status information in the first few rows
+        status_found = False
+        for idx, row in parlay_df.head(10).iterrows():
+            row_values = [str(val) for val in row.values if val and str(val).strip()]
+            if len(row_values) >= 2:
+                st.write(f"**{row_values[0]}:** {row_values[1]}")
+                status_found = True
         
-        st.info("🎯 This usually means no games are scheduled today. The pipeline ran successfully but found no parlays to build.")
-        return
-    
-    # Check if we have actual parlay data
-    required_columns = ['Parlay_ID', 'Pitcher_Name', 'Estimated_Parlay_EV']
-    if not all(col in parlay_df.columns for col in required_columns):
-        st.warning("📊 Sheet structure doesn't match expected format.")
-        st.write("**Available columns:**", list(parlay_df.columns))
+        if not status_found:
+            st.write("Sheet exists but no clear status found.")
+        
+        st.info("🎯 This usually means no games are scheduled today or the pipeline found no parlays to build.")
         return
     
     # Filter out rows that don't have parlay data (metadata rows)
     parlay_df = parlay_df[
         (parlay_df['Parlay_ID'].notna()) & 
-        (parlay_df['Parlay_ID'].str.contains('PARLAY_', na=False))
+        (parlay_df['Parlay_ID'].astype(str).str.contains('PARLAY_', na=False))
     ]
     
     if parlay_df.empty:
-        st.info("📊 No parlay data found in sheet - likely no games today.")
+        st.info("📊 No parlay data found in sheet - metadata only.")
         return
+    
+    st.write(f"✅ **Found {len(parlay_df)} parlays!**")
     
     # Summary metrics
     col1, col2, col3 = st.columns(3)
@@ -482,27 +486,27 @@ def show_correlation_parlays(dashboard, client):
     
     with col2:
         if 'Estimated_Parlay_EV' in parlay_df.columns:
-            best_parlay_ev = pd.to_numeric(parlay_df['Estimated_Parlay_EV'], errors='coerce').max()
+            evs = pd.to_numeric(parlay_df['Estimated_Parlay_EV'], errors='coerce')
+            best_parlay_ev = evs.max() if not evs.isna().all() else 0
             st.metric(
                 label="Best Parlay EV",
-                value=f"{best_parlay_ev:.1%}" if not pd.isna(best_parlay_ev) else "N/A"
+                value=f"{best_parlay_ev:.1%}" if best_parlay_ev > 0 else "N/A"
             )
     
     with col3:
         if 'Total_Legs' in parlay_df.columns:
-            avg_legs = pd.to_numeric(parlay_df['Total_Legs'], errors='coerce').mean()
+            legs = pd.to_numeric(parlay_df['Total_Legs'], errors='coerce')
+            avg_legs = legs.mean() if not legs.isna().all() else 0
             st.metric(
                 label="Avg Legs/Parlay",
-                value=f"{avg_legs:.1f}" if not pd.isna(avg_legs) else "N/A"
+                value=f"{avg_legs:.1f}" if avg_legs > 0 else "N/A"
             )
     
     st.markdown("---")
     
     # Find compressed batter columns dynamically
-    batter_columns = [col for col in parlay_df.columns if col.startswith('Batter_') and col.replace('Batter_', '').replace('_', '').isdigit()]
-    batter_columns.sort(key=lambda x: int(''.join(filter(str.isdigit, x))))  # Sort numerically
-    
-    st.write(f"🔍 **Debug Info:** Found {len(batter_columns)} batter columns: {batter_columns[:5]}...")
+    batter_columns = [col for col in parlay_df.columns if 'Batter_' in col]
+    st.write(f"🏏 **Found batter columns:** {batter_columns}")
     
     # Display each parlay with parsed batter information
     for idx, row in parlay_df.iterrows():
@@ -512,12 +516,39 @@ def show_correlation_parlays(dashboard, client):
         pitcher_market = row.get('Pitcher_Market', 'Unknown Market')
         pitcher_line = row.get('Pitcher_Line', 'N/A')
         pitcher_bet_type = row.get('Pitcher_Bet_Type', 'N/A')
-        pitcher_ev = pd.to_numeric(row.get('Pitcher_EV', 0), errors='coerce')
+        
+        # Handle pitcher EV
+        pitcher_ev_raw = row.get('Pitcher_EV', 0)
+        try:
+            pitcher_ev = float(pitcher_ev_raw)
+        except (ValueError, TypeError):
+            pitcher_ev = 0
+        
         opposing_team = row.get('Opposing_Team', 'Unknown Team')
-        num_batters = pd.to_numeric(row.get('Num_Batters', 0), errors='coerce')
+        
+        # Handle num batters
+        num_batters_raw = row.get('Num_Batters', 0)
+        try:
+            num_batters = int(float(num_batters_raw))
+        except (ValueError, TypeError):
+            num_batters = 0
+        
         correlation_type = row.get('Correlation_Type', 'Unknown')
-        estimated_ev = pd.to_numeric(row.get('Estimated_Parlay_EV', 0), errors='coerce')
-        total_legs = pd.to_numeric(row.get('Total_Legs', 0), errors='coerce')
+        
+        # Handle estimated EV
+        estimated_ev_raw = row.get('Estimated_Parlay_EV', 0)
+        try:
+            estimated_ev = float(estimated_ev_raw)
+        except (ValueError, TypeError):
+            estimated_ev = 0
+        
+        # Handle total legs
+        total_legs_raw = row.get('Total_Legs', 0)
+        try:
+            total_legs = int(float(total_legs_raw))
+        except (ValueError, TypeError):
+            total_legs = 0
+        
         correlation_strength = row.get('Correlation_Strength', 'N/A')
         bet_logic = row.get('Bet_Logic', 'N/A')
         
@@ -551,23 +582,19 @@ def show_correlation_parlays(dashboard, client):
                             st.write(f"   • **{batter_data['name']}** ({opposing_team}) - {batter_data['market']} {batter_data['line']} ({batter_data['bet_type']})")
                             st.write(f"     EV: {batter_data['ev']:.3f} | Best Odds: {batter_data['best_odds']}")
                             batters_displayed += 1
+                        else:
+                            # Show raw data if parsing failed
+                            st.write(f"   ⚠️ Raw batter data: `{row[batter_col]}`")
                 
                 if batters_displayed == 0:
-                    st.write("   ⚠️ No batter data found in compressed format")
+                    st.write("   ⚠️ No parseable batter data found")
                     
                     # Show raw data for debugging
-                    st.write("**Debug - Available batter columns with data:**")
-                    for batter_col in batter_columns[:3]:  # Show first 3 for debugging
-                        if batter_col in row and row[batter_col]:
-                            st.write(f"   {batter_col}: `{row[batter_col]}`")
-                        elif batter_col in row:
-                            st.write(f"   {batter_col}: (empty)")
-                    
-                    # Show all non-empty columns for debugging
-                    st.write("**All non-empty columns in this row:**")
-                    for col in row.index:
-                        if row[col] and str(row[col]).strip():
-                            st.write(f"   {col}: `{row[col]}`")
+                    st.write("**Debug - Batter column contents:**")
+                    for batter_col in batter_columns:
+                        if batter_col in row:
+                            content = row[batter_col]
+                            st.write(f"   {batter_col}: `{content}`")
             
             with col2:
                 if estimated_ev > 0:

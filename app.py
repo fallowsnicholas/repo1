@@ -56,6 +56,8 @@ st.markdown("""
         display: flex;
         align-items: center;
         padding-left: 24px;
+        max-width: 1280px;
+        margin: 0 auto;
     }
 
     .stTabs [data-baseweb="tab"] {
@@ -74,14 +76,9 @@ st.markdown("""
         background-color: transparent !important;
     }
 
+    /* Remove the underlines */
     .stTabs [aria-selected="true"]::after {
-        content: '';
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 32px;
-        height: 2px;
-        background: #111827;
+        display: none;
     }
 </style>
 """, unsafe_allow_html=True)

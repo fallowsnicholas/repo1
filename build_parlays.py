@@ -415,8 +415,8 @@ def main():
             print("❌ No correlation parlays could be built")
             return
         
-        # Save results
-        builder.save_parlays(parlays, client)
+        # Save results - CHANGED TO USE COMPRESSED FORMAT
+        builder.save_parlays_compressed(parlays, client)  # ← This was the issue!
         
         print(f"\n✅ STEP 7 COMPLETE - SIMPLIFIED PIPELINE!")
         print(f"   🎯 Correlation parlays built: {len(parlays)}")

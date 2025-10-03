@@ -33,10 +33,11 @@ def connect_to_sheets():
         return None
 
 def read_ev_results():
-    """Read Individual EV data from Google Sheets EV_RESULTS"""
+    """Read Individual EV data from Google Sheets EV_RESULTS with detailed debugging"""
     try:
         client = connect_to_sheets()
         if not client:
+            logger.error("Failed to get Google Sheets client")
             return []
         
         spreadsheet = client.open("MLB_Splash_Data")
@@ -49,36 +50,106 @@ def read_ev_results():
             logger.warning("EV_RESULTS sheet is empty")
             return []
         
-        # Find header row (skip metadata)
+        # Debug: Show first 10 rows of raw data
+        logger.info(f"Total rows in sheet: {len(all_data)}")
+        for i, row in enumerate(all_data[:10]):
+            logger.info(f"Row {i}: {row[:8]}")  # Show first 8 columns
+        
+        # Find header row (skip metadata) - be more flexible
         header_row_index = -1
+        possible_headers = ['Player', 'Name', 'Market', 'Line', 'EV', 'Splash_EV_Percentage']
+        
         for i, row in enumerate(all_data):
-            if row and any(col in row for col in ['Player', 'Name', 'Market']):
+            if row and any(header in row for header in possible_headers):
+                logger.info(f"Found potential header row at index {i}: {row}")
                 header_row_index = i
                 break
         
         if header_row_index == -1:
             logger.warning("Could not find header row in EV_RESULTS")
+            logger.info("Looking for any row with multiple non-empty cells...")
+            for i, row in enumerate(all_data):
+                non_empty = [cell for cell in row if cell and str(cell).strip()]
+                if len(non_empty) >= 5:
+                    logger.info(f"Row {i} has {len(non_empty)} non-empty cells: {non_empty}")
+                    if i <= 15:  # Only consider first 15 rows as potential headers
+                        header_row_index = i
+                        break
+        
+        if header_row_index == -1:
+            logger.error("Still no header row found")
             return []
         
         # Extract headers and data
         headers = all_data[header_row_index]
         data_rows = all_data[header_row_index + 1:]
         
+        logger.info(f"Using headers from row {header_row_index}: {headers}")
+        logger.info(f"Data rows available: {len(data_rows)}")
+        
+        # Show first few data rows
+        for i, row in enumerate(data_rows[:3]):
+            logger.info(f"Data row {i}: {row[:6]}")
+        
         # Create DataFrame
         ev_df = pd.DataFrame(data_rows, columns=headers)
         
-        # Remove empty rows
-        ev_df = ev_df[ev_df['Player'].notna() & (ev_df['Player'] != '')]
+        # Debug DataFrame creation
+        logger.info(f"DataFrame shape: {ev_df.shape}")
+        logger.info(f"DataFrame columns: {list(ev_df.columns)}")
+        
+        # Look for Player column variations
+        player_col = None
+        for col in ev_df.columns:
+            if 'player' in col.lower() or 'name' in col.lower():
+                player_col = col
+                break
+        
+        if not player_col:
+            logger.error(f"No player column found. Available columns: {list(ev_df.columns)}")
+            return []
+        
+        logger.info(f"Using player column: '{player_col}'")
+        
+        # Remove empty rows based on player column
+        before_filter = len(ev_df)
+        ev_df = ev_df[ev_df[player_col].notna() & (ev_df[player_col] != '')]
+        after_filter = len(ev_df)
+        
+        logger.info(f"Rows after filtering: {after_filter} (removed {before_filter - after_filter})")
         
         if ev_df.empty:
             logger.warning("No EV data found after filtering")
             return []
         
+        # Show sample of actual data
+        logger.info(f"Sample data from first row:")
+        if len(ev_df) > 0:
+            first_row = ev_df.iloc[0]
+            for col, val in first_row.items():
+                logger.info(f"  {col}: {val}")
+        
         # Convert to format expected by dash table
         individual_evs = []
+        ev_col = None
+        
+        # Find EV column
+        for col in ev_df.columns:
+            if 'ev' in col.lower() and 'percentage' in col.lower():
+                ev_col = col
+                break
+        
+        if not ev_col:
+            logger.warning("No EV percentage column found, looking for alternatives...")
+            for col in ev_df.columns:
+                if 'ev' in col.lower():
+                    ev_col = col
+                    logger.info(f"Using EV column: {col}")
+                    break
+        
         for _, row in ev_df.iterrows():
             # Format EV percentage
-            ev_value = row.get('Splash_EV_Percentage', 0)
+            ev_value = row.get(ev_col, 0) if ev_col else '0'
             try:
                 ev_float = float(ev_value)
                 ev_percent = f"{ev_float:.1%}"
@@ -86,17 +157,24 @@ def read_ev_results():
                 ev_percent = str(ev_value)
             
             individual_evs.append({
-                'Player': row['Player'],
+                'Player': row[player_col],
                 'Market': row.get('Market', ''),
                 'Line': row.get('Line', ''),
                 'EV %': ev_percent
             })
         
-        logger.info(f"Successfully loaded {len(individual_evs)} Individual EV opportunities")
+        logger.info(f"Successfully converted {len(individual_evs)} Individual EV opportunities")
+        
+        # Show first converted result
+        if individual_evs:
+            logger.info(f"First converted result: {individual_evs[0]}")
+        
         return individual_evs
         
     except Exception as e:
         logger.error(f"Error reading EV results: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return []
 
 def get_individual_evs():

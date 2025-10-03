@@ -9,47 +9,8 @@ import json
 import logging
 
 # Initialize the Dash app with server configuration
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
+app = dash.Dash(__name__)
 server = app.server  # Expose server for deployment
-
-# Inject custom CSS for fixed header
-app.index_string = '''
-<!DOCTYPE html>
-<html>
-    <head>
-        {%metas%}
-        <title>{%title%}</title>
-        {%favicon%}
-        {%css%}
-        <style>
-            #header-fixed {
-                position: fixed !important;
-                top: 0 !important;
-                left: 0 !important;
-                right: 0 !important;
-                width: 100% !important;
-                z-index: 1000 !important;
-            }
-            #ribbons-fixed {
-                position: fixed !important;
-                top: 64px !important;
-                left: 0 !important;
-                right: 0 !important;
-                width: 100% !important;
-                z-index: 999 !important;
-            }
-        </style>
-    </head>
-    <body>
-        {%app_entry%}
-        <footer>
-            {%config%}
-            {%scripts%}
-            {%renderer%}
-        </footer>
-    </body>
-</html>
-'''
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)

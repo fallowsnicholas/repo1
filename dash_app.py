@@ -523,12 +523,18 @@ app.layout = html.Div([
             'justifyContent': 'space-between',
             'width': '100%'
         })
-    ], style={
+    ], className='header-fixed-class', style={
         'background': 'white',
         'borderBottom': '1px solid #e5e7eb',
         'height': '64px',
         'display': 'flex',
-        'alignItems': 'center'
+        'alignItems': 'center',
+        'position': 'fixed',
+        'top': '0',
+        'left': '0',
+        'right': '0',
+        'width': '100%',
+        'zIndex': '1000'
     }),
     
     # Two stacked ribbons underneath EV Sports (top left)
@@ -619,10 +625,19 @@ app.layout = html.Div([
             'margin': '0 auto',
             'padding': '16px 24px'
         })
-    ], style={
+    ], className='ribbons-fixed-class', style={
         'background': 'white',
-        'borderBottom': '1px solid #f3f4f6'
+        'borderBottom': '1px solid #f3f4f6',
+        'position': 'fixed',
+        'top': '64px',
+        'left': '0',
+        'right': '0',
+        'width': '100%',
+        'zIndex': '999'
     }),
+
+    # Spacer to push content below fixed headers (64px header + ~92px ribbons)
+    html.Div(style={'height': '156px'}),
     
     # Main Content Area - Always show Individual EVs
     html.Div([

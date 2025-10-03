@@ -16,6 +16,26 @@ server = app.server  # Expose server for deployment
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def clean_market_name(market):
+    """Clean market name by removing pitcher/batter prefix and formatting"""
+    if not market:
+        return market
+    
+    # Remove "pitcher_" or "batter_" prefix (case insensitive)
+    cleaned = market
+    if cleaned.lower().startswith('pitcher_'):
+        cleaned = cleaned[8:]
+    elif cleaned.lower().startswith('batter_'):
+        cleaned = cleaned[7:]
+    
+    # Replace underscores with spaces
+    cleaned = cleaned.replace('_', ' ')
+    
+    # Capitalize each word
+    cleaned = ' '.join(word.capitalize() for word in cleaned.split())
+    
+    return cleaned
+
 def connect_to_sheets():
     """Connect to Google Sheets using service account"""
     try:
@@ -163,9 +183,13 @@ def read_ev_results():
             except (ValueError, TypeError):
                 ev_percent = str(ev_value)
             
+            # Clean the market name
+            raw_market = row.get('Market', '')
+            cleaned_market = clean_market_name(raw_market)
+            
             individual_evs.append({
                 'Player': row[player_col],
-                'Market': row.get('Market', ''),
+                'Market': cleaned_market,
                 'Line': row.get('Line', ''),
                 'EV %': ev_percent
             })
@@ -347,14 +371,6 @@ def render_individual_evs():
     if not individualEVs:
         # Show empty state if no data
         return html.Div([
-            html.H2("Individual EV Opportunities", style={
-                'fontSize': '32px',
-                'fontWeight': '300',
-                'color': '#111827',
-                'margin': '0',
-                'marginBottom': '24px',
-                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-            }),
             html.Div([
                 html.P("No EV opportunities found.", style={
                     'fontSize': '16px',
@@ -373,57 +389,47 @@ def render_individual_evs():
         ])
     
     return html.Div([
-        # Header with filter buttons (clean text style)
+        # Filter buttons (centered)
         html.Div([
-            html.H2("Individual EV Opportunities", style={
-                'fontSize': '32px',
-                'fontWeight': '300',
-                'color': '#111827',
-                'margin': '0',
-                'marginRight': '24px',
-                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-            }),
-            html.Div([
-                html.Button(
-                    "All",
-                    id="filter-all",
-                    n_clicks=0,
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'color': '#111827',
-                        'fontSize': '14px',
-                        'fontWeight': '600',
-                        'padding': '6px 16px',
-                        'marginRight': '16px',
-                        'cursor': 'pointer',
-                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-                    }
-                )
-            ] + [
-                html.Button(
-                    market,
-                    id=f"filter-{market.replace(' ', '-').lower()}",
-                    n_clicks=0,
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'color': '#9ca3af',
-                        'fontSize': '14px',
-                        'fontWeight': '400',
-                        'padding': '6px 16px',
-                        'marginRight': '16px',
-                        'cursor': 'pointer',
-                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-                    }
-                ) for market in all_markets
-            ], style={'display': 'flex', 'alignItems': 'center'}) if all_markets else html.Div()
+            html.Button(
+                "All",
+                id="filter-all",
+                n_clicks=0,
+                style={
+                    'background': 'none',
+                    'border': 'none',
+                    'color': '#111827',
+                    'fontSize': '14px',
+                    'fontWeight': '600',
+                    'padding': '6px 16px',
+                    'marginRight': '16px',
+                    'cursor': 'pointer',
+                    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                }
+            )
+        ] + [
+            html.Button(
+                market,
+                id=f"filter-{market.replace(' ', '-').lower()}",
+                n_clicks=0,
+                style={
+                    'background': 'none',
+                    'border': 'none',
+                    'color': '#9ca3af',
+                    'fontSize': '14px',
+                    'fontWeight': '400',
+                    'padding': '6px 16px',
+                    'marginRight': '16px',
+                    'cursor': 'pointer',
+                    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                }
+            ) for market in all_markets
         ], style={
             'display': 'flex',
             'alignItems': 'center',
-            'justifyContent': 'space-between',
+            'justifyContent': 'center',
             'marginBottom': '24px'
-        }),
+        }) if all_markets else html.Div(),
         
         # Opportunities count
         html.Div(

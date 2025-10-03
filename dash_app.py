@@ -208,6 +208,180 @@ def read_ev_results():
         logger.error(f"Full traceback: {traceback.format_exc()}")
         return []
 
+def read_correlation_parlays():
+    """Read Correlation Parlays data from Google Sheets"""
+    try:
+        client = connect_to_sheets()
+        if not client:
+            logger.error("Failed to get Google Sheets client for parlays")
+            return []
+        
+        logger.info("📊 Attempting to read Correlation Parlays...")
+        spreadsheet = client.open("MLB_Splash_Data")
+        parlay_worksheet = spreadsheet.worksheet("CORRELATION_PARLAYS")
+        logger.info("✅ Successfully accessed CORRELATION_PARLAYS worksheet")
+        
+        all_data = parlay_worksheet.get_all_values()
+        
+        if not all_data:
+            logger.warning("CORRELATION_PARLAYS sheet is empty")
+            return []
+        
+        logger.info(f"Total rows in parlay sheet: {len(all_data)}")
+        
+        # Find header row
+        header_row_index = -1
+        for i, row in enumerate(all_data):
+            if row and 'anchor_pitcher' in str(row).lower():
+                logger.info(f"Found parlay header at index {i}: {row}")
+                header_row_index = i
+                break
+        
+        if header_row_index == -1:
+            logger.error("Could not find header row in CORRELATION_PARLAYS")
+            return []
+        
+        headers = all_data[header_row_index]
+        data_rows = all_data[header_row_index + 1:]
+        
+        logger.info(f"Parlay headers: {headers}")
+        logger.info(f"Parlay data rows: {len(data_rows)}")
+        
+        # Create DataFrame
+        parlay_df = pd.DataFrame(data_rows, columns=headers)
+        
+        # Remove empty rows
+        parlay_df = parlay_df[parlay_df.iloc[:, 0].notna() & (parlay_df.iloc[:, 0] != '')]
+        
+        if parlay_df.empty:
+            logger.warning("No parlay data found after filtering")
+            return []
+        
+        logger.info(f"Found {len(parlay_df)} parlay rows")
+        
+        # Parse parlays - each row is a parlay with anchor pitcher and batters
+        parlays = []
+        
+        for idx, row in parlay_df.iterrows():
+            try:
+                # Get anchor pitcher info
+                anchor_col_prefix = None
+                for col in parlay_df.columns:
+                    if 'anchor' in col.lower() and 'pitcher' in col.lower():
+                        anchor_col_prefix = col.split('_')[0] + '_'
+                        break
+                
+                if not anchor_col_prefix:
+                    logger.warning(f"No anchor pitcher columns found in row {idx}")
+                    continue
+                
+                # Build anchor pitcher data
+                anchor_name = row.get(f'{anchor_col_prefix}pitcher', '') or row.get('anchor_pitcher', '')
+                anchor_market = row.get(f'{anchor_col_prefix}pitcher_market', '') or row.get('anchor_pitcher_market', '')
+                anchor_line = row.get(f'{anchor_col_prefix}pitcher_line', '') or row.get('anchor_pitcher_line', '')
+                anchor_over_under = row.get(f'{anchor_col_prefix}pitcher_over_under', '') or row.get('anchor_pitcher_over_under', '')
+                anchor_ev = row.get(f'{anchor_col_prefix}pitcher_EV', '') or row.get('anchor_pitcher_EV', '')
+                anchor_odds = row.get(f'{anchor_col_prefix}pitcher_american_odds', '') or row.get('anchor_pitcher_american_odds', '')
+                
+                # Clean anchor market name
+                anchor_market_clean = clean_market_name(anchor_market)
+                
+                # Collect batter legs
+                batter_legs = []
+                batter_num = 1
+                
+                while True:
+                    batter_prefix = f'batter_{batter_num}_'
+                    
+                    # Check if this batter exists
+                    name_col = None
+                    for col in parlay_df.columns:
+                        if batter_prefix in col.lower() and ('name' in col.lower() or col.lower() == f'batter_{batter_num}'):
+                            name_col = col
+                            break
+                    
+                    if not name_col:
+                        break
+                    
+                    batter_name = row.get(name_col, '')
+                    if not batter_name:
+                        break
+                    
+                    # Get batter info
+                    batter_market = row.get(f'batter_{batter_num}_market', '')
+                    batter_line = row.get(f'batter_{batter_num}_line', '')
+                    batter_over_under = row.get(f'batter_{batter_num}_over_under', '')
+                    batter_ev = row.get(f'batter_{batter_num}_EV', '')
+                    batter_odds = row.get(f'batter_{batter_num}_american_odds', '')
+                    
+                    # Clean batter market name
+                    batter_market_clean = clean_market_name(batter_market)
+                    
+                    # Format batter info into condensed string
+                    batter_info = f"{batter_name} • {batter_market_clean} {batter_over_under} {batter_line}"
+                    if batter_ev:
+                        try:
+                            ev_float = float(batter_ev)
+                            batter_info += f" • EV: {ev_float:.1%}"
+                        except:
+                            batter_info += f" • EV: {batter_ev}"
+                    if batter_odds:
+                        batter_info += f" • {batter_odds}"
+                    
+                    batter_legs.append({
+                        'Batter': batter_info
+                    })
+                    
+                    batter_num += 1
+                
+                if not batter_legs:
+                    logger.warning(f"No batters found for parlay {idx}")
+                    continue
+                
+                # Calculate total EV
+                total_ev = 0
+                try:
+                    if anchor_ev:
+                        total_ev += float(anchor_ev)
+                    for i in range(1, batter_num):
+                        batter_ev_val = row.get(f'batter_{i}_EV', '')
+                        if batter_ev_val:
+                            total_ev += float(batter_ev_val)
+                except Exception as e:
+                    logger.warning(f"Error calculating total EV: {e}")
+                
+                # Format anchor pitcher info
+                anchor_info = {
+                    'Player': anchor_name,
+                    'Market': anchor_market_clean,
+                    'Line': f"{anchor_over_under} {anchor_line}",
+                    'EV': f"{float(anchor_ev):.1%}" if anchor_ev else "",
+                    'Odds': anchor_odds
+                }
+                
+                parlays.append({
+                    'id': f"PARLAY_{idx + 1:03d}",
+                    'anchor': anchor_info,
+                    'batters': batter_legs,
+                    'totalEV': f"{total_ev:.1%}" if total_ev else "N/A",
+                    'leg_count': 1 + len(batter_legs)
+                })
+                
+            except Exception as e:
+                logger.error(f"Error parsing parlay row {idx}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                continue
+        
+        logger.info(f"Successfully parsed {len(parlays)} parlays")
+        return parlays
+        
+    except Exception as e:
+        logger.error(f"Error reading correlation parlays: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        return []
+
 def get_individual_evs():
     """Get Individual EV data - try real data first, fallback to empty if fails"""
     real_data = read_ev_results()
@@ -219,8 +393,19 @@ def get_individual_evs():
         logger.warning("No real EV data available, showing empty state")
         return []
 
+def get_correlation_parlays():
+    """Get Correlation Parlays data"""
+    real_data = read_correlation_parlays()
+    
+    if real_data:
+        return real_data
+    else:
+        logger.warning("No parlay data available, showing empty state")
+        return []
+
 # Load real data
 individualEVs = get_individual_evs()
+parlays = get_correlation_parlays()
 
 # Get unique markets for filtering (handle empty data case)
 all_markets = list(set([ev['Market'] for ev in individualEVs if ev.get('Market')])) if individualEVs else []
@@ -316,7 +501,7 @@ app.layout = html.Div([
                 )
             ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '8px'}),
             
-            # Ribbon 2: View Selection (stacked underneath) - Only Individual EVs for now
+            # Ribbon 2: View Selection (stacked underneath)
             html.Div([
                 html.Button("Individual EVs",
                     id="view-individual",
@@ -329,6 +514,20 @@ app.layout = html.Div([
                         'fontWeight': '600',
                         'padding': '8px 0',
                         'marginRight': '32px',
+                        'cursor': 'pointer',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }
+                ),
+                html.Button("Correlation Parlays",
+                    id="view-parlays",
+                    n_clicks=0,
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#9ca3af',
+                        'fontSize': '14px',
+                        'fontWeight': '400',
+                        'padding': '8px 0',
                         'cursor': 'pointer',
                         'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
                     }
@@ -361,11 +560,58 @@ app.layout = html.Div([
 
 # Main callback to render content
 @app.callback(
-    Output('main-content-fixed', 'children'),
-    Input('view-individual', 'n_clicks')
+    [Output('main-content-fixed', 'children'),
+     Output('view-individual', 'style'),
+     Output('view-parlays', 'style')],
+    [Input('view-individual', 'n_clicks'),
+     Input('view-parlays', 'n_clicks')]
 )
-def render_main_content(n_clicks):
-    return render_individual_evs()
+def render_main_content(individual_clicks, parlays_clicks):
+    ctx = dash.callback_context
+    
+    # Determine which view button was clicked
+    current_view = 'individual'
+    if ctx.triggered:
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        if button_id == 'view-parlays':
+            current_view = 'parlays'
+    
+    # Define button styles
+    active_style = {
+        'background': 'none',
+        'border': 'none',
+        'color': '#111827',
+        'fontSize': '14px',
+        'fontWeight': '600',
+        'padding': '8px 0',
+        'marginRight': '32px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }
+    
+    inactive_style = {
+        'background': 'none',
+        'border': 'none',
+        'color': '#9ca3af',
+        'fontSize': '14px',
+        'fontWeight': '400',
+        'padding': '8px 0',
+        'marginRight': '32px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }
+    
+    # Render content based on current view
+    if current_view == 'individual':
+        content = render_individual_evs()
+        individual_style = active_style
+        parlays_style = inactive_style
+    else:
+        content = render_parlays()
+        individual_style = inactive_style
+        parlays_style = active_style
+    
+    return content, individual_style, parlays_style
 
 def render_individual_evs():
     if not individualEVs:
@@ -448,6 +694,142 @@ def render_individual_evs():
         html.Div(id='evs-table')
     ])
 
+def render_parlays():
+    """Render correlation parlays view"""
+    if not parlays:
+        return html.Div([
+            html.Div([
+                html.P("No correlation parlays found.", style={
+                    'fontSize': '16px',
+                    'color': '#6b7280',
+                    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                }),
+                html.P("Check the logs for Google Sheets connection details.", style={
+                    'fontSize': '14px',
+                    'color': '#9ca3af',
+                    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                })
+            ], style={
+                'textAlign': 'center',
+                'padding': '48px 24px'
+            })
+        ])
+    
+    return html.Div([
+        # Parlays count
+        html.Div(
+            f"{len(parlays)} parlays found",
+            style={
+                'fontSize': '14px',
+                'color': '#6b7280',
+                'marginBottom': '24px',
+                'fontWeight': '600',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+            }
+        ),
+        
+        # Parlay cards
+        html.Div([
+            render_parlay_card(parlay) for parlay in parlays
+        ])
+    ])
+
+def render_parlay_card(parlay):
+    """Render a single parlay card with anchor pitcher and batters"""
+    return html.Div([
+        # Parlay header with ID and total EV
+        html.Div([
+            html.Span(f"{parlay['id']} • {parlay['leg_count']} Legs", style={
+                'fontWeight': '500',
+                'color': '#6b7280'
+            }),
+            html.Span(" • Total EV: ", style={'color': '#6b7280'}),
+            html.Span(parlay['totalEV'], style={
+                'color': '#059669',
+                'fontWeight': '600'
+            })
+        ], style={
+            'background': '#f9fafb',
+            'padding': '12px 24px',
+            'borderBottom': '1px solid #e5e7eb',
+            'fontSize': '12px',
+            'textTransform': 'uppercase',
+            'letterSpacing': '0.5px',
+            'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+        }),
+        
+        # Anchor Pitcher section
+        html.Div([
+            html.Div("ANCHOR PITCHER", style={
+                'fontSize': '11px',
+                'fontWeight': '600',
+                'color': '#9ca3af',
+                'textTransform': 'uppercase',
+                'letterSpacing': '0.5px',
+                'marginBottom': '8px',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+            }),
+            html.Div([
+                html.Div([
+                    html.Span(parlay['anchor']['Player'], style={
+                        'fontWeight': '600',
+                        'fontSize': '15px',
+                        'color': '#111827'
+                    }),
+                    html.Span(f" • {parlay['anchor']['Market']} {parlay['anchor']['Line']}", style={
+                        'fontSize': '14px',
+                        'color': '#374151'
+                    }),
+                    html.Span(f" • EV: {parlay['anchor']['EV']}", style={
+                        'fontSize': '14px',
+                        'color': '#059669',
+                        'fontWeight': '600',
+                        'marginLeft': '8px'
+                    }),
+                    html.Span(f" • {parlay['anchor']['Odds']}", style={
+                        'fontSize': '14px',
+                        'color': '#6b7280',
+                        'marginLeft': '8px'
+                    }) if parlay['anchor']['Odds'] else None
+                ], style={'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'})
+            ], style={
+                'padding': '12px 0',
+                'borderBottom': '1px solid #e5e7eb'
+            })
+        ], style={'padding': '16px 24px'}),
+        
+        # Batters section
+        html.Div([
+            html.Div("OPPOSING BATTERS", style={
+                'fontSize': '11px',
+                'fontWeight': '600',
+                'color': '#9ca3af',
+                'textTransform': 'uppercase',
+                'letterSpacing': '0.5px',
+                'marginBottom': '12px',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+            }),
+            html.Div([
+                html.Div([
+                    html.Div(batter['Batter'], style={
+                        'fontSize': '14px',
+                        'color': '#374151',
+                        'padding': '10px 0',
+                        'borderBottom': '1px solid #f3f4f6' if i < len(parlay['batters']) - 1 else 'none',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    })
+                ]) for i, batter in enumerate(parlay['batters'])
+            ])
+        ], style={'padding': '0 24px 24px 24px'})
+        
+    ], style={
+        'background': 'white',
+        'border': '1px solid #e5e7eb',
+        'borderRadius': '8px',
+        'overflow': 'hidden',
+        'marginBottom': '24px',
+        'boxShadow': '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
+    })
 # Filtering callback for Individual EVs (only if we have markets)
 if all_markets:
     @app.callback(

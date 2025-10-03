@@ -1,4 +1,4 @@
-# dash_app.py - Dash app configured for server deployment
+# dash_app.py - Updated with clean text buttons and modern font
 import dash
 from dash import dcc, html, Input, Output, callback, dash_table
 import pandas as pd
@@ -40,20 +40,28 @@ parlays = [
 # Get unique markets for filtering
 all_markets = list(set([ev['Market'] for ev in individualEVs]))
 
-# Define the app layout - same as before but with server optimization
+# Define the app layout with clean text buttons and modern font
 app.layout = html.Div([
-    # Header
+    # Add modern font import
+    html.Link(
+        rel='stylesheet',
+        href='https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap'
+    ),
+    
+    # Header with light grey line underneath
     html.Div([
         html.Div([
             html.H1("EV Sports", style={
                 'margin': '0',
                 'fontSize': '24px',
-                'fontWeight': '700',
-                'color': '#111827'
+                'fontWeight': '800',
+                'color': '#111827',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             }),
             html.Span("Last Updated: 2 hours ago", style={
                 'fontSize': '14px',
-                'color': '#6b7280'
+                'color': '#6b7280',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             })
         ], style={
             'maxWidth': '1280px',
@@ -72,55 +80,98 @@ app.layout = html.Div([
         'alignItems': 'center'
     }),
     
-    # League Selection Ribbon
+    # Two stacked ribbons underneath EV Sports (top left)
     html.Div([
         html.Div([
-            html.Span("MLB", style={
-                'color': '#111827',
-                'fontWeight': '500',
-                'fontSize': '14px',
-                'marginRight': '32px'
-            }),
-            html.Span("NFL", style={
-                'color': '#9ca3af',
-                'fontSize': '14px',
-                'marginRight': '32px'
-            }),
-            html.Span("NBA", style={
-                'color': '#9ca3af',
-                'fontSize': '14px'
-            })
+            # Ribbon 1: League Selection (stacked)
+            html.Div([
+                html.Button("MLB", 
+                    id="league-mlb",
+                    n_clicks=0,
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#111827',
+                        'fontSize': '14px',
+                        'fontWeight': '600',
+                        'padding': '8px 0',
+                        'marginRight': '32px',
+                        'cursor': 'pointer',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }
+                ),
+                html.Button("NFL", 
+                    id="league-nfl",
+                    n_clicks=0,
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#9ca3af',
+                        'fontSize': '14px',
+                        'fontWeight': '400',
+                        'padding': '8px 0',
+                        'marginRight': '32px',
+                        'cursor': 'pointer',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }
+                ),
+                html.Button("NBA",
+                    id="league-nba",
+                    n_clicks=0,
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#9ca3af',
+                        'fontSize': '14px',
+                        'fontWeight': '400',
+                        'padding': '8px 0',
+                        'cursor': 'pointer',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }
+                )
+            ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '8px'}),
+            
+            # Ribbon 2: View Selection (stacked underneath)
+            html.Div([
+                html.Button("Individual EVs",
+                    id="view-individual",
+                    n_clicks=0,
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#111827',
+                        'fontSize': '14px',
+                        'fontWeight': '600',
+                        'padding': '8px 0',
+                        'marginRight': '32px',
+                        'cursor': 'pointer',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }
+                ),
+                html.Button("Correlation Parlays",
+                    id="view-parlays",
+                    n_clicks=0,
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#9ca3af',
+                        'fontSize': '14px',
+                        'fontWeight': '400',
+                        'padding': '8px 0',
+                        'cursor': 'pointer',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }
+                )
+            ], style={'display': 'flex', 'alignItems': 'center'})
         ], style={
             'maxWidth': '1280px',
             'margin': '0 auto',
             'padding': '16px 24px'
         })
     ], style={
-        'background': '#f9fafb',
-        'borderBottom': '1px solid #e5e7eb',
-        'height': '56px',
-        'display': 'flex',
-        'alignItems': 'center'
+        'background': 'white',
+        'borderBottom': '1px solid #f3f4f6'
     }),
-    
-    # Main Navigation Tabs
-    dcc.Tabs(
-        id="main-tabs",
-        value='individual',
-        children=[
-            dcc.Tab(label='Individual EVs', value='individual'),
-            dcc.Tab(label='Correlation Parlays', value='parlays')
-        ],
-        style={
-            'height': '56px',
-            'borderBottom': '1px solid #e5e7eb'
-        },
-        colors={
-            'border': '#e5e7eb',
-            'primary': '#111827',
-            'background': 'white'
-        }
-    ),
     
     # Main Content Area
     html.Div([
@@ -128,32 +179,85 @@ app.layout = html.Div([
     ], style={
         'maxWidth': '1280px',
         'margin': '0 auto',
-        'padding': '48px 24px'
+        'padding': '48px 24px',
+        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     })
-])
+], style={
+    'backgroundColor': 'white',
+    'minHeight': '100vh',
+    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+})
 
-# [Include all the callback functions from the previous code - same as before]
+# State management for active views
+current_view = 'individual'
 
 @app.callback(
-    Output('main-content', 'children'),
-    Input('main-tabs', 'value')
+    [Output('main-content', 'children'),
+     Output('view-individual', 'style'),
+     Output('view-parlays', 'style')],
+    [Input('view-individual', 'n_clicks'),
+     Input('view-parlays', 'n_clicks')]
 )
-def render_content(active_tab):
-    if active_tab == 'individual':
-        return render_individual_evs()
-    elif active_tab == 'parlays':
-        return render_parlays()
+def update_view(individual_clicks, parlays_clicks):
+    global current_view
+    ctx = dash.callback_context
+    
+    # Determine which view button was clicked
+    if ctx.triggered:
+        button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+        if button_id == 'view-individual':
+            current_view = 'individual'
+        elif button_id == 'view-parlays':
+            current_view = 'parlays'
+    
+    # Define button styles
+    active_style = {
+        'background': 'none',
+        'border': 'none',
+        'color': '#111827',
+        'fontSize': '14px',
+        'fontWeight': '600',
+        'padding': '8px 0',
+        'marginRight': '32px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }
+    
+    inactive_style = {
+        'background': 'none',
+        'border': 'none',
+        'color': '#9ca3af',
+        'fontSize': '14px',
+        'fontWeight': '400',
+        'padding': '8px 0',
+        'marginRight': '32px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }
+    
+    # Render content based on current view
+    if current_view == 'individual':
+        content = render_individual_evs()
+        individual_style = active_style
+        parlays_style = inactive_style
+    else:
+        content = render_parlays()
+        individual_style = inactive_style
+        parlays_style = active_style
+    
+    return content, individual_style, parlays_style
 
 def render_individual_evs():
     return html.Div([
-        # Header with filter buttons
+        # Header with filter buttons (clean text style)
         html.Div([
             html.H2("Individual EV Opportunities", style={
-                'fontSize': '30px',
+                'fontSize': '32px',
                 'fontWeight': '300',
                 'color': '#111827',
                 'margin': '0',
-                'marginRight': '24px'
+                'marginRight': '24px',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             }),
             html.Div([
                 html.Button(
@@ -161,15 +265,15 @@ def render_individual_evs():
                     id="filter-all",
                     n_clicks=0,
                     style={
-                        'backgroundColor': '#111827',
-                        'color': 'white',
-                        'border': '1px solid #111827',
-                        'borderRadius': '4px',
-                        'padding': '6px 16px',
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#111827',
                         'fontSize': '14px',
-                        'fontWeight': '500',
-                        'marginRight': '8px',
-                        'cursor': 'pointer'
+                        'fontWeight': '600',
+                        'padding': '6px 16px',
+                        'marginRight': '16px',
+                        'cursor': 'pointer',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
                     }
                 )
             ] + [
@@ -178,15 +282,15 @@ def render_individual_evs():
                     id=f"filter-{market.replace(' ', '-').lower()}",
                     n_clicks=0,
                     style={
-                        'backgroundColor': 'white',
-                        'color': '#6b7280',
-                        'border': '1px solid #d1d5db',
-                        'borderRadius': '4px',
-                        'padding': '6px 16px',
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#9ca3af',
                         'fontSize': '14px',
-                        'fontWeight': '500',
-                        'marginRight': '8px',
-                        'cursor': 'pointer'
+                        'fontWeight': '400',
+                        'padding': '6px 16px',
+                        'marginRight': '16px',
+                        'cursor': 'pointer',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
                     }
                 ) for market in all_markets
             ], style={'display': 'flex', 'alignItems': 'center'})
@@ -205,7 +309,8 @@ def render_individual_evs():
                 'fontSize': '14px',
                 'color': '#6b7280',
                 'marginBottom': '24px',
-                'fontWeight': '600'
+                'fontWeight': '600',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             }
         ),
         
@@ -218,15 +323,17 @@ def render_parlays():
         # Header
         html.Div([
             html.H2("Correlation Parlays", style={
-                'fontSize': '30px',
+                'fontSize': '32px',
                 'fontWeight': '300',
                 'color': '#111827',
-                'margin': '0'
+                'margin': '0',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             }),
             html.Span(f"{len(parlays)} parlays found", style={
                 'fontSize': '14px',
                 'color': '#6b7280',
-                'fontWeight': '600'
+                'fontWeight': '600',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             })
         ], style={
             'display': 'flex',
@@ -235,28 +342,26 @@ def render_parlays():
             'marginBottom': '24px'
         }),
         
-        # Action buttons
+        # Action buttons (clean text style)
         html.Div([
             html.Button("🔄 Refresh", style={
-                'padding': '8px 16px',
+                'background': 'none',
+                'border': 'none',
                 'fontSize': '14px',
                 'fontWeight': '500',
                 'color': '#374151',
-                'backgroundColor': 'white',
-                'border': '1px solid #d1d5db',
-                'borderRadius': '4px',
-                'marginRight': '16px',
-                'cursor': 'pointer'
+                'marginRight': '24px',
+                'cursor': 'pointer',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             }),
             html.Button("🔍 Filter", style={
-                'padding': '8px 16px',
+                'background': 'none',
+                'border': 'none',
                 'fontSize': '14px',
                 'fontWeight': '500',
                 'color': '#374151',
-                'backgroundColor': 'white',
-                'border': '1px solid #d1d5db',
-                'borderRadius': '4px',
-                'cursor': 'pointer'
+                'cursor': 'pointer',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             })
         ], style={'marginBottom': '24px'}),
         
@@ -283,7 +388,8 @@ def render_parlay_card(parlay):
             'fontWeight': '500',
             'color': '#6b7280',
             'textTransform': 'uppercase',
-            'letterSpacing': '0.5px'
+            'letterSpacing': '0.5px',
+            'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
         }),
         
         # Parlay legs table
@@ -302,14 +408,16 @@ def render_parlay_card(parlay):
                 'textTransform': 'uppercase',
                 'fontSize': '12px',
                 'letterSpacing': '0.5px',
-                'padding': '12px 24px'
+                'padding': '12px 24px',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             },
             style_cell={
                 'textAlign': 'left',
                 'padding': '16px 24px',
                 'fontSize': '14px',
                 'border': 'none',
-                'borderBottom': '1px solid #e5e7eb'
+                'borderBottom': '1px solid #e5e7eb',
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
             },
             style_data={
                 'backgroundColor': 'white',
@@ -330,7 +438,7 @@ def render_parlay_card(parlay):
         'marginBottom': '24px'
     })
 
-# Filtering callback (include the complete callback from previous code)
+# Filtering callback for Individual EVs
 @app.callback(
     [Output('evs-table', 'children'),
      Output('opportunities-count', 'children')] +
@@ -375,14 +483,16 @@ def update_evs_table(*args):
             'textTransform': 'uppercase',
             'fontSize': '12px',
             'letterSpacing': '0.5px',
-            'padding': '16px 24px'
+            'padding': '16px 24px',
+            'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
         },
         style_cell={
             'textAlign': 'left',
             'padding': '16px 24px',
             'fontSize': '14px',
             'border': 'none',
-            'borderBottom': '1px solid #e5e7eb'
+            'borderBottom': '1px solid #e5e7eb',
+            'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
         },
         style_data={
             'backgroundColor': 'white',
@@ -409,27 +519,27 @@ def update_evs_table(*args):
     
     # Update button styles
     active_style = {
-        'backgroundColor': '#111827',
-        'color': 'white',
-        'border': '1px solid #111827',
-        'borderRadius': '4px',
-        'padding': '6px 16px',
+        'background': 'none',
+        'border': 'none',
+        'color': '#111827',
         'fontSize': '14px',
-        'fontWeight': '500',
-        'marginRight': '8px',
-        'cursor': 'pointer'
+        'fontWeight': '600',
+        'padding': '6px 16px',
+        'marginRight': '16px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }
     
     inactive_style = {
-        'backgroundColor': 'white',
-        'color': '#6b7280',
-        'border': '1px solid #d1d5db',
-        'borderRadius': '4px',
-        'padding': '6px 16px',
+        'background': 'none',
+        'border': 'none',
+        'color': '#9ca3af',
         'fontSize': '14px',
-        'fontWeight': '500',
-        'marginRight': '8px',
-        'cursor': 'pointer'
+        'fontWeight': '400',
+        'padding': '6px 16px',
+        'marginRight': '16px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }
     
     # Create styles list

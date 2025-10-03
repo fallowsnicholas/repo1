@@ -502,7 +502,7 @@ app.layout = html.Div([
     # Header with light grey line underneath
     html.Div([
         html.Div([
-            html.H1("EV Sports Test Version", style={
+            html.H1("EV Sports", style={
                 'margin': '0',
                 'fontSize': '24px',
                 'fontWeight': '800',

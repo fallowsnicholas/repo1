@@ -252,16 +252,25 @@ def read_correlation_parlays():
         for i, row in enumerate(all_data[:10]):
             logger.info(f"  Row {i}: {row[:10]}")  # Show first 10 columns
         
-        # Find header row - look for any row with column headers
+        # Find header row - look for row with actual column names (multiple fields)
         header_row_index = -1
-        possible_header_indicators = ['anchor', 'pitcher', 'batter', 'market', 'player', 'name']
         
         for i, row in enumerate(all_data[:20]):  # Check first 20 rows
-            row_lower = [str(cell).lower() for cell in row]
-            if any(indicator in ' '.join(row_lower) for indicator in possible_header_indicators):
-                logger.info(f"🎯 Found potential header at row {i}: {row}")
-                header_row_index = i
-                break
+            # A real header row should have multiple non-empty cells with _underscore column names
+            non_empty = [cell for cell in row if cell and str(cell).strip()]
+            
+            # Check if this looks like a header row (has multiple column-like names)
+            if len(non_empty) >= 5:  # At least 5 columns
+                row_lower = [str(cell).lower() for cell in row]
+                # Real headers have underscores or are proper column names like "Pitcher_Name", "Parlay_ID"
+                has_underscore_cols = any('_' in str(cell) for cell in row if cell)
+                has_id_col = any('id' in str(cell).lower() for cell in row if cell)
+                has_pitcher_name = any('pitcher_name' in str(cell).lower() for cell in row if cell)
+                
+                if has_underscore_cols or (has_id_col and has_pitcher_name):
+                    logger.info(f"🎯 Found actual header row at index {i}: {row}")
+                    header_row_index = i
+                    break
         
         if header_row_index == -1:
             logger.error("❌ Could not find header row in parlay sheet")
@@ -315,132 +324,78 @@ def read_correlation_parlays():
         for idx, row in parlay_df.iterrows():
             logger.info(f"\n🔄 Processing parlay row {idx}...")
             try:
-                # Find anchor pitcher columns
-                anchor_cols = [col for col in parlay_df.columns if 'anchor' in col.lower() or ('pitcher' in col.lower() and 'batter' not in col.lower())]
-                logger.info(f"  📋 Anchor columns found: {anchor_cols}")
+                # Get pitcher information from columns
+                pitcher_name = row.get('Pitcher_Name', '')
+                pitcher_team = row.get('Pitcher_Team', '')
+                pitcher_market = row.get('Pitcher_Market', '')
+                pitcher_line = row.get('Pitcher_Line', '')
+                pitcher_bet_type = row.get('Pitcher_Bet_Type', '')
+                pitcher_ev = row.get('Pitcher_EV', '')
                 
-                # Try to get anchor pitcher name from various possible column names
-                anchor_name = None
-                for possible_col in anchor_cols:
-                    if row.get(possible_col):
-                        if 'name' in possible_col.lower() or possible_col.lower() in ['anchor_pitcher', 'pitcher', 'anchor']:
-                            anchor_name = row.get(possible_col)
-                            logger.info(f"  ✅ Found anchor name in column '{possible_col}': {anchor_name}")
-                            break
+                logger.info(f"  ✅ Pitcher Name: {pitcher_name}")
+                logger.info(f"  ✅ Pitcher Market: {pitcher_market}")
+                logger.info(f"  ✅ Pitcher Line: {pitcher_line}")
+                logger.info(f"  ✅ Pitcher Bet Type: {pitcher_bet_type}")
+                logger.info(f"  ✅ Pitcher EV: {pitcher_ev}")
                 
-                if not anchor_name:
-                    logger.warning(f"  ⚠️ No anchor pitcher name found in row {idx}, skipping")
-                    logger.info(f"  Available data: {dict(row)}")
+                if not pitcher_name:
+                    logger.warning(f"  ⚠️ No pitcher name found in row {idx}, skipping")
                     continue
                 
-                # Get anchor pitcher details - try multiple column name patterns
-                anchor_market = None
-                anchor_line = None
-                anchor_over_under = None
-                anchor_ev = None
-                anchor_odds = None
+                # Clean pitcher market name
+                pitcher_market_clean = clean_market_name(pitcher_market) if pitcher_market else ""
                 
-                for col in parlay_df.columns:
-                    col_lower = col.lower()
-                    val = row.get(col)
-                    
-                    if val and str(val).strip():
-                        if 'market' in col_lower and 'anchor' in col_lower:
-                            anchor_market = val
-                            logger.info(f"  ✅ Market: {val} (from {col})")
-                        elif 'line' in col_lower and 'anchor' in col_lower:
-                            anchor_line = val
-                            logger.info(f"  ✅ Line: {val} (from {col})")
-                        elif 'over' in col_lower or 'under' in col_lower:
-                            if 'anchor' in col_lower or idx == 0:
-                                anchor_over_under = val
-                                logger.info(f"  ✅ Over/Under: {val} (from {col})")
-                        elif 'ev' in col_lower and 'anchor' in col_lower:
-                            anchor_ev = val
-                            logger.info(f"  ✅ EV: {val} (from {col})")
-                        elif 'odds' in col_lower and 'anchor' in col_lower:
-                            anchor_odds = val
-                            logger.info(f"  ✅ Odds: {val} (from {col})")
-                
-                # Clean anchor market name
-                anchor_market_clean = clean_market_name(anchor_market) if anchor_market else ""
-                
-                # Collect batter legs
+                # Collect batter legs - they're in a compressed format in Batter_1, Batter_2 columns
                 batter_legs = []
                 batter_num = 1
                 
                 logger.info(f"  🔍 Looking for batters...")
                 
                 while batter_num <= 10:  # Check up to 10 batters
-                    # Find batter columns for this number
-                    batter_cols = [col for col in parlay_df.columns if f'batter_{batter_num}' in col.lower() or f'batter{batter_num}' in col.lower()]
+                    batter_col = f'Batter_{batter_num}'
+                    batter_data = row.get(batter_col, '')
                     
-                    if not batter_cols:
-                        logger.info(f"  ⏹️ No columns found for batter_{batter_num}, stopping")
+                    if not batter_data or str(batter_data).strip() == '':
+                        logger.info(f"  ⏹️ No data for {batter_col}, stopping")
                         break
                     
-                    logger.info(f"  📋 Batter {batter_num} columns: {batter_cols}")
+                    logger.info(f"  ✅ Found {batter_col}: {batter_data}")
                     
-                    # Get batter name
-                    batter_name = None
-                    for col in batter_cols:
-                        val = row.get(col)
-                        if val and str(val).strip() and ('name' in col.lower() or col.lower() == f'batter_{batter_num}'):
-                            batter_name = val
-                            logger.info(f"  ✅ Batter {batter_num} name: {batter_name}")
-                            break
-                    
-                    if not batter_name:
-                        logger.info(f"  ⏹️ No name found for batter_{batter_num}, stopping")
-                        break
-                    
-                    # Get batter details
-                    batter_market = None
-                    batter_line = None
-                    batter_over_under = None
-                    batter_ev = None
-                    batter_odds = None
-                    
-                    for col in batter_cols:
-                        val = row.get(col)
-                        if val and str(val).strip():
-                            col_lower = col.lower()
-                            if 'market' in col_lower:
-                                batter_market = val
-                            elif 'line' in col_lower:
-                                batter_line = val
-                            elif 'over' in col_lower or 'under' in col_lower:
-                                batter_over_under = val
-                            elif 'ev' in col_lower:
-                                batter_ev = val
-                            elif 'odds' in col_lower:
-                                batter_odds = val
-                    
-                    # Clean batter market name
-                    batter_market_clean = clean_market_name(batter_market) if batter_market else ""
-                    
-                    # Format batter info into condensed string
-                    batter_info = f"{batter_name}"
-                    if batter_market_clean:
-                        batter_info += f" • {batter_market_clean}"
-                    if batter_over_under:
-                        batter_info += f" {batter_over_under}"
-                    if batter_line:
-                        batter_info += f" {batter_line}"
-                    if batter_ev:
-                        try:
-                            ev_float = float(batter_ev)
-                            batter_info += f" • EV: {ev_float:.1%}"
-                        except:
-                            batter_info += f" • EV: {batter_ev}"
-                    if batter_odds:
-                        batter_info += f" • {batter_odds}"
-                    
-                    logger.info(f"  ✅ Batter {batter_num} info: {batter_info}")
-                    
-                    batter_legs.append({
-                        'Batter': batter_info
-                    })
+                    # Parse compressed format: "Name, Market, Line, Bet_Type, EV, Odds"
+                    # Example: "Gabriel Arias, batter_hits, Under 0.5, under, 0.0419216616, -115"
+                    try:
+                        parts = [p.strip() for p in str(batter_data).split(',')]
+                        if len(parts) >= 4:
+                            batter_name = parts[0]
+                            batter_market_raw = parts[1]
+                            batter_line = parts[2]
+                            batter_bet_type = parts[3] if len(parts) > 3 else ''
+                            batter_ev = parts[4] if len(parts) > 4 else ''
+                            batter_odds = parts[5] if len(parts) > 5 else ''
+                            
+                            # Clean batter market name
+                            batter_market_clean = clean_market_name(batter_market_raw)
+                            
+                            # Format batter info into condensed string
+                            batter_info = f"{batter_name} • {batter_market_clean} {batter_line}"
+                            if batter_ev:
+                                try:
+                                    ev_float = float(batter_ev)
+                                    batter_info += f" • EV: {ev_float:.1%}"
+                                except:
+                                    batter_info += f" • EV: {batter_ev}"
+                            if batter_odds:
+                                batter_info += f" • {batter_odds}"
+                            
+                            logger.info(f"  ✅ Parsed batter {batter_num}: {batter_info}")
+                            
+                            batter_legs.append({
+                                'Batter': batter_info
+                            })
+                        else:
+                            logger.warning(f"  ⚠️ Batter data doesn't have enough parts: {batter_data}")
+                    except Exception as e:
+                        logger.warning(f"  ⚠️ Error parsing batter data: {e}")
                     
                     batter_num += 1
                 
@@ -453,31 +408,35 @@ def read_correlation_parlays():
                 # Calculate total EV
                 total_ev = 0
                 try:
-                    if anchor_ev:
-                        total_ev += float(anchor_ev)
-                    for i in range(len(batter_legs)):
-                        batter_col_pattern = f'batter_{i+1}'
-                        for col in parlay_df.columns:
-                            if batter_col_pattern in col.lower() and 'ev' in col.lower():
-                                batter_ev_val = row.get(col)
-                                if batter_ev_val:
-                                    total_ev += float(batter_ev_val)
-                                break
+                    if pitcher_ev:
+                        total_ev += float(pitcher_ev)
+                    
+                    # Add batter EVs
+                    for i in range(1, batter_num):
+                        batter_col = f'Batter_{i}'
+                        batter_data = row.get(batter_col, '')
+                        if batter_data:
+                            parts = str(batter_data).split(',')
+                            if len(parts) > 4:
+                                try:
+                                    total_ev += float(parts[4].strip())
+                                except:
+                                    pass
                 except Exception as e:
                     logger.warning(f"  ⚠️ Error calculating total EV: {e}")
                 
-                # Format anchor pitcher info
-                anchor_info = {
-                    'Player': anchor_name,
-                    'Market': anchor_market_clean,
-                    'Line': f"{anchor_over_under or ''} {anchor_line or ''}".strip(),
-                    'EV': f"{float(anchor_ev):.1%}" if anchor_ev else "",
-                    'Odds': anchor_odds or ""
+                # Format pitcher info
+                pitcher_info = {
+                    'Player': pitcher_name,
+                    'Market': pitcher_market_clean,
+                    'Line': f"{pitcher_bet_type.title()} {pitcher_line}".strip() if pitcher_bet_type else pitcher_line,
+                    'EV': f"{float(pitcher_ev):.1%}" if pitcher_ev else "",
+                    'Odds': row.get('Pitcher_Odds', '') or ""  # If odds column exists
                 }
                 
                 parlay = {
-                    'id': f"PARLAY_{idx + 1:03d}",
-                    'anchor': anchor_info,
+                    'id': row.get('Parlay_ID', f"PARLAY_{idx + 1:03d}"),
+                    'anchor': pitcher_info,
                     'batters': batter_legs,
                     'totalEV': f"{total_ev:.1%}" if total_ev else "N/A",
                     'leg_count': 1 + len(batter_legs)

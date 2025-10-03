@@ -209,116 +209,224 @@ def read_ev_results():
         return []
 
 def read_correlation_parlays():
-    """Read Correlation Parlays data from Google Sheets"""
+    """Read Correlation Parlays data from Google Sheets with detailed debugging"""
     try:
         client = connect_to_sheets()
         if not client:
-            logger.error("Failed to get Google Sheets client for parlays")
+            logger.error("❌ Failed to get Google Sheets client for parlays")
             return []
         
         logger.info("📊 Attempting to read Correlation Parlays...")
         spreadsheet = client.open("MLB_Splash_Data")
-        parlay_worksheet = spreadsheet.worksheet("CORRELATION_PARLAYS")
-        logger.info("✅ Successfully accessed CORRELATION_PARLAYS worksheet")
+        
+        # Log all available worksheets
+        all_worksheets = spreadsheet.worksheets()
+        logger.info(f"📋 Available worksheets: {[ws.title for ws in all_worksheets]}")
+        
+        # Try to find the correlation parlays sheet
+        parlay_sheet_name = None
+        for ws in all_worksheets:
+            if 'correlation' in ws.title.lower() or 'parlay' in ws.title.lower():
+                parlay_sheet_name = ws.title
+                logger.info(f"✅ Found potential parlay sheet: '{parlay_sheet_name}'")
+                break
+        
+        if not parlay_sheet_name:
+            logger.error("❌ No worksheet with 'correlation' or 'parlay' in name found")
+            logger.info("💡 Please check the exact sheet name in Google Sheets")
+            return []
+        
+        parlay_worksheet = spreadsheet.worksheet(parlay_sheet_name)
+        logger.info(f"✅ Successfully accessed '{parlay_sheet_name}' worksheet")
         
         all_data = parlay_worksheet.get_all_values()
         
         if not all_data:
-            logger.warning("CORRELATION_PARLAYS sheet is empty")
+            logger.warning("⚠️ Parlay sheet is empty")
             return []
         
-        logger.info(f"Total rows in parlay sheet: {len(all_data)}")
+        logger.info(f"📊 Total rows in parlay sheet: {len(all_data)}")
         
-        # Find header row
+        # Show first 10 rows for debugging
+        logger.info("🔍 First 10 rows of raw data:")
+        for i, row in enumerate(all_data[:10]):
+            logger.info(f"  Row {i}: {row[:10]}")  # Show first 10 columns
+        
+        # Find header row - look for any row with column headers
         header_row_index = -1
-        for i, row in enumerate(all_data):
-            if row and 'anchor_pitcher' in str(row).lower():
-                logger.info(f"Found parlay header at index {i}: {row}")
+        possible_header_indicators = ['anchor', 'pitcher', 'batter', 'market', 'player', 'name']
+        
+        for i, row in enumerate(all_data[:20]):  # Check first 20 rows
+            row_lower = [str(cell).lower() for cell in row]
+            if any(indicator in ' '.join(row_lower) for indicator in possible_header_indicators):
+                logger.info(f"🎯 Found potential header at row {i}: {row}")
                 header_row_index = i
                 break
         
         if header_row_index == -1:
-            logger.error("Could not find header row in CORRELATION_PARLAYS")
+            logger.error("❌ Could not find header row in parlay sheet")
+            logger.info("🔍 Looking for rows with multiple non-empty cells...")
+            for i, row in enumerate(all_data[:15]):
+                non_empty = [cell for cell in row if cell and str(cell).strip()]
+                if len(non_empty) >= 3:
+                    logger.info(f"  Row {i} has {len(non_empty)} non-empty cells: {non_empty[:10]}")
             return []
         
         headers = all_data[header_row_index]
         data_rows = all_data[header_row_index + 1:]
         
-        logger.info(f"Parlay headers: {headers}")
-        logger.info(f"Parlay data rows: {len(data_rows)}")
+        logger.info(f"📋 Using headers from row {header_row_index}:")
+        logger.info(f"   All columns: {headers}")
+        logger.info(f"📊 Data rows available: {len(data_rows)}")
+        
+        # Show first 3 data rows
+        logger.info("🔍 First 3 data rows:")
+        for i, row in enumerate(data_rows[:3]):
+            logger.info(f"  Data row {i}: {row[:10]}")
         
         # Create DataFrame
         parlay_df = pd.DataFrame(data_rows, columns=headers)
         
-        # Remove empty rows
+        logger.info(f"📊 DataFrame shape: {parlay_df.shape}")
+        logger.info(f"📋 DataFrame columns: {list(parlay_df.columns)}")
+        
+        # Remove empty rows based on first column
+        before_filter = len(parlay_df)
         parlay_df = parlay_df[parlay_df.iloc[:, 0].notna() & (parlay_df.iloc[:, 0] != '')]
+        after_filter = len(parlay_df)
+        
+        logger.info(f"🔍 Rows after filtering empty: {after_filter} (removed {before_filter - after_filter})")
         
         if parlay_df.empty:
-            logger.warning("No parlay data found after filtering")
+            logger.warning("⚠️ No parlay data found after filtering")
             return []
         
-        logger.info(f"Found {len(parlay_df)} parlay rows")
+        # Show sample of actual data
+        logger.info(f"📊 Sample data from first row:")
+        if len(parlay_df) > 0:
+            first_row = parlay_df.iloc[0]
+            for col, val in first_row.items():
+                if val and str(val).strip():  # Only show non-empty values
+                    logger.info(f"  {col}: {val}")
         
         # Parse parlays - each row is a parlay with anchor pitcher and batters
         parlays = []
         
         for idx, row in parlay_df.iterrows():
+            logger.info(f"\n🔄 Processing parlay row {idx}...")
             try:
-                # Get anchor pitcher info
-                anchor_col_prefix = None
-                for col in parlay_df.columns:
-                    if 'anchor' in col.lower() and 'pitcher' in col.lower():
-                        anchor_col_prefix = col.split('_')[0] + '_'
-                        break
+                # Find anchor pitcher columns
+                anchor_cols = [col for col in parlay_df.columns if 'anchor' in col.lower() or ('pitcher' in col.lower() and 'batter' not in col.lower())]
+                logger.info(f"  📋 Anchor columns found: {anchor_cols}")
                 
-                if not anchor_col_prefix:
-                    logger.warning(f"No anchor pitcher columns found in row {idx}")
+                # Try to get anchor pitcher name from various possible column names
+                anchor_name = None
+                for possible_col in anchor_cols:
+                    if row.get(possible_col):
+                        if 'name' in possible_col.lower() or possible_col.lower() in ['anchor_pitcher', 'pitcher', 'anchor']:
+                            anchor_name = row.get(possible_col)
+                            logger.info(f"  ✅ Found anchor name in column '{possible_col}': {anchor_name}")
+                            break
+                
+                if not anchor_name:
+                    logger.warning(f"  ⚠️ No anchor pitcher name found in row {idx}, skipping")
+                    logger.info(f"  Available data: {dict(row)}")
                     continue
                 
-                # Build anchor pitcher data
-                anchor_name = row.get(f'{anchor_col_prefix}pitcher', '') or row.get('anchor_pitcher', '')
-                anchor_market = row.get(f'{anchor_col_prefix}pitcher_market', '') or row.get('anchor_pitcher_market', '')
-                anchor_line = row.get(f'{anchor_col_prefix}pitcher_line', '') or row.get('anchor_pitcher_line', '')
-                anchor_over_under = row.get(f'{anchor_col_prefix}pitcher_over_under', '') or row.get('anchor_pitcher_over_under', '')
-                anchor_ev = row.get(f'{anchor_col_prefix}pitcher_EV', '') or row.get('anchor_pitcher_EV', '')
-                anchor_odds = row.get(f'{anchor_col_prefix}pitcher_american_odds', '') or row.get('anchor_pitcher_american_odds', '')
+                # Get anchor pitcher details - try multiple column name patterns
+                anchor_market = None
+                anchor_line = None
+                anchor_over_under = None
+                anchor_ev = None
+                anchor_odds = None
+                
+                for col in parlay_df.columns:
+                    col_lower = col.lower()
+                    val = row.get(col)
+                    
+                    if val and str(val).strip():
+                        if 'market' in col_lower and 'anchor' in col_lower:
+                            anchor_market = val
+                            logger.info(f"  ✅ Market: {val} (from {col})")
+                        elif 'line' in col_lower and 'anchor' in col_lower:
+                            anchor_line = val
+                            logger.info(f"  ✅ Line: {val} (from {col})")
+                        elif 'over' in col_lower or 'under' in col_lower:
+                            if 'anchor' in col_lower or idx == 0:
+                                anchor_over_under = val
+                                logger.info(f"  ✅ Over/Under: {val} (from {col})")
+                        elif 'ev' in col_lower and 'anchor' in col_lower:
+                            anchor_ev = val
+                            logger.info(f"  ✅ EV: {val} (from {col})")
+                        elif 'odds' in col_lower and 'anchor' in col_lower:
+                            anchor_odds = val
+                            logger.info(f"  ✅ Odds: {val} (from {col})")
                 
                 # Clean anchor market name
-                anchor_market_clean = clean_market_name(anchor_market)
+                anchor_market_clean = clean_market_name(anchor_market) if anchor_market else ""
                 
                 # Collect batter legs
                 batter_legs = []
                 batter_num = 1
                 
-                while True:
-                    batter_prefix = f'batter_{batter_num}_'
+                logger.info(f"  🔍 Looking for batters...")
+                
+                while batter_num <= 10:  # Check up to 10 batters
+                    # Find batter columns for this number
+                    batter_cols = [col for col in parlay_df.columns if f'batter_{batter_num}' in col.lower() or f'batter{batter_num}' in col.lower()]
                     
-                    # Check if this batter exists
-                    name_col = None
-                    for col in parlay_df.columns:
-                        if batter_prefix in col.lower() and ('name' in col.lower() or col.lower() == f'batter_{batter_num}'):
-                            name_col = col
+                    if not batter_cols:
+                        logger.info(f"  ⏹️ No columns found for batter_{batter_num}, stopping")
+                        break
+                    
+                    logger.info(f"  📋 Batter {batter_num} columns: {batter_cols}")
+                    
+                    # Get batter name
+                    batter_name = None
+                    for col in batter_cols:
+                        val = row.get(col)
+                        if val and str(val).strip() and ('name' in col.lower() or col.lower() == f'batter_{batter_num}'):
+                            batter_name = val
+                            logger.info(f"  ✅ Batter {batter_num} name: {batter_name}")
                             break
                     
-                    if not name_col:
-                        break
-                    
-                    batter_name = row.get(name_col, '')
                     if not batter_name:
+                        logger.info(f"  ⏹️ No name found for batter_{batter_num}, stopping")
                         break
                     
-                    # Get batter info
-                    batter_market = row.get(f'batter_{batter_num}_market', '')
-                    batter_line = row.get(f'batter_{batter_num}_line', '')
-                    batter_over_under = row.get(f'batter_{batter_num}_over_under', '')
-                    batter_ev = row.get(f'batter_{batter_num}_EV', '')
-                    batter_odds = row.get(f'batter_{batter_num}_american_odds', '')
+                    # Get batter details
+                    batter_market = None
+                    batter_line = None
+                    batter_over_under = None
+                    batter_ev = None
+                    batter_odds = None
+                    
+                    for col in batter_cols:
+                        val = row.get(col)
+                        if val and str(val).strip():
+                            col_lower = col.lower()
+                            if 'market' in col_lower:
+                                batter_market = val
+                            elif 'line' in col_lower:
+                                batter_line = val
+                            elif 'over' in col_lower or 'under' in col_lower:
+                                batter_over_under = val
+                            elif 'ev' in col_lower:
+                                batter_ev = val
+                            elif 'odds' in col_lower:
+                                batter_odds = val
                     
                     # Clean batter market name
-                    batter_market_clean = clean_market_name(batter_market)
+                    batter_market_clean = clean_market_name(batter_market) if batter_market else ""
                     
                     # Format batter info into condensed string
-                    batter_info = f"{batter_name} • {batter_market_clean} {batter_over_under} {batter_line}"
+                    batter_info = f"{batter_name}"
+                    if batter_market_clean:
+                        batter_info += f" • {batter_market_clean}"
+                    if batter_over_under:
+                        batter_info += f" {batter_over_under}"
+                    if batter_line:
+                        batter_info += f" {batter_line}"
                     if batter_ev:
                         try:
                             ev_float = float(batter_ev)
@@ -328,6 +436,8 @@ def read_correlation_parlays():
                     if batter_odds:
                         batter_info += f" • {batter_odds}"
                     
+                    logger.info(f"  ✅ Batter {batter_num} info: {batter_info}")
+                    
                     batter_legs.append({
                         'Batter': batter_info
                     })
@@ -335,49 +445,61 @@ def read_correlation_parlays():
                     batter_num += 1
                 
                 if not batter_legs:
-                    logger.warning(f"No batters found for parlay {idx}")
+                    logger.warning(f"  ⚠️ No batters found for parlay {idx}")
                     continue
+                
+                logger.info(f"  ✅ Found {len(batter_legs)} batters for this parlay")
                 
                 # Calculate total EV
                 total_ev = 0
                 try:
                     if anchor_ev:
                         total_ev += float(anchor_ev)
-                    for i in range(1, batter_num):
-                        batter_ev_val = row.get(f'batter_{i}_EV', '')
-                        if batter_ev_val:
-                            total_ev += float(batter_ev_val)
+                    for i in range(len(batter_legs)):
+                        batter_col_pattern = f'batter_{i+1}'
+                        for col in parlay_df.columns:
+                            if batter_col_pattern in col.lower() and 'ev' in col.lower():
+                                batter_ev_val = row.get(col)
+                                if batter_ev_val:
+                                    total_ev += float(batter_ev_val)
+                                break
                 except Exception as e:
-                    logger.warning(f"Error calculating total EV: {e}")
+                    logger.warning(f"  ⚠️ Error calculating total EV: {e}")
                 
                 # Format anchor pitcher info
                 anchor_info = {
                     'Player': anchor_name,
                     'Market': anchor_market_clean,
-                    'Line': f"{anchor_over_under} {anchor_line}",
+                    'Line': f"{anchor_over_under or ''} {anchor_line or ''}".strip(),
                     'EV': f"{float(anchor_ev):.1%}" if anchor_ev else "",
-                    'Odds': anchor_odds
+                    'Odds': anchor_odds or ""
                 }
                 
-                parlays.append({
+                parlay = {
                     'id': f"PARLAY_{idx + 1:03d}",
                     'anchor': anchor_info,
                     'batters': batter_legs,
                     'totalEV': f"{total_ev:.1%}" if total_ev else "N/A",
                     'leg_count': 1 + len(batter_legs)
-                })
+                }
+                
+                parlays.append(parlay)
+                logger.info(f"  ✅ Successfully created parlay: {parlay['id']} with {parlay['leg_count']} legs")
                 
             except Exception as e:
-                logger.error(f"Error parsing parlay row {idx}: {e}")
+                logger.error(f"  ❌ Error parsing parlay row {idx}: {e}")
                 import traceback
-                logger.error(traceback.format_exc())
+                logger.error(f"  Full traceback: {traceback.format_exc()}")
                 continue
         
-        logger.info(f"Successfully parsed {len(parlays)} parlays")
+        logger.info(f"\n✅ Successfully parsed {len(parlays)} parlays total")
+        if parlays:
+            logger.info(f"📊 Sample parlay: {parlays[0]}")
+        
         return parlays
         
     except Exception as e:
-        logger.error(f"Error reading correlation parlays: {e}")
+        logger.error(f"❌ Error reading correlation parlays: {e}")
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
         return []

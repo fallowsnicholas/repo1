@@ -237,7 +237,7 @@ app.layout = html.Div([
     
     # Main Content Area - Always show Individual EVs
     html.Div([
-        render_individual_evs()
+        html.Div(id='main-content-fixed')
     ], style={
         'maxWidth': '1280px',
         'margin': '0 auto',
@@ -348,6 +348,14 @@ def render_individual_evs():
         # Data table
         html.Div(id='evs-table')
     ])
+
+# Main callback to render content
+@app.callback(
+    Output('main-content-fixed', 'children'),
+    Input('view-individual', 'n_clicks')
+)
+def render_main_content(n_clicks):
+    return render_individual_evs()
 
 # Filtering callback for Individual EVs (only if we have markets)
 if all_markets:

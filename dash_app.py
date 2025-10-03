@@ -429,7 +429,7 @@ def read_correlation_parlays():
                 pitcher_info = {
                     'Player': pitcher_name,
                     'Market': pitcher_market_clean,
-                    'Line': f"{pitcher_bet_type.title()} {pitcher_line}".strip() if pitcher_bet_type else pitcher_line,
+                    'Line': pitcher_line,  # Just the line without prepending bet_type
                     'EV': f"{float(pitcher_ev):.1%}" if pitcher_ev else "",
                     'Odds': row.get('Pitcher_Odds', '') or ""  # If odds column exists
                 }
@@ -758,19 +758,6 @@ def render_individual_evs():
             'marginBottom': '24px'
         }) if all_markets else html.Div(),
         
-        # Opportunities count
-        html.Div(
-            id='opportunities-count',
-            children=f"{len(individualEVs)} opportunities found",
-            style={
-                'fontSize': '14px',
-                'color': '#6b7280',
-                'marginBottom': '24px',
-                'fontWeight': '600',
-                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-            }
-        ),
-        
         # Data table
         html.Div(id='evs-table')
     ])
@@ -797,18 +784,6 @@ def render_parlays():
         ])
     
     return html.Div([
-        # Parlays count
-        html.Div(
-            f"{len(parlays)} parlays found",
-            style={
-                'fontSize': '14px',
-                'color': '#6b7280',
-                'marginBottom': '24px',
-                'fontWeight': '600',
-                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-            }
-        ),
-        
         # Parlay cards
         html.Div([
             render_parlay_card(parlay) for parlay in parlays
@@ -841,39 +816,31 @@ def render_parlay_card(parlay):
         
         # Anchor Pitcher section
         html.Div([
-            html.Div("ANCHOR PITCHER", style={
-                'fontSize': '11px',
-                'fontWeight': '600',
-                'color': '#9ca3af',
-                'textTransform': 'uppercase',
-                'letterSpacing': '0.5px',
-                'marginBottom': '8px',
-                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-            }),
             html.Div([
-                html.Div([
-                    html.Span(parlay['anchor']['Player'], style={
-                        'fontWeight': '600',
-                        'fontSize': '15px',
-                        'color': '#111827'
-                    }),
-                    html.Span(f" • {parlay['anchor']['Market']} {parlay['anchor']['Line']}", style={
-                        'fontSize': '14px',
-                        'color': '#374151'
-                    }),
-                    html.Span(f" • EV: {parlay['anchor']['EV']}", style={
-                        'fontSize': '14px',
-                        'color': '#059669',
-                        'fontWeight': '600',
-                        'marginLeft': '8px'
-                    }),
-                    html.Span(f" • {parlay['anchor']['Odds']}", style={
-                        'fontSize': '14px',
-                        'color': '#6b7280',
-                        'marginLeft': '8px'
-                    }) if parlay['anchor']['Odds'] else None
-                ], style={'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'})
+                html.Span(parlay['anchor']['Player'], style={
+                    'fontWeight': '700',
+                    'fontSize': '15px',
+                    'color': '#111827'
+                }),
+                html.Span(f" • {parlay['anchor']['Market']} {parlay['anchor']['Line']}", style={
+                    'fontSize': '14px',
+                    'fontWeight': '700',
+                    'color': '#374151'
+                }),
+                html.Span(f" • EV: {parlay['anchor']['EV']}", style={
+                    'fontSize': '14px',
+                    'color': '#111827',
+                    'fontWeight': '700',
+                    'marginLeft': '8px'
+                }),
+                html.Span(f" • {parlay['anchor']['Odds']}", style={
+                    'fontSize': '14px',
+                    'fontWeight': '700',
+                    'color': '#6b7280',
+                    'marginLeft': '8px'
+                }) if parlay['anchor']['Odds'] else None
             ], style={
+                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                 'padding': '12px 0',
                 'borderBottom': '1px solid #e5e7eb'
             })
@@ -881,15 +848,6 @@ def render_parlay_card(parlay):
         
         # Batters section
         html.Div([
-            html.Div("OPPOSING BATTERS", style={
-                'fontSize': '11px',
-                'fontWeight': '600',
-                'color': '#9ca3af',
-                'textTransform': 'uppercase',
-                'letterSpacing': '0.5px',
-                'marginBottom': '12px',
-                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-            }),
             html.Div([
                 html.Div([
                     html.Div(batter['Batter'], style={
@@ -914,8 +872,7 @@ def render_parlay_card(parlay):
 # Filtering callback for Individual EVs (only if we have markets)
 if all_markets:
     @app.callback(
-        [Output('evs-table', 'children'),
-         Output('opportunities-count', 'children')] +
+        [Output('evs-table', 'children')] +
         [Output(f"filter-{market.replace(' ', '-').lower()}", 'style') for market in all_markets] +
         [Output('filter-all', 'style')],
         [Input('filter-all', 'n_clicks')] +
@@ -1028,7 +985,6 @@ if all_markets:
         
         return (
             table,
-            f"{len(filtered_data)} opportunities found",
             *market_styles,
             all_style
         )

@@ -1,0 +1,27 @@
+name: Trigger All Sports Workflows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout All-Sports branch
+        uses: actions/checkout@v3
+        with:
+          ref: All-Sports
+      
+      - name: List workflows
+        run: |
+          echo "Workflows in All-Sports branch:"
+          ls -la .github/workflows/
+      
+      - name: Test sports config if exists
+        run: |
+          if [ -f "sports_config.py" ]; then
+            echo "Found sports_config.py, testing it:"
+            python sports_config.py
+          else
+            echo "sports_config.py not found"
+          fi

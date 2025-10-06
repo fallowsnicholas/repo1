@@ -1,0 +1,45 @@
+name: Test Sports Configuration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [All-Sports]
+    paths:
+      - 'sports_config.py'
+
+jobs:
+  test-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: All-Sports  # Make sure we're using All Sports branch
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Test sports configuration
+        run: |
+          echo "Testing sports configuration file..."
+          python sports_config.py
+          
+      - name: Test importing config
+        run: |
+          python -c "
+          from sports_config import get_sport_config, get_active_sports
+          
+          print('Testing MLB config:')
+          mlb_config = get_sport_config('MLB')
+          print(f'  Spreadsheet: {mlb_config[\"spreadsheet_name\"]}')
+          print(f'  Markets: {len(mlb_config[\"odds_markets\"])}')
+          
+          print('\nTesting NFL config:')
+          nfl_config = get_sport_config('NFL')
+          print(f'  Spreadsheet: {nfl_config[\"spreadsheet_name\"]}')
+          print(f'  Markets: {len(nfl_config[\"odds_markets\"])}')
+          
+          print('\nCurrently active sports:')
+          print(get_active_sports())
+          "

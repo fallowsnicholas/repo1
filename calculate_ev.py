@@ -1,4 +1,4 @@
-# calculate_ev.py - Step 5: Calculate Expected Value from matched lines (UPDATED with team data)
+# calculate_ev.py - Step 5: Calculate Expected Value from matched lines (Multi-Sport Version)
 import pandas as pd
 import numpy as np
 import gspread
@@ -7,6 +7,8 @@ import json
 import os
 from datetime import datetime
 import logging
+import argparse
+from sports_config import get_sport_config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,8 +16,21 @@ logger = logging.getLogger(__name__)
 class EVCalculator:
     """Step 5: Calculate Expected Value for matched Splash/Odds lines with team data preservation"""
     
-    def __init__(self):
+    def __init__(self, sport='MLB'):
+        self.sport = sport.upper()
         self.ev_results = []
+        
+        # Load sport-specific configuration
+        config = get_sport_config(self.sport)
+        self.spreadsheet_name = config['spreadsheet_name']
+        self.ev_params = config['ev_params']
+        
+        print(f"🏈 Initialized {self.sport} EV Calculator")
+        print(f"   Spreadsheet: {self.spreadsheet_name}")
+        print(f"   EV Parameters:")
+        print(f"      Min books: {self.ev_params['min_books']}")
+        print(f"      Min true prob: {self.ev_params['min_true_prob']:.1%}")
+        print(f"      EV threshold: {self.ev_params['ev_threshold']:.1%}")
     
     def connect_to_sheets(self):
         """Establish connection to Google Sheets"""
@@ -37,8 +52,8 @@ class EVCalculator:
     def read_matched_lines(self, client):
         """Read matched lines from Step 4 with robust metadata handling"""
         try:
-            print("📋 Reading matched lines from Step 4...")
-            spreadsheet = client.open("MLB_Splash_Data")
+            print(f"📋 Reading matched lines from Step 4...")
+            spreadsheet = client.open(self.spreadsheet_name)
             matched_worksheet = spreadsheet.worksheet("MATCHED_LINES")
             
             # Use robust reading to handle metadata
@@ -101,14 +116,19 @@ class EVCalculator:
         except (ValueError, TypeError):
             return None
     
-    def calculate_expected_values(self, matched_df, min_books=3, min_true_prob=0.50, ev_threshold=0.01):
+    def calculate_expected_values(self, matched_df):
         """Calculate Expected Value for each prop with sufficient book coverage"""
-        print("⚾ STEP 5: CALCULATING EXPECTED VALUES")
+        print(f"⚾ STEP 5: CALCULATING {self.sport} EXPECTED VALUES")
         print("=" * 60)
         
         if matched_df.empty:
             print("❌ No matched data for EV calculation")
             return pd.DataFrame()
+        
+        # Get EV parameters from config
+        min_books = self.ev_params['min_books']
+        min_true_prob = self.ev_params['min_true_prob']
+        ev_threshold = self.ev_params['ev_threshold']
         
         print(f"🎯 Calculating EVs with parameters:")
         print(f"   Minimum books required: {min_books}")
@@ -259,7 +279,7 @@ class EVCalculator:
             
             print(f"💾 Saving {len(ev_df)} EV results to Google Sheets...")
             
-            spreadsheet = client.open("MLB_Splash_Data")
+            spreadsheet = client.open(self.spreadsheet_name)
             
             # Get or create EV_RESULTS worksheet
             try:
@@ -275,7 +295,7 @@ class EVCalculator:
             preserved_team_cols = [col for col in team_columns if col in ev_df.columns]
             
             metadata = [
-                ['Expected Value Results', ''],
+                [f'{self.sport} Expected Value Results', ''],
                 ['Calculated At', datetime.now().isoformat()],
                 ['Total Opportunities', len(ev_df)],
                 ['Best EV', f"{ev_df['Splash_EV_Percentage'].max():.1%}"],
@@ -301,8 +321,13 @@ class EVCalculator:
 
 def main():
     """Main function for Step 5"""
+    parser = argparse.ArgumentParser(description='Calculate EV for MLB or NFL')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+                       help='Sport to calculate EV for (default: MLB)')
+    args = parser.parse_args()
+    
     try:
-        calculator = EVCalculator()
+        calculator = EVCalculator(sport=args.sport)
         
         # Connect to Google Sheets
         client = calculator.connect_to_sheets()
@@ -326,7 +351,7 @@ def main():
         
         print(f"\n✅ STEP 5 COMPLETE:")
         print(f"   EV opportunities found: {len(ev_df)}")
-        print(f"   Ready for Steps 6-7 (Pitcher Anchors & Parlays)")
+        print(f"   Ready for Steps 6-7 (Correlation Parlays)")
         
     except Exception as e:
         logger.error(f"Error in Step 5: {e}")

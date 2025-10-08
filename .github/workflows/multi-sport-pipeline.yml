@@ -22,8 +22,7 @@ on:
         - full-pipeline
         - step-1-matchups
         - step-2-odds
-        - step-3a-splash-fetch
-        - step-3b-splash-process
+        - step-3-splash
         - step-4-match-lines
         - step-5-calculate-ev
         - step-6-find-anchors
@@ -87,8 +86,7 @@ jobs:
     - name: "Step 3: Fetch and Process Splash Sports Data"
       if: |
         github.event.inputs.step == 'full-pipeline' || 
-        github.event.inputs.step == 'step-3a-splash-fetch' ||
-        github.event.inputs.step == 'step-3b-splash-process' ||
+        github.event.inputs.step == 'step-3-splash' ||
         github.event.inputs.step == 'steps-1-5-data-only'
       env:
         SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}

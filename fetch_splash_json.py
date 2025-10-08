@@ -1,17 +1,28 @@
-# fetch_splash_json.py - Step 3A: Dedicated script for fetching JSON data only
+# fetch_splash_json.py - Step 3A: Fetch Splash Sports JSON (Multi-Sport Version)
 import requests
 import json
 import os
 import time
 from datetime import datetime
+import argparse
+from sports_config import get_sport_config
 
 class SplashJSONFetcher:
-    """Dedicated JSON fetcher using free API services - no processing, just data collection"""
+    """Multi-sport JSON fetcher using free API services - no processing, just data collection"""
     
-    def __init__(self):
+    def __init__(self, sport='MLB'):
+        self.sport = sport.upper()
         self.base_url = "https://api.splashsports.com/props-service/api/props"
-        self.output_file = "splash_raw_data.json"
+        self.output_file = f"splash_{sport.lower()}_raw_data.json"
         self.services_used = []
+        
+        # Load sport-specific configuration
+        config = get_sport_config(self.sport)
+        self.splash_league = config['splash_league']  # 'mlb' or 'nfl'
+        
+        print(f"🏈 Initialized {self.sport} Splash Fetcher")
+        print(f"   League parameter: {self.splash_league}")
+        print(f"   Output file: {self.output_file}")
         
     def fetch_via_scraperapi(self, url, params=None):
         """Primary: ScraperAPI (5000 free requests/month)"""
@@ -19,7 +30,7 @@ class SplashJSONFetcher:
         
         if not api_key:
             print("❌ SCRAPERAPI_KEY not found in environment")
-            return None
+            return None, None
         
         target_url = self._build_url(url, params)
         
@@ -120,11 +131,11 @@ class SplashJSONFetcher:
     
     def fetch_all_splash_json(self):
         """Main fetching logic - collect raw JSON responses only (NO PROCESSING)"""
-        print("📥 STEP 3A: FETCHING RAW JSON RESPONSES")
+        print(f"📥 STEP 3A: FETCHING {self.sport} RAW JSON RESPONSES")
         print("=" * 60)
         print("🎯 Goal: Collect raw API responses only")
         print("🚫 NO data analysis, filtering, or counting")
-        print("💾 Output: splash_raw_data.json")
+        print(f"💾 Output: {self.output_file}")
         print()
         
         # API service priority order (best free tier first)
@@ -149,12 +160,12 @@ class SplashJSONFetcher:
             
             while requests_made < max_requests:
                 params = {
-                    'league': 'mlb',
+                    'league': self.splash_league,  # Use sport-specific league parameter
                     'limit': limit,
                     'offset': offset
                 }
                 
-                print(f"📊 Request {requests_made + 1}/{max_requests}: offset={offset}, limit={limit}")
+                print(f"📊 Request {requests_made + 1}/{max_requests}: league={self.splash_league}, offset={offset}, limit={limit}")
                 
                 # Try each API service in priority order
                 response_received = False
@@ -171,6 +182,8 @@ class SplashJSONFetcher:
                         # Store the COMPLETE raw response with minimal metadata
                         response_info = {
                             'request_number': requests_made + 1,
+                            'sport': self.sport,
+                            'league': self.splash_league,
                             'offset': offset,
                             'limit': limit,
                             'service_used': used_service,
@@ -247,6 +260,8 @@ class SplashJSONFetcher:
         # Create final JSON structure - store everything as-is
         output_data = {
             'fetch_metadata': {
+                'sport': self.sport,
+                'league': self.splash_league,
                 'fetch_timestamp': datetime.now().isoformat(),
                 'total_requests_made': total_requests,
                 'services_used': services_summary,
@@ -264,6 +279,8 @@ class SplashJSONFetcher:
             print(f"\n💾 RAW API RESPONSES SAVED")
             print(f"=" * 40)
             print(f"📁 File: {self.output_file}")
+            print(f"🏈 Sport: {self.sport}")
+            print(f"⚾ League: {self.splash_league}")
             print(f"🔢 Total API Requests: {total_requests}")
             print(f"🛠️ Services Used: {list(services_summary.keys())}")
             
@@ -283,9 +300,14 @@ class SplashJSONFetcher:
 
 def main():
     """Main execution for JSON fetching only"""
-    print(f"🚀 Starting JSON fetch at: {datetime.now()}")
+    parser = argparse.ArgumentParser(description='Fetch Splash Sports JSON for MLB or NFL')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+                       help='Sport to fetch data for (default: MLB)')
+    args = parser.parse_args()
     
-    fetcher = SplashJSONFetcher()
+    print(f"🚀 Starting {args.sport} JSON fetch at: {datetime.now()}")
+    
+    fetcher = SplashJSONFetcher(sport=args.sport)
     
     try:
         success = fetcher.fetch_all_splash_json()
@@ -293,7 +315,7 @@ def main():
         if success:
             print(f"\n🎉 JSON FETCH COMPLETE!")
             print(f"✅ Raw data saved to: {fetcher.output_file}")
-            print(f"🔄 Next: Run process_splash_data.py to process and save to sheets")
+            print(f"🔄 Next: Run process_splash_data.py --sport {args.sport} to process and save to sheets")
         else:
             print(f"\n❌ JSON FETCH FAILED")
             print(f"💡 Check API credentials and service status")

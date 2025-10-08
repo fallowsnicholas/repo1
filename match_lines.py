@@ -1,4 +1,4 @@
-# match_lines.py - Step 4: Match Splash props to Odds data (FIXED for metadata)
+# match_lines.py - Step 4: Match Splash props to Odds data (Multi-Sport Version)
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -6,6 +6,8 @@ import json
 import os
 from datetime import datetime
 import logging
+import argparse
+from sports_config import get_sport_config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -13,21 +15,30 @@ logger = logging.getLogger(__name__)
 class LineMatching:
     """Step 4: Match Splash Sports props to Odds API data (both read from Google Sheets)"""
     
-    def __init__(self):
-        # Market mapping for matching between Splash and Odds API
-        self.market_mapping = {
-            'strikeouts': 'pitcher_strikeouts',
-            'earned_runs': 'pitcher_earned_runs', 
-            'hits': 'batter_hits',
-            'hits_allowed': 'pitcher_hits_allowed',
-            'hits_plus_runs_plus_RBIs': 'hits_plus_runs_plus_RBIs',
-            'runs': 'batter_runs_scored',
-            'batter_singles': 'batter_singles',
-            'total_bases': 'batter_total_bases',
-            'RBIs': 'batter_rbis',
-            'total_outs': 'pitcher_outs',
-            'singles': 'batter_singles'
-        }
+    def __init__(self, sport='MLB'):
+        self.sport = sport.upper()
+        
+        # Load sport-specific configuration
+        config = get_sport_config(self.sport)
+        self.spreadsheet_name = config['spreadsheet_name']
+        self.market_mapping = config['market_mappings']
+        
+        # Determine worksheet names based on sport
+        if self.sport == 'MLB':
+            self.splash_worksheet_name = 'SPLASH_MLB'
+        elif self.sport == 'NFL':
+            self.splash_worksheet_name = 'SPLASH_NFL'
+        else:
+            self.splash_worksheet_name = f'SPLASH_{self.sport}'
+        
+        self.odds_worksheet_name = 'ODDS_API'
+        self.output_worksheet_name = 'MATCHED_LINES'
+        
+        print(f"🏈 Initialized {self.sport} Line Matching")
+        print(f"   Spreadsheet: {self.spreadsheet_name}")
+        print(f"   Splash worksheet: {self.splash_worksheet_name}")
+        print(f"   Odds worksheet: {self.odds_worksheet_name}")
+        print(f"   Market mappings: {len(self.market_mapping)} markets")
     
     def connect_to_sheets(self):
         """Establish connection to Google Sheets"""
@@ -107,16 +118,16 @@ class LineMatching:
             return pd.DataFrame()
     
     def read_splash_data(self, client):
-        """Read Splash Sports data from SPLASH_MLB sheet"""
+        """Read Splash Sports data from sport-specific worksheet"""
         try:
-            spreadsheet = client.open("MLB_Splash_Data")
-            splash_worksheet = spreadsheet.worksheet("SPLASH_MLB")
+            spreadsheet = client.open(self.spreadsheet_name)
+            splash_worksheet = spreadsheet.worksheet(self.splash_worksheet_name)
             
             expected_columns = ['Name', 'Market', 'Line']
-            splash_df = self.read_sheet_with_metadata_skip(splash_worksheet, "SPLASH_MLB", expected_columns)
+            splash_df = self.read_sheet_with_metadata_skip(splash_worksheet, self.splash_worksheet_name, expected_columns)
             
             if splash_df.empty:
-                print("❌ No Splash data found - make sure SPLASH_MLB sheet is populated")
+                print(f"❌ No Splash data found - make sure {self.splash_worksheet_name} sheet is populated")
                 return pd.DataFrame()
             
             # Show breakdown
@@ -136,15 +147,15 @@ class LineMatching:
     def read_odds_data(self, client):
         """Read Odds API data from ODDS_API sheet"""
         try:
-            spreadsheet = client.open("MLB_Splash_Data")
-            odds_worksheet = spreadsheet.worksheet("ODDS_API")
+            spreadsheet = client.open(self.spreadsheet_name)
+            odds_worksheet = spreadsheet.worksheet(self.odds_worksheet_name)
             
             expected_columns = ['Name', 'Market', 'Line', 'Odds', 'Book']
-            odds_df = self.read_sheet_with_metadata_skip(odds_worksheet, "ODDS_API", expected_columns)
+            odds_df = self.read_sheet_with_metadata_skip(odds_worksheet, self.odds_worksheet_name, expected_columns)
             
             if odds_df.empty:
-                print("❌ No Odds data found - make sure ODDS_API sheet is populated")
-                print("   💡 Run your fetch_odds_data.py script first to populate this sheet")
+                print(f"❌ No Odds data found - make sure {self.odds_worksheet_name} sheet is populated")
+                print(f"   💡 Run Step 2 (fetch_odds_data.py --sport {self.sport}) first to populate this sheet")
                 return pd.DataFrame()
             
             # Show breakdown
@@ -199,7 +210,7 @@ class LineMatching:
     
     def find_matching_lines(self, splash_df, odds_df):
         """Find matching lines between Splash and Odds data"""
-        print("⚾ STEP 4: MATCHING SPLASH PROPS TO ODDS DATA")
+        print(f"⚾ STEP 4: MATCHING {self.sport} SPLASH PROPS TO ODDS DATA")
         print("=" * 60)
         
         if splash_df.empty:
@@ -208,7 +219,7 @@ class LineMatching:
             
         if odds_df.empty:
             print("❌ No Odds data - cannot proceed")
-            print("   💡 Make sure to populate ODDS_API sheet first")
+            print(f"   💡 Make sure to populate {self.odds_worksheet_name} sheet first")
             return pd.DataFrame()
         
         # Prepare data for matching
@@ -315,24 +326,24 @@ class LineMatching:
             
             print(f"💾 Saving {len(matched_df)} matched lines to Google Sheets...")
             
-            spreadsheet = client.open("MLB_Splash_Data")
+            spreadsheet = client.open(self.spreadsheet_name)
             
             # Get or create MATCHED_LINES worksheet
             try:
-                worksheet = spreadsheet.worksheet("MATCHED_LINES")
+                worksheet = spreadsheet.worksheet(self.output_worksheet_name)
             except:
-                worksheet = spreadsheet.add_worksheet(title="MATCHED_LINES", rows=5000, cols=15)
+                worksheet = spreadsheet.add_worksheet(title=self.output_worksheet_name, rows=5000, cols=15)
             
             # Clear existing data
             worksheet.clear()
             
             # Add metadata
             metadata = [
-                ['Matched Lines Data', ''],
+                [f'{self.sport} Matched Lines Data', ''],
                 ['Created At', datetime.now().isoformat()],
                 ['Total Matched Lines', len(matched_df)],
                 ['Unique Props', len(matched_df.groupby(['Name', 'Market', 'Line']))],
-                ['Data Sources', 'SPLASH_MLB + ODDS_API sheets'],
+                ['Data Sources', f'{self.splash_worksheet_name} + {self.odds_worksheet_name} sheets'],
                 ['']  # Empty row for spacing
             ]
             
@@ -342,7 +353,7 @@ class LineMatching:
             # Write to sheet
             worksheet.update(range_name='A1', values=all_data)
             
-            print("✅ Successfully saved matched lines to MATCHED_LINES sheet")
+            print(f"✅ Successfully saved matched lines to {self.output_worksheet_name} sheet")
             
         except Exception as e:
             logger.error(f"Error saving matched lines: {e}")
@@ -351,8 +362,13 @@ class LineMatching:
 
 def main():
     """Main function for Step 4 - matching data from Google Sheets"""
+    parser = argparse.ArgumentParser(description='Match Splash to Odds data for MLB or NFL')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+                       help='Sport to match data for (default: MLB)')
+    args = parser.parse_args()
+    
     try:
-        matcher = LineMatching()
+        matcher = LineMatching(sport=args.sport)
         
         # Connect to Google Sheets
         client = matcher.connect_to_sheets()
@@ -362,13 +378,13 @@ def main():
         odds_df = matcher.read_odds_data(client)
         
         if splash_df.empty:
-            print("❌ Missing Splash data from SPLASH_MLB sheet")
-            print("   💡 Make sure Step 3 completed successfully")
+            print(f"❌ Missing Splash data from {matcher.splash_worksheet_name} sheet")
+            print(f"   💡 Make sure Step 3 completed successfully")
             return
             
         if odds_df.empty:
-            print("❌ Missing Odds data from ODDS_API sheet") 
-            print("   💡 Make sure Step 2 completed successfully")
+            print(f"❌ Missing Odds data from {matcher.odds_worksheet_name} sheet") 
+            print(f"   💡 Make sure Step 2 completed successfully")
             return
         
         # Preprocess odds data for matching
@@ -391,7 +407,7 @@ def main():
         print(f"\n✅ STEP 4 COMPLETE:")
         print(f"   Matched lines: {len(matched_df)}")
         print(f"   Unique props: {len(matched_df.groupby(['Name', 'Market', 'Line']))}")
-        print("   Ready for Step 5 (EV Calculation)")
+        print(f"   Ready for Step 5: calculate_ev.py --sport {args.sport}")
         
     except Exception as e:
         logger.error(f"Error in Step 4: {e}")

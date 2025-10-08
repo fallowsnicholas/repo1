@@ -1,0 +1,192 @@
+# .github/workflows/multi-sport-pipeline.yml
+name: Multi-Sport Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      sport:
+        description: 'Which sport to run'
+        required: true
+        default: 'MLB'
+        type: choice
+        options:
+        - MLB
+        - NFL
+      
+      step:
+        description: 'Which step(s) to run'
+        required: true
+        default: 'full-pipeline'
+        type: choice
+        options:
+        - full-pipeline
+        - step-1-matchups
+        - step-2-odds
+        - step-3a-splash-fetch
+        - step-3b-splash-process
+        - step-4-match-lines
+        - step-5-calculate-ev
+        - step-6-find-anchors
+        - step-7-build-parlays
+        - steps-1-5-data-only
+        - steps-6-7-parlays-only
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    # STEP 1: Fetch Matchups
+    - name: "Step 1: Fetch Matchups"
+      if: |
+        github.event.inputs.step == 'full-pipeline' || 
+        github.event.inputs.step == 'step-1-matchups' ||
+        github.event.inputs.step == 'steps-1-5-data-only'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+        DAYS_OFFSET: '0'
+      run: |
+        echo "🎯 Step 1: Fetching ${{ github.event.inputs.sport }} Matchups"
+        python fetch_matchups.py --sport ${{ github.event.inputs.sport }}
+        echo "✅ Step 1 complete"
+    
+    # STEP 2: Fetch Odds
+    - name: "Step 2: Fetch Odds API Data"
+      if: |
+        github.event.inputs.step == 'full-pipeline' || 
+        github.event.inputs.step == 'step-2-odds' ||
+        github.event.inputs.step == 'steps-1-5-data-only'
+      env:
+        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Step 2: Fetching ${{ github.event.inputs.sport }} Odds"
+        python fetch_odds_data.py --sport ${{ github.event.inputs.sport }}
+        echo "✅ Step 2 complete"
+    
+    # STEP 3A: Fetch Splash Sports JSON
+    - name: "Step 3A: Fetch Splash Sports JSON"
+      if: |
+        github.event.inputs.step == 'full-pipeline' || 
+        github.event.inputs.step == 'step-3a-splash-fetch' ||
+        github.event.inputs.step == 'steps-1-5-data-only'
+      env:
+        SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+        SCRAPFLY_KEY: ${{ secrets.SCRAPFLY_KEY }}
+        ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
+      run: |
+        echo "🎯 Step 3A: Fetching Splash Sports JSON for ${{ github.event.inputs.sport }}"
+        python fetch_splash_json.py --sport ${{ github.event.inputs.sport }}
+        echo "✅ Step 3A complete"
+    
+    # STEP 3B: Process Splash Data
+    - name: "Step 3B: Process Splash Data to Sheets"
+      if: |
+        github.event.inputs.step == 'full-pipeline' || 
+        github.event.inputs.step == 'step-3b-splash-process' ||
+        github.event.inputs.step == 'steps-1-5-data-only'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Step 3B: Processing Splash Data for ${{ github.event.inputs.sport }}"
+        python process_splash_data.py --sport ${{ github.event.inputs.sport }}
+        echo "✅ Step 3B complete"
+    
+    # STEP 4: Match Lines
+    - name: "Step 4: Match Splash to Odds Lines"
+      if: |
+        github.event.inputs.step == 'full-pipeline' || 
+        github.event.inputs.step == 'step-4-match-lines' ||
+        github.event.inputs.step == 'steps-1-5-data-only'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Step 4: Matching Lines for ${{ github.event.inputs.sport }}"
+        python match_lines.py --sport ${{ github.event.inputs.sport }}
+        echo "✅ Step 4 complete"
+    
+    # STEP 5: Calculate EV
+    - name: "Step 5: Calculate Expected Values"
+      if: |
+        github.event.inputs.step == 'full-pipeline' || 
+        github.event.inputs.step == 'step-5-calculate-ev' ||
+        github.event.inputs.step == 'steps-1-5-data-only'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Step 5: Calculating EV for ${{ github.event.inputs.sport }}"
+        python calculate_ev.py --sport ${{ github.event.inputs.sport }}
+        echo "✅ Step 5 complete"
+    
+    # STEP 6: Find Anchors (MLB only for now)
+    - name: "Step 6: Find Anchors"
+      if: |
+        (github.event.inputs.step == 'full-pipeline' || 
+         github.event.inputs.step == 'step-6-find-anchors' ||
+         github.event.inputs.step == 'steps-6-7-parlays-only') &&
+        github.event.inputs.sport == 'MLB'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Step 6: Finding Anchors for ${{ github.event.inputs.sport }}"
+        python find_pitcher_anchors.py --sport ${{ github.event.inputs.sport }}
+        echo "✅ Step 6 complete"
+    
+    # STEP 7: Build Parlays (MLB only for now)
+    - name: "Step 7: Build Correlation Parlays"
+      if: |
+        (github.event.inputs.step == 'full-pipeline' || 
+         github.event.inputs.step == 'step-7-build-parlays' ||
+         github.event.inputs.step == 'steps-6-7-parlays-only') &&
+        github.event.inputs.sport == 'MLB'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Step 7: Building Parlays for ${{ github.event.inputs.sport }}"
+        python build_parlays.py --sport ${{ github.event.inputs.sport }}
+        echo "✅ Step 7 complete"
+    
+    # Upload artifacts for debugging
+    - name: "Upload artifacts (if available)"
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pipeline-artifacts-${{ github.event.inputs.sport }}
+        path: |
+          splash_raw_data.json
+          *.log
+        retention-days: 7
+      continue-on-error: true
+    
+    # Pipeline Summary
+    - name: "Pipeline Summary"
+      if: always()
+      run: |
+        echo "🎉 PIPELINE RUN COMPLETE!"
+        echo "Sport: ${{ github.event.inputs.sport }}"
+        echo "Step: ${{ github.event.inputs.step }}"
+        echo ""
+        echo "📊 Check Google Sheets for results:"
+        echo "   Spreadsheet: ${{ github.event.inputs.sport }}_Splash_Data"
+        echo ""
+        if [ "${{ github.event.inputs.step }}" = "full-pipeline" ]; then
+          echo "✅ Full pipeline executed"
+        elif [ "${{ github.event.inputs.step }}" = "steps-1-5-data-only" ]; then
+          echo "✅ Data collection steps (1-5) executed"
+        elif [ "${{ github.event.inputs.step }}" = "steps-6-7-parlays-only" ]; then
+          echo "✅ Parlay building steps (6-7) executed"
+        else
+          echo "✅ Individual step executed"
+        fi

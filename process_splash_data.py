@@ -1,4 +1,4 @@
-# process_splash_data_robust.py - More flexible version that can handle different JSON structures
+# process_splash_data.py - Step 3B: Process Splash JSON and save to sheets (Multi-Sport)
 import json
 import pandas as pd
 import gspread
@@ -7,21 +7,42 @@ from google.oauth2.service_account import Credentials
 import os
 from datetime import datetime
 import logging
+import argparse
+from sports_config import get_sport_config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class RobustSplashDataProcessor:
-    """More flexible processor that can handle various JSON structures"""
+    """Multi-sport processor that can handle various JSON structures"""
     
-    def __init__(self):
-        self.input_file = "splash_raw_data.json"
+    def __init__(self, sport='MLB'):
+        self.sport = sport.upper()
+        self.input_file = f"splash_{sport.lower()}_raw_data.json"
         self.processed_data = []
+        
+        # Load sport-specific configuration
+        config = get_sport_config(self.sport)
+        self.spreadsheet_name = config['spreadsheet_name']
+        self.splash_league = config['splash_league']
+        
+        # Determine worksheet name based on sport
+        if self.sport == 'MLB':
+            self.worksheet_name = 'SPLASH_MLB'
+        elif self.sport == 'NFL':
+            self.worksheet_name = 'SPLASH_NFL'
+        else:
+            self.worksheet_name = f'SPLASH_{self.sport}'
+        
+        print(f"🏈 Initialized {self.sport} Splash Processor")
+        print(f"   Input file: {self.input_file}")
+        print(f"   Spreadsheet: {self.spreadsheet_name}")
+        print(f"   Worksheet: {self.worksheet_name}")
         
     def load_and_analyze_json(self):
         """Load JSON and figure out its structure dynamically"""
         try:
-            print("📂 Loading and analyzing JSON structure...")
+            print(f"📂 Loading and analyzing {self.sport} JSON structure...")
             
             if not os.path.exists(self.input_file):
                 print(f"❌ Raw data file not found: {self.input_file}")
@@ -145,7 +166,7 @@ class RobustSplashDataProcessor:
     
     def _process_props_data(self, all_props, metadata):
         """Process the actual props data"""
-        print(f"\n🔄 PROCESSING PROPS DATA")
+        print(f"\n🔄 PROCESSING {self.sport} PROPS DATA")
         print(f"📊 Total raw items: {len(all_props)}")
         
         if not all_props:
@@ -161,21 +182,28 @@ class RobustSplashDataProcessor:
             else:
                 print(f"   Type: {type(sample)}")
         
-        # Filter for MLB only
-        mlb_props = []
+        # Filter for correct sport/league
+        sport_props = []
         for prop in all_props:
-            if isinstance(prop, dict) and prop.get('league', '').lower() == 'mlb':
-                mlb_props.append(prop)
+            if isinstance(prop, dict):
+                prop_league = prop.get('league', '').lower()
+                # Match against our expected league
+                if prop_league == self.splash_league.lower():
+                    sport_props.append(prop)
         
-        print(f"⚾ MLB props: {len(mlb_props)}")
+        print(f"🏈 {self.sport} props: {len(sport_props)}")
         
-        if not mlb_props:
-            print("❌ No MLB props found")
+        if not sport_props:
+            print(f"❌ No {self.sport} props found")
+            print(f"   Expected league: {self.splash_league}")
+            # Show what leagues we found
+            leagues_found = set(prop.get('league', 'unknown') for prop in all_props if isinstance(prop, dict))
+            print(f"   Leagues in data: {leagues_found}")
             return pd.DataFrame()
         
         # Process into structured format
         processed_props = []
-        for prop in mlb_props:
+        for prop in sport_props:
             try:
                 processed_prop = {
                     'Name': prop.get('entity_name', '').strip(),
@@ -236,15 +264,15 @@ class RobustSplashDataProcessor:
             credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
             client = gspread.authorize(credentials)
             
-            spreadsheet = client.open("MLB_Splash_Data")
+            spreadsheet = client.open(self.spreadsheet_name)
             
-            # Get or create SPLASH_MLB worksheet
+            # Get or create worksheet
             try:
-                worksheet = spreadsheet.worksheet("SPLASH_MLB")
-                print("📋 Using existing SPLASH_MLB worksheet")
+                worksheet = spreadsheet.worksheet(self.worksheet_name)
+                print(f"📋 Using existing {self.worksheet_name} worksheet")
             except:
-                worksheet = spreadsheet.add_worksheet(title="SPLASH_MLB", rows=5000, cols=15)
-                print("📋 Created new SPLASH_MLB worksheet")
+                worksheet = spreadsheet.add_worksheet(title=self.worksheet_name, rows=5000, cols=15)
+                print(f"📋 Created new {self.worksheet_name} worksheet")
             
             # Clear existing data
             print("🧹 Clearing existing data...")
@@ -252,13 +280,13 @@ class RobustSplashDataProcessor:
             
             # Prepare helpful metadata (readable scripts will skip this)
             header_info = [
-                ['=== SPLASH SPORTS MLB DATA ===', ''],
+                [f'=== SPLASH SPORTS {self.sport} DATA ===', ''],
                 ['Processed At:', datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')],
                 ['Total Props:', str(len(df))],
                 ['Unique Players:', str(df['Name'].nunique())],
                 ['Unique Markets:', str(df['Market'].nunique())],
                 ['Top Markets:', ', '.join(df['Market'].value_counts().head(3).index.tolist())],
-                ['Data Source:', 'Splash Sports via ScraperAPI/ScrapFly/ZenRows'],
+                ['Data Source:', f'Splash Sports via ScraperAPI/ScrapFly/ZenRows'],
                 ['Processing Method:', 'Robust structure detection'],
                 ['Pipeline Step:', 'Step 3B - JSON Processing'],
                 [''],  # Empty row for spacing
@@ -276,8 +304,8 @@ class RobustSplashDataProcessor:
             print("✍️ Writing data with metadata to sheet...")
             worksheet.update(range_name='A1', values=all_data)
             
-            print("✅ Successfully saved to Google Sheets!")
-            print(f"📊 Saved {len(df)} props to SPLASH_MLB worksheet")
+            print(f"✅ Successfully saved to Google Sheets!")
+            print(f"📊 Saved {len(df)} props to {self.worksheet_name} worksheet")
             print(f"📋 Format: Metadata rows 1-12, headers row 13, data starts row 14")
             print(f"🤖 Downstream scripts will automatically skip metadata")
             
@@ -307,9 +335,14 @@ class RobustSplashDataProcessor:
 
 def main():
     """Main processing execution with robust handling"""
-    print(f"⚙️ Starting ROBUST data processing at: {datetime.now()}")
+    parser = argparse.ArgumentParser(description='Process Splash Sports data for MLB or NFL')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+                       help='Sport to process data for (default: MLB)')
+    args = parser.parse_args()
     
-    processor = RobustSplashDataProcessor()
+    print(f"⚙️ Starting {args.sport} data processing at: {datetime.now()}")
+    
+    processor = RobustSplashDataProcessor(sport=args.sport)
     
     try:
         # Load and analyze JSON
@@ -327,9 +360,9 @@ def main():
         # Cleanup temporary files
         processor.cleanup_files()
         
-        print(f"\n🎉 ROBUST PROCESSING COMPLETE!")
+        print(f"\n🎉 {args.sport} PROCESSING COMPLETE!")
         print(f"✅ Data successfully processed and saved to Google Sheets")
-        print(f"🔄 Ready for Step 4: match_lines.py")
+        print(f"🔄 Ready for Step 4: match_lines.py --sport {args.sport}")
         
     except Exception as e:
         logger.error(f"Processing failed: {e}")

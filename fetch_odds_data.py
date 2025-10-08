@@ -1,4 +1,4 @@
-# fetch_odds_data.py - Step 2: Fetch odds using Step 1 matchup data and include player teams
+# fetch_odds_data.py - Step 2: Fetch odds using Step 1 matchup data (Multi-Sport Version)
 import requests
 import time
 import pandas as pd
@@ -7,6 +7,8 @@ from google.oauth2.service_account import Credentials
 import json
 from datetime import datetime
 import os
+import argparse
+from sports_config import get_sport_config
 
 def read_sheet_with_metadata_skip(worksheet, sheet_name):
     """
@@ -77,63 +79,62 @@ def read_sheet_with_metadata_skip(worksheet, sheet_name):
         return None
 
 
-# Then update the read_matchups function in your OddsDataFetcher class to use this helper:
-
-def read_matchups(self, client):
-    """Read today's matchups from Step 1 with robust metadata handling"""
-    try:
-        print("📋 Reading today's matchups from Step 1...")
-        spreadsheet = client.open("MLB_Splash_Data")
-        matchups_worksheet = spreadsheet.worksheet("MATCHUPS")
-        
-        # Use robust reading
-        matchups_df = read_sheet_with_metadata_skip(matchups_worksheet, "MATCHUPS")
-        
-        if matchups_df is None or matchups_df.empty:
-            print("❌ No Step 1 matchups found - aborting odds fetch")
-            print("💡 Make sure Step 1 (fetch_matchups.py) ran successfully")
-            return None
-        
-        # Show what we found
-        print(f"🏟️ Found matchups for {len(matchups_df)} games")
-        
-        # Display sample matchups
-        if 'Away_Team' in matchups_df.columns and 'Home_Team' in matchups_df.columns:
-            print(f"📊 Sample matchups:")
-            for i, row in matchups_df.head(3).iterrows():
-                away = row.get('Away_Abbr', row.get('Away_Team', 'N/A'))
-                home = row.get('Home_Abbr', row.get('Home_Team', 'N/A'))
-                print(f"   • {away} @ {home}")
-        
-        return matchups_df
-        
-    except Exception as e:
-        print(f"❌ Error reading matchups: {e}")
-        return None
-
-class MLBOddsFetcher:
-    def __init__(self, api_key: str):
+class OddsFetcher:
+    """Multi-sport odds fetcher - works for MLB, NFL, etc."""
+    
+    def __init__(self, api_key: str, sport='MLB'):
         self.api_key = api_key
+        self.sport = sport.upper()
         self.odds_base_url = "https://api.the-odds-api.com/v4"
         self.api_call_count = 0
         self.todays_matchups = []
+        
+        # Load sport-specific configuration
+        config = get_sport_config(self.sport)
+        
+        # Use config instead of hardcoded values
+        self.odds_api_sport = config['odds_api_sport']
+        self.spreadsheet_name = config['spreadsheet_name']
+        self.MARKETS = config['odds_markets']
+        self.BOOKS = config['sportsbooks']
+        
+        print(f"🏈 Initialized {self.sport} Odds Fetcher")
+        print(f"   API Sport: {self.odds_api_sport}")
+        print(f"   Spreadsheet: {self.spreadsheet_name}")
+        print(f"   Markets: {len(self.MARKETS)}")
+        print(f"   Sportsbooks: {len(self.BOOKS)}")
 
-    # Markets to fetch
-    MARKETS = [
-        'pitcher_strikeouts', 'pitcher_hits_allowed', 'pitcher_outs',
-        'pitcher_earned_runs', 'batter_total_bases', 'batter_hits',
-        'batter_runs_scored', 'batter_rbis', 'batter_singles'
-    ]
+    def _make_odds_api_request(self, endpoint: str, params: dict):
+        """Helper to make Odds API requests with error handling and timeout"""
+        url = f"{self.odds_base_url}{endpoint}"
+        params['apiKey'] = self.api_key
+        self.api_call_count += 1
+        try:
+            response = requests.get(url, params=params, timeout=15)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.Timeout:
+            print(f"❌ Odds API request timed out for {url}")
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Odds API request failed for {url}: {e}")
+            return None
 
-    # Bookmakers to include
-    BOOKS = [
-        'fanduel', 'draftkings', 'betmgm', 'caesars', 'pointsbetus','betrivers',
-        'unibet', 'bovada', 'mybookieag', 'betus', 'william_us', 'fanatics', 'lowvig'
-    ]
+    def get_odds_api_games(self):
+        """Get today's games from Odds API for mapping to our Step 1 matchups"""
+        print("🔗 Getting Odds API games for mapping...")
+        
+        endpoint = f"/sports/{self.odds_api_sport}/events"
+        params = {
+            'regions': 'us',
+            'markets': 'h2h',
+            'oddsFormat': 'american'
+        }
+        return self._make_odds_api_request(endpoint, params)
 
     def read_todays_matchups_from_step1(self):
         """Read today's matchups from Step 1 instead of calling ESPN again"""
-        print("📋 Reading today's matchups from Step 1...")
+        print(f"📋 Reading {self.sport} matchups from Step 1...")
         
         try:
             # Connect to Google Sheets
@@ -146,7 +147,7 @@ class MLBOddsFetcher:
             credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
             client = gspread.authorize(credentials)
             
-            spreadsheet = client.open("MLB_Splash_Data")
+            spreadsheet = client.open(self.spreadsheet_name)
             matchups_worksheet = spreadsheet.worksheet("MATCHUPS")
             
             # Get all data and find header row
@@ -200,34 +201,6 @@ class MLBOddsFetcher:
             print(f"❌ Error reading matchups from Step 1: {e}")
             return []
 
-    def _make_odds_api_request(self, endpoint: str, params: dict):
-        """Helper to make Odds API requests with error handling and timeout"""
-        url = f"{self.odds_base_url}{endpoint}"
-        params['apiKey'] = self.api_key
-        self.api_call_count += 1
-        try:
-            response = requests.get(url, params=params, timeout=15)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.Timeout:
-            print(f"❌ Odds API request timed out for {url}")
-            return None
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Odds API request failed for {url}: {e}")
-            return None
-
-    def get_odds_api_games(self):
-        """Get today's games from Odds API for mapping to our Step 1 matchups"""
-        print("🔗 Getting Odds API games for mapping...")
-        
-        endpoint = "/sports/baseball_mlb/events"
-        params = {
-            'regions': 'us',
-            'markets': 'h2h',
-            'oddsFormat': 'american'
-        }
-        return self._make_odds_api_request(endpoint, params)
-
     def map_step1_to_odds_api_games(self):
         """Map Step 1 matchups to Odds API game IDs"""
         print("🔗 Mapping Step 1 matchups to Odds API games...")
@@ -241,57 +214,22 @@ class MLBOddsFetcher:
             print("❌ Failed to retrieve Odds API games for mapping")
             return []
 
-        # Team name mapping for better matching
-        team_mapping = {
-            'Arizona Diamondbacks': ['Arizona Diamondbacks', 'Diamondbacks', 'ARI'],
-            'Atlanta Braves': ['Atlanta Braves', 'Braves', 'ATL'],
-            'Baltimore Orioles': ['Baltimore Orioles', 'Orioles', 'BAL'],
-            'Boston Red Sox': ['Boston Red Sox', 'Red Sox', 'BOS'],
-            'Chicago Cubs': ['Chicago Cubs', 'Cubs', 'CHC'],
-            'Chicago White Sox': ['Chicago White Sox', 'White Sox', 'CHW'],
-            'Cincinnati Reds': ['Cincinnati Reds', 'Reds', 'CIN'],
-            'Cleveland Guardians': ['Cleveland Guardians', 'Guardians', 'CLE'],
-            'Colorado Rockies': ['Colorado Rockies', 'Rockies', 'COL'],
-            'Detroit Tigers': ['Detroit Tigers', 'Tigers', 'DET'],
-            'Houston Astros': ['Houston Astros', 'Astros', 'HOU'],
-            'Kansas City Royals': ['Kansas City Royals', 'Royals', 'KC'],
-            'Los Angeles Angels': ['Los Angeles Angels', 'LA Angels', 'Angels', 'LAA'],
-            'Los Angeles Dodgers': ['Los Angeles Dodgers', 'LA Dodgers', 'Dodgers', 'LAD'],
-            'Miami Marlins': ['Miami Marlins', 'Marlins', 'MIA'],
-            'Milwaukee Brewers': ['Milwaukee Brewers', 'Brewers', 'MIL'],
-            'Minnesota Twins': ['Minnesota Twins', 'Twins', 'MIN'],
-            'New York Mets': ['New York Mets', 'NY Mets', 'Mets', 'NYM'],
-            'New York Yankees': ['New York Yankees', 'NY Yankees', 'Yankees', 'NYY'],
-            'Oakland Athletics': ['Oakland Athletics', 'Oakland A\'s', 'Athletics', 'A\'s', 'ATH'],
-            'Philadelphia Phillies': ['Philadelphia Phillies', 'Phillies', 'PHI'],
-            'Pittsburgh Pirates': ['Pittsburgh Pirates', 'Pirates', 'PIT'],
-            'San Diego Padres': ['San Diego Padres', 'Padres', 'SD'],
-            'San Francisco Giants': ['San Francisco Giants', 'SF Giants', 'Giants', 'SF'],
-            'Seattle Mariners': ['Seattle Mariners', 'Mariners', 'SEA'],
-            'St. Louis Cardinals': ['St. Louis Cardinals', 'St Louis Cardinals', 'Cardinals', 'STL'],
-            'Tampa Bay Rays': ['Tampa Bay Rays', 'Rays', 'TB'],
-            'Texas Rangers': ['Texas Rangers', 'Rangers', 'TEX'],
-            'Toronto Blue Jays': ['Toronto Blue Jays', 'Blue Jays', 'TOR'],
-            'Washington Nationals': ['Washington Nationals', 'Nationals', 'WSH']
-        }
-
+        # Team name mapping for better matching (sport-agnostic approach)
         def normalize_team_name(name):
             return name.lower().strip().replace('.', '').replace('\'', '')
 
         def find_team_match(name1, name2):
             norm1 = normalize_team_name(name1)
             norm2 = normalize_team_name(name2)
-
+            
+            # Direct match
             if norm1 == norm2:
                 return True
-
-            for canonical, variations in team_mapping.items():
-                canonical_norm = normalize_team_name(canonical)
-                all_norms = {normalize_team_name(v) for v in variations} | {canonical_norm}
-
-                if norm1 in all_norms and norm2 in all_norms:
-                    return True
-
+            
+            # Check if one contains the other (e.g., "New York Giants" contains "Giants")
+            if norm1 in norm2 or norm2 in norm1:
+                return True
+            
             return False
 
         matched_games = []
@@ -324,7 +262,7 @@ class MLBOddsFetcher:
 
     def get_player_props_with_teams(self, game_id: str, market: str, home_team: str, away_team: str):
         """Get player props for a specific game and market, including team information"""
-        endpoint = f"/sports/baseball_mlb/events/{game_id}/odds"
+        endpoint = f"/sports/{self.odds_api_sport}/events/{game_id}/odds"
         params = {
             'regions': 'us',
             'markets': market,
@@ -382,17 +320,17 @@ class MLBOddsFetcher:
         # For demo purposes, we'll alternate or use some basic logic
         # In production, you'd want to maintain team rosters or use additional API calls
         
-        if 'pitcher' in market.lower():
-            # Pitchers - we could maintain a pitcher-to-team mapping
+        if 'pitcher' in market.lower() or 'pass' in market.lower():
+            # Pitchers/QBs - we could maintain a pitcher-to-team mapping
             # For now, we'll just assign alternately or use some heuristic
             return home_team if hash(player_name) % 2 == 0 else away_team
         else:
-            # Batters - same issue, need roster data
+            # Batters/receivers - same issue, need roster data
             return away_team if hash(player_name) % 2 == 0 else home_team
 
     def fetch_all_odds_with_teams(self):
         """Main method: Fetch odds for Step 1 games with team information"""
-        print("🚀 Starting Step 2: Fetch odds with team data...")
+        print(f"🚀 Starting Step 2: Fetch {self.sport} odds with team data...")
 
         # Read matchups from Step 1
         step1_matchups = self.read_todays_matchups_from_step1()
@@ -432,7 +370,7 @@ class MLBOddsFetcher:
         print(f"\n🎉 Collected {len(all_odds)} total player props with team data!")
         return all_odds
 
-    def write_to_google_sheets(self, df, spreadsheet_name: str = "MLB_Splash_Data", worksheet_name: str = "ODDS_API"):
+    def write_to_google_sheets(self, df, worksheet_name: str = "ODDS_API"):
         """Write DataFrame to Google Sheets using a service account"""
         if df.empty:
             print("❌ No data to write to Google Sheets")
@@ -449,8 +387,8 @@ class MLBOddsFetcher:
             creds = Credentials.from_service_account_info(credentials_info, scopes=SCOPES)
             gc = gspread.authorize(creds)
 
-            print(f"📊 Connecting to Google Sheets: {spreadsheet_name} -> {worksheet_name}...")
-            spreadsheet = gc.open(spreadsheet_name)
+            print(f"📊 Connecting to Google Sheets: {self.spreadsheet_name} -> {worksheet_name}...")
+            spreadsheet = gc.open(self.spreadsheet_name)
             worksheet = spreadsheet.worksheet(worksheet_name)
 
             print("🧹 Clearing existing data...")
@@ -460,7 +398,7 @@ class MLBOddsFetcher:
             
             # Add metadata
             metadata = [
-                ['Odds API Data with Team Information', ''],
+                [f'{self.sport} Odds API Data with Team Information', ''],
                 ['Fetched At', datetime.now().isoformat()],
                 ['Total Props', len(df)],
                 ['API Calls Used', self.api_call_count],
@@ -479,13 +417,20 @@ class MLBOddsFetcher:
             raise
 
 def run_odds_fetcher():
-    """Main function"""
+    """Main function with sport parameter"""
+    parser = argparse.ArgumentParser(description='Fetch odds data for MLB or NFL')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+                       help='Sport to fetch odds for (default: MLB)')
+    args = parser.parse_args()
+    
     api_key = os.environ.get('ODDS_API_KEY')
     if not api_key:
         print("❌ ODDS_API_KEY environment variable not set!")
         return
 
-    fetcher = MLBOddsFetcher(api_key)
+    print(f"🏈 Starting Step 2: {args.sport} Odds Collection with Team Data")
+    
+    fetcher = OddsFetcher(api_key, sport=args.sport)
     odds = fetcher.fetch_all_odds_with_teams()
     
     if odds:
@@ -506,5 +451,4 @@ def run_odds_fetcher():
     print(f"\nTotal API calls made: {fetcher.api_call_count}")
 
 if __name__ == "__main__":
-    print("⚾ Starting Step 2: MLB Odds Collection with Team Data")
     run_odds_fetcher()

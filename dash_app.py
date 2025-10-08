@@ -492,9 +492,16 @@ app.layout = html.Div([
     ], style={
         'maxWidth': '1280px',
         'margin': '0 auto',
-        'padding': '48px 24px',
+        'padding': '24px 24px 48px 24px',
         'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    })
+    }),
+    
+    # Add hover effect CSS
+    html.Style('''
+        .table-row:hover {
+            background-color: #f9fafb !important;
+        }
+    ''')
 ], style={
     'backgroundColor': 'white',
     'minHeight': '100vh',
@@ -626,59 +633,208 @@ def render_individual_evs(sport):
         ])
     
     # Get unique markets for filtering
-    all_markets = list(set([ev['Market'] for ev in individualEVs if ev.get('Market')]))
+    all_markets = sorted(list(set([ev['Market'] for ev in individualEVs if ev.get('Market')])))
     
-    # Create table
-    table = dash_table.DataTable(
-        data=individualEVs,
-        columns=[
-            {'name': 'Player', 'id': 'Player'},
-            {'name': 'Market', 'id': 'Market'},
-            {'name': 'Line', 'id': 'Line'},
-            {'name': 'EV %', 'id': 'EV %'}
-        ],
-        style_header={
-            'backgroundColor': '#f9fafb',
-            'color': '#6b7280',
-            'fontWeight': '500',
-            'textTransform': 'uppercase',
-            'fontSize': '12px',
-            'letterSpacing': '0.5px',
-            'padding': '16px 24px',
-            'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-        },
-        style_cell={
-            'textAlign': 'left',
-            'padding': '16px 24px',
-            'fontSize': '14px',
-            'border': 'none',
-            'borderBottom': '1px solid #e5e7eb',
-            'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-        },
-        style_data={
-            'backgroundColor': 'white',
-            'color': '#111827'
-        },
-        style_data_conditional=[
-            {
-                'if': {'column_id': 'Player'},
-                'fontWeight': '500'
-            },
-            {
-                'if': {'column_id': 'EV %'},
-                'color': '#059669',
-                'fontWeight': '600'
-            }
-        ],
-        style_table={
+    return html.Div([
+        # Store for current filter
+        dcc.Store(id=f'market-filter-{sport}', data='All'),
+        
+        # Filter buttons (sticky below ribbons)
+        html.Div([
+            html.Div([
+                html.Button(
+                    "All",
+                    id={'type': 'market-filter-btn', 'index': 'All', 'sport': sport},
+                    n_clicks=0,
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#111827',
+                        'fontSize': '14px',
+                        'fontWeight': '600',
+                        'padding': '8px 16px',
+                        'marginRight': '12px',
+                        'cursor': 'pointer',
+                        'borderRadius': '6px',
+                        'transition': 'all 0.2s',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }
+                )
+            ] + [
+                html.Button(
+                    market,
+                    id={'type': 'market-filter-btn', 'index': market, 'sport': sport},
+                    n_clicks=0,
+                    style={
+                        'background': 'none',
+                        'border': 'none',
+                        'color': '#6b7280',
+                        'fontSize': '14px',
+                        'fontWeight': '400',
+                        'padding': '8px 16px',
+                        'marginRight': '12px',
+                        'cursor': 'pointer',
+                        'borderRadius': '6px',
+                        'transition': 'all 0.2s',
+                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }
+                ) for market in all_markets
+            ], style={
+                'display': 'flex',
+                'alignItems': 'center',
+                'flexWrap': 'wrap',
+                'gap': '4px',
+                'maxWidth': '1280px',
+                'margin': '0 auto',
+                'padding': '16px 24px'
+            })
+        ], style={
             'background': 'white',
-            'border': '1px solid #e5e7eb',
-            'borderRadius': '4px',
-            'overflow': 'hidden'
-        }
-    )
+            'borderBottom': '1px solid #f3f4f6',
+            'position': 'sticky',
+            'top': '156px',  # Below the two ribbons
+            'zIndex': '998',
+            'overflowX': 'auto'
+        }),
+        
+        # Table container with sticky header
+        html.Div([
+            html.Div(id=f'evs-table-{sport}', children=[
+                create_evs_table(individualEVs, 'All')
+            ])
+        ], style={
+            'marginTop': '0'
+        })
+    ])
+
+def create_evs_table(data, selected_filter):
+    """Create the EVs table with sticky header"""
+    # Filter data
+    if selected_filter != 'All':
+        filtered_data = [ev for ev in data if ev['Market'] == selected_filter]
+    else:
+        filtered_data = data
     
-    return html.Div([table])
+    # Create custom table structure with sticky header
+    return html.Div([
+        # Table header (sticky)
+        html.Div([
+            html.Div([
+                html.Div('Player', style={
+                    'flex': '1',
+                    'minWidth': '200px',
+                    'padding': '16px 24px',
+                    'fontWeight': '500',
+                    'textTransform': 'uppercase',
+                    'fontSize': '12px',
+                    'letterSpacing': '0.5px',
+                    'color': '#6b7280'
+                }),
+                html.Div('Market', style={
+                    'flex': '1',
+                    'minWidth': '150px',
+                    'padding': '16px 24px',
+                    'fontWeight': '500',
+                    'textTransform': 'uppercase',
+                    'fontSize': '12px',
+                    'letterSpacing': '0.5px',
+                    'color': '#6b7280'
+                }),
+                html.Div('Line', style={
+                    'flex': '0 0 120px',
+                    'padding': '16px 24px',
+                    'fontWeight': '500',
+                    'textTransform': 'uppercase',
+                    'fontSize': '12px',
+                    'letterSpacing': '0.5px',
+                    'color': '#6b7280'
+                }),
+                html.Div('EV %', style={
+                    'flex': '0 0 100px',
+                    'padding': '16px 24px',
+                    'fontWeight': '500',
+                    'textTransform': 'uppercase',
+                    'fontSize': '12px',
+                    'letterSpacing': '0.5px',
+                    'color': '#6b7280'
+                })
+            ], style={
+                'display': 'flex',
+                'backgroundColor': '#f9fafb',
+                'borderBottom': '1px solid #e5e7eb'
+            })
+        ], style={
+            'position': 'sticky',
+            'top': '220px',  # Below ribbons + filter buttons
+            'zIndex': '997',
+            'background': 'white'
+        }),
+        
+        # Table body (scrollable)
+        html.Div([
+            html.Div([
+                html.Div([
+                    html.Div(row['Player'], style={
+                        'flex': '1',
+                        'minWidth': '200px',
+                        'padding': '16px 24px',
+                        'fontWeight': '500',
+                        'color': '#111827'
+                    }),
+                    html.Div(row['Market'], style={
+                        'flex': '1',
+                        'minWidth': '150px',
+                        'padding': '16px 24px',
+                        'color': '#374151'
+                    }),
+                    html.Div(row['Line'], style={
+                        'flex': '0 0 120px',
+                        'padding': '16px 24px',
+                        'color': '#374151'
+                    }),
+                    html.Div(row['EV %'], style={
+                        'flex': '0 0 100px',
+                        'padding': '16px 24px',
+                        'fontWeight': '600',
+                        'color': '#059669'
+                    })
+                ], style={
+                    'display': 'flex',
+                    'borderBottom': '1px solid #e5e7eb',
+                    'transition': 'background-color 0.15s',
+                    'cursor': 'default'
+                }, className='table-row')
+            ]) for row in filtered_data
+        ])
+    ], style={
+        'border': '1px solid #e5e7eb',
+        'borderRadius': '4px',
+        'overflow': 'hidden',
+        'background': 'white'
+    })
+
+# Callback for market filtering
+@app.callback(
+    Output({'type': 'evs-table-container', 'sport': dash.MATCH}, 'children'),
+    [Input({'type': 'market-filter-btn', 'index': dash.ALL, 'sport': dash.MATCH}, 'n_clicks')],
+    [State('current-sport', 'data')],
+    prevent_initial_call=True
+)
+def update_market_filter(n_clicks, current_sport):
+    ctx = dash.callback_context
+    
+    if not ctx.triggered:
+        return dash.no_update
+    
+    # Get which button was clicked
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    button_data = json.loads(button_id)
+    selected_market = button_data['index']
+    
+    # Reload data and filter
+    individualEVs = read_ev_results(current_sport)
+    
+    return create_evs_table(individualEVs, selected_market)
 
 def render_parlays(sport):
     """Render correlation parlays for the selected sport"""

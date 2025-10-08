@@ -30,6 +30,12 @@ on:
         - step-7-build-parlays
         - steps-1-5-data-only
         - steps-6-7-parlays-only
+      
+      days_offset:
+        description: 'Days offset (0=today, 1=tomorrow, -1=yesterday)'
+        required: false
+        default: '0'
+        type: string
 
 jobs:
   run-pipeline:
@@ -56,9 +62,10 @@ jobs:
         github.event.inputs.step == 'steps-1-5-data-only'
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
-        DAYS_OFFSET: '0'
+        DAYS_OFFSET: ${{ github.event.inputs.days_offset }}
       run: |
         echo "🎯 Step 1: Fetching ${{ github.event.inputs.sport }} Matchups"
+        echo "📅 Days offset: ${{ github.event.inputs.days_offset }}"
         python fetch_matchups.py --sport ${{ github.event.inputs.sport }}
         echo "✅ Step 1 complete"
     

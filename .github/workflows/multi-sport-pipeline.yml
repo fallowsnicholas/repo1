@@ -83,33 +83,25 @@ jobs:
         python fetch_odds_data.py --sport ${{ github.event.inputs.sport }}
         echo "✅ Step 2 complete"
     
-    # STEP 3A: Fetch Splash Sports JSON
-    - name: "Step 3A: Fetch Splash Sports JSON"
+    # STEP 3: Fetch and Process Splash Sports Data (Combined)
+    - name: "Step 3: Fetch and Process Splash Sports Data"
       if: |
         github.event.inputs.step == 'full-pipeline' || 
         github.event.inputs.step == 'step-3a-splash-fetch' ||
+        github.event.inputs.step == 'step-3b-splash-process' ||
         github.event.inputs.step == 'steps-1-5-data-only'
       env:
         SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
         SCRAPFLY_KEY: ${{ secrets.SCRAPFLY_KEY }}
         ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
-      run: |
-        echo "🎯 Step 3A: Fetching Splash Sports JSON for ${{ github.event.inputs.sport }}"
-        python fetch_splash_json.py --sport ${{ github.event.inputs.sport }}
-        echo "✅ Step 3A complete"
-    
-    # STEP 3B: Process Splash Data
-    - name: "Step 3B: Process Splash Data to Sheets"
-      if: |
-        github.event.inputs.step == 'full-pipeline' || 
-        github.event.inputs.step == 'step-3b-splash-process' ||
-        github.event.inputs.step == 'steps-1-5-data-only'
-      env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
-        echo "🎯 Step 3B: Processing Splash Data for ${{ github.event.inputs.sport }}"
+        echo "🎯 Step 3: Fetching and Processing Splash Sports Data for ${{ github.event.inputs.sport }}"
+        echo "📥 Step 3A: Fetching JSON..."
+        python fetch_splash_json.py --sport ${{ github.event.inputs.sport }}
+        echo "⚙️ Step 3B: Processing and saving to sheets..."
         python process_splash_data.py --sport ${{ github.event.inputs.sport }}
-        echo "✅ Step 3B complete"
+        echo "✅ Step 3 complete"
     
     # STEP 4: Match Lines
     - name: "Step 4: Match Splash to Odds Lines"

@@ -1,4 +1,4 @@
-# fetch_matchups.py - Step 1: Get MLB matchups from ESPN with configurable date
+# fetch_matchups.py - Step 1: Get matchups from ESPN with configurable date (Multi-Sport)
 import requests
 import json
 import pandas as pd
@@ -38,7 +38,7 @@ class MatchupFetcher:
             # Fallback to MLB defaults (keeps working if no config)
             self.espn_sport = 'baseball'
             self.espn_league = 'mlb'
-            spreadsheet = client.open(self.spreadsheet_name)
+            self.spreadsheet_name = 'MLB_Splash_Data'
             if self.sport != 'MLB':
                 print(f"⚠️ No config for {self.sport}, using MLB defaults")
         
@@ -47,7 +47,7 @@ class MatchupFetcher:
         
     def fetch_todays_games(self):
         """Get games with configurable date offset"""
-        print("⚾ STEP 1: FETCHING MLB MATCHUPS")
+        print(f"⚾ STEP 1: FETCHING {self.sport} MATCHUPS")
         print("=" * 60)
         
         try:
@@ -169,7 +169,7 @@ class MatchupFetcher:
     def save_to_google_sheets(self, matchups):
         """Save matchup data to Google Sheets"""
         try:
-            print("💾 Saving matchup data to Google Sheets...")
+            print(f"💾 Saving matchup data to Google Sheets: {self.spreadsheet_name}...")
             
             # Connect to Google Sheets
             scopes = [
@@ -181,12 +181,12 @@ class MatchupFetcher:
             credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
             client = gspread.authorize(credentials)
             
-            spreadsheet = client.open("MLB_Splash_Data")
+            spreadsheet = client.open(self.spreadsheet_name)
             
             # Save game matchups
             self._save_matchups_sheet(spreadsheet, matchups)
             
-            print("✅ Successfully saved matchup data to Google Sheets")
+            print(f"✅ Successfully saved matchup data to {self.spreadsheet_name}")
             
         except Exception as e:
             logger.error(f"Error saving to Google Sheets: {e}")
@@ -257,7 +257,7 @@ class MatchupFetcher:
                 offset_text = f"{abs(self.days_offset)} days ago"
             
             metadata = [
-                [f'MLB Matchups for {date_display}'],
+                [f'{self.sport} Matchups for {date_display}'],
                 [f'Date Offset: {offset_text} (DAYS_OFFSET={self.days_offset})'],
                 [f'Total Games: {len(matchups)}'],
                 [f'Fetched At: {datetime.now().isoformat()}'],
@@ -287,6 +287,7 @@ class MatchupFetcher:
             print("📝 Saved 'no games' notice to MATCHUPS sheet")
 
 def main():
+    """Main execution for Step 1 - configurable date and sport"""
     # Add argument parser for sport selection
     parser = argparse.ArgumentParser(description='Fetch sports matchups from ESPN')
     parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
@@ -296,10 +297,6 @@ def main():
     try:
         print(f"🏆 Fetching {args.sport} matchups...")
         fetcher = MatchupFetcher(sport=args.sport)
-        
-        # Rest of your existing code stays the same
-        matchups = fetcher.fetch_todays_games()
-        fetcher.save_to_google_sheets(matchups)
         
         # Show configuration
         if fetcher.days_offset != 0:
@@ -315,7 +312,7 @@ def main():
         print(f"\n🎯 STEP 1 COMPLETE:")
         print(f"   📅 Date: {target_date.strftime('%B %d, %Y')}")
         print(f"   🏟️ Games Found: {len(matchups)}")
-        print(f"   💾 Data saved to Google Sheets (MATCHUPS tab)")
+        print(f"   💾 Data saved to {fetcher.spreadsheet_name} (MATCHUPS tab)")
         
         if matchups:
             print(f"\n📋 SUMMARY OF MATCHUPS:")

@@ -1,0 +1,38 @@
+name: Test Multi-Sport Matchups
+
+on:
+  workflow_dispatch:
+    inputs:
+      sport:
+        description: 'Which sport to test'
+        required: true
+        default: 'NFL'
+        type: choice
+        options:
+        - MLB
+        - NFL
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: All-Sports
+          
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - run: pip install -r requirements.txt
+      
+      - name: Test matchups for ${{ github.event.inputs.sport }}
+        env:
+          GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+        run: |
+          echo "🏆 Testing ${{ github.event.inputs.sport }} matchups"
+          echo "Current directory contents:"
+          ls -la
+          echo ""
+          echo "Running fetch_matchups.py for ${{ github.event.inputs.sport }}:"
+          python fetch_matchups.py --sport ${{ github.event.inputs.sport }}

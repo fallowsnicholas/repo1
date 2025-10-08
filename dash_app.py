@@ -494,14 +494,7 @@ app.layout = html.Div([
         'margin': '0 auto',
         'padding': '24px 24px 48px 24px',
         'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    }),
-    
-    # Add hover effect CSS
-    html.Style('''
-        .table-row:hover {
-            background-color: #f9fafb !important;
-        }
-    ''')
+    })
 ], style={
     'backgroundColor': 'white',
     'minHeight': '100vh',

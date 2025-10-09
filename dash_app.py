@@ -1,4 +1,4 @@
-# dash_app.py - Fixed version with clean market filtering
+# dash_app.py - COMPLETE FIX with all requested changes
 import sys
 import traceback
 
@@ -467,7 +467,7 @@ try:
         ], style={
             'maxWidth': '1280px',
             'margin': '0 auto',
-            'padding': '24px 24px 48px 24px',
+            'padding': '0',  # Changed from '24px 24px 48px 24px'
             'fontFamily': 'Inter, sans-serif'
         })
     ], style={
@@ -591,7 +591,7 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
 print("✅ Main content callback registered")
 
 def render_individual_evs(sport):
-    """Render individual EVs for the selected sport with clean market filters"""
+    """Render individual EVs for the selected sport with CLEAN text-only filters"""
     individualEVs = read_ev_results(sport)
     
     if not individualEVs:
@@ -618,51 +618,65 @@ def render_individual_evs(sport):
     
     print(f"🔍 DEBUG: Found {len(all_markets)} unique markets: {all_markets}")
     
-    # Create filter buttons - NO BOXES, just text
-    filter_buttons = html.Div([
-        html.Button(
-            "All",
-            id={'type': 'market-filter', 'index': 0},
-            style={
-                'background': 'none',
-                'border': 'none',
-                'color': '#111827',  # Black for active "All" button
-                'fontSize': '14px',
-                'fontWeight': '600',
-                'padding': '8px 16px',
-                'marginRight': '16px',
-                'cursor': 'pointer',
-                'fontFamily': 'Inter, sans-serif'
-            }
-        )
-    ] + [
-        html.Button(
-            market,
-            id={'type': 'market-filter', 'index': i+1},
-            style={
-                'background': 'none',
-                'border': 'none',
-                'color': '#9ca3af',  # Gray for inactive buttons
-                'fontSize': '14px',
-                'fontWeight': '400',
-                'padding': '8px 16px',
-                'marginRight': '16px',
-                'cursor': 'pointer',
-                'fontFamily': 'Inter, sans-serif'
-            }
-        ) for i, market in enumerate(all_markets)
+    # Create filter buttons - PURE TEXT, NO BOXES
+    filter_buttons_container = html.Div([
+        html.Div([
+            html.Button(
+                "All",
+                id={'type': 'market-filter', 'index': 0},
+                style={
+                    'background': 'transparent',
+                    'border': 'none',
+                    'boxShadow': 'none',
+                    'outline': 'none',
+                    'color': '#111827',
+                    'fontSize': '14px',
+                    'fontWeight': '600',
+                    'padding': '8px 16px',
+                    'marginRight': '16px',
+                    'cursor': 'pointer',
+                    'fontFamily': 'Inter, sans-serif',
+                    'WebkitAppearance': 'none',
+                    'MozAppearance': 'none'
+                }
+            )
+        ] + [
+            html.Button(
+                market,
+                id={'type': 'market-filter', 'index': i+1},
+                style={
+                    'background': 'transparent',
+                    'border': 'none',
+                    'boxShadow': 'none',
+                    'outline': 'none',
+                    'color': '#9ca3af',
+                    'fontSize': '14px',
+                    'fontWeight': '400',
+                    'padding': '8px 16px',
+                    'marginRight': '16px',
+                    'cursor': 'pointer',
+                    'fontFamily': 'Inter, sans-serif',
+                    'WebkitAppearance': 'none',
+                    'MozAppearance': 'none'
+                }
+            ) for i, market in enumerate(all_markets)
+        ], style={
+            'display': 'flex',
+            'alignItems': 'center',
+            'justifyContent': 'center',
+            'flexWrap': 'wrap',
+            'maxWidth': '1280px',
+            'margin': '0 auto',
+            'padding': '16px 24px'
+        })
     ], style={
-        'display': 'flex',
-        'alignItems': 'center',
-        'justifyContent': 'center',
-        'flexWrap': 'wrap',
-        'padding': '16px 24px',
         'background': 'white',
         'borderBottom': '1px solid #f3f4f6',
         'position': 'sticky',
         'top': '156px',
         'left': '0',
         'right': '0',
+        'width': '100%',
         'zIndex': '998'
     })
     
@@ -670,8 +684,8 @@ def render_individual_evs(sport):
     table = create_evs_table(individualEVs)
     
     return html.Div([
-        filter_buttons,
-        html.Div(id='evs-table-container', children=[table])
+        filter_buttons_container,
+        html.Div(id='evs-table-container', children=[table], style={'padding': '0 24px 48px 24px'})
     ])
 
 # Market filter callback - WITH BUTTON STYLE UPDATES
@@ -705,7 +719,7 @@ def update_market_filter(n_clicks, current_sport):
                 'padding': '24px',
                 'fontFamily': 'Inter, sans-serif'
             })
-        ])
+        ], style={'padding': '0 24px 48px 24px'})
         return empty_div, dash.no_update
     
     # Get unique markets
@@ -719,31 +733,39 @@ def update_market_filter(n_clicks, current_sport):
         filtered_data = [ev for ev in individualEVs if ev['Market'] == selected_market]
     
     # Create table
-    table = create_evs_table(filtered_data)
+    table_div = html.Div([create_evs_table(filtered_data)], style={'padding': '0 24px 48px 24px'})
     
     # Update button styles - Active button is BLACK
     active_style = {
-        'background': 'none',
+        'background': 'transparent',
         'border': 'none',
-        'color': '#111827',  # BLACK for active
+        'boxShadow': 'none',
+        'outline': 'none',
+        'color': '#111827',  # BLACK
         'fontSize': '14px',
         'fontWeight': '600',
         'padding': '8px 16px',
         'marginRight': '16px',
         'cursor': 'pointer',
-        'fontFamily': 'Inter, sans-serif'
+        'fontFamily': 'Inter, sans-serif',
+        'WebkitAppearance': 'none',
+        'MozAppearance': 'none'
     }
     
     inactive_style = {
-        'background': 'none',
+        'background': 'transparent',
         'border': 'none',
-        'color': '#9ca3af',  # GRAY for inactive
+        'boxShadow': 'none',
+        'outline': 'none',
+        'color': '#9ca3af',  # GRAY
         'fontSize': '14px',
         'fontWeight': '400',
         'padding': '8px 16px',
         'marginRight': '16px',
         'cursor': 'pointer',
-        'fontFamily': 'Inter, sans-serif'
+        'fontFamily': 'Inter, sans-serif',
+        'WebkitAppearance': 'none',
+        'MozAppearance': 'none'
     }
     
     # Create styles list for all buttons (All + all markets)
@@ -756,7 +778,7 @@ def update_market_filter(n_clicks, current_sport):
         else:
             button_styles.append(inactive_style)
     
-    return table, button_styles
+    return table_div, button_styles
 
 print("✅ Market filter callback registered")
 
@@ -776,31 +798,31 @@ def create_evs_table(data):
     return html.Div([
         # Table header (STICKY)
         html.Div([
-            html.Div('Player', style={
+            html.Div('PLAYER', style={
                 'flex': '1',
                 'minWidth': '200px',
                 'padding': '16px 24px',
-                'fontWeight': '600',
-                'fontSize': '12px',
+                'fontWeight': '500',
+                'fontSize': '11px',
                 'letterSpacing': '0.5px',
                 'color': '#6b7280',
                 'textTransform': 'uppercase'
             }),
-            html.Div('Market', style={
+            html.Div('MARKET', style={
                 'flex': '1',
                 'minWidth': '150px',
                 'padding': '16px 24px',
-                'fontWeight': '600',
-                'fontSize': '12px',
+                'fontWeight': '500',
+                'fontSize': '11px',
                 'letterSpacing': '0.5px',
                 'color': '#6b7280',
                 'textTransform': 'uppercase'
             }),
-            html.Div('Line', style={
+            html.Div('LINE', style={
                 'flex': '0 0 120px',
                 'padding': '16px 24px',
-                'fontWeight': '600',
-                'fontSize': '12px',
+                'fontWeight': '500',
+                'fontSize': '11px',
                 'letterSpacing': '0.5px',
                 'color': '#6b7280',
                 'textTransform': 'uppercase'
@@ -808,8 +830,8 @@ def create_evs_table(data):
             html.Div('EV %', style={
                 'flex': '0 0 100px',
                 'padding': '16px 24px',
-                'fontWeight': '600',
-                'fontSize': '12px',
+                'fontWeight': '500',
+                'fontSize': '11px',
                 'letterSpacing': '0.5px',
                 'color': '#6b7280',
                 'textTransform': 'uppercase'
@@ -899,7 +921,7 @@ def render_parlays(sport):
     return html.Div([
         html.Div([
             render_parlay_card(parlay) for parlay in parlays
-        ])
+        ], style={'padding': '0 24px 48px 24px'})
     ])
 
 def render_parlay_card(parlay):

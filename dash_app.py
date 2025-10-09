@@ -58,6 +58,7 @@ def clean_market_name(market):
 def connect_to_sheets():
     """Connect to Google Sheets using service account"""
     try:
+        print("Connecting to Google Sheets...")
         scopes = [
             'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/drive'
@@ -67,9 +68,15 @@ def connect_to_sheets():
         credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
         client = gspread.authorize(credentials)
         logger.info("✅ Successfully connected to Google Sheets")
+        print("✅ Google Sheets connection successful")
         return client
+    except KeyError:
+        logger.error("❌ GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable not set")
+        print("❌ GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable not set", file=sys.stderr)
+        return None
     except Exception as e:
         logger.error(f"Failed to connect to Google Sheets: {e}")
+        print(f"❌ Google Sheets connection failed: {e}", file=sys.stderr)
         return None
 
 def read_ev_results(sport='MLB'):
@@ -316,7 +323,9 @@ def read_correlation_parlays(sport='MLB'):
         return []
 
 # Define the app layout
-app.layout = html.Div([
+print("Step 3: Building app layout...")
+try:
+    app.layout = html.Div([
     # Add modern font import
     html.Link(
         rel='stylesheet',
@@ -462,20 +471,56 @@ app.layout = html.Div([
         'fontFamily': 'Inter, sans-serif'
     }),
     
-    # Add hover effect CSS
-    html.Style('''
+    # Add hover effect CSS using the correct method
+    html.Div([
+        html.Style('''
         .table-row:hover {
             background-color: #f9fafb !important;
         }
     ''')
+    ], style={'display': 'none'})  # Hidden div to hold the style tag
 ], style={
     'backgroundColor': 'white',
     'minHeight': '100vh',
     'fontFamily': 'Inter, sans-serif'
 })
+    print("✅ App layout created successfully")
+    
+    # Inject custom CSS for hover effects
+    app.index_string = '''
+    <!DOCTYPE html>
+    <html>
+        <head>
+            {%metas%}
+            <title>{%title%}</title>
+            {%favicon%}
+            {%css%}
+            <style>
+                .table-row:hover {
+                    background-color: #f9fafb !important;
+                }
+            </style>
+        </head>
+        <body>
+            {%app_entry%}
+            <footer>
+                {%config%}
+                {%scripts%}
+                {%renderer%}
+            </footer>
+        </body>
+    </html>
+    '''
+    
+except Exception as e:
+    print(f"❌ ERROR creating layout: {e}", file=sys.stderr)
+    print(traceback.format_exc(), file=sys.stderr)
+    sys.exit(1)
 
 # Callback for sport selection
-@app.callback(
+print("Step 4: Registering callbacks...")
+try:
+    @app.callback(
     [Output('current-sport', 'data'),
      Output('league-mlb', 'style'),
      Output('league-nfl', 'style')],
@@ -519,8 +564,15 @@ def update_sport(mlb_clicks, nfl_clicks):
     else:
         return 'MLB', active_style, inactive_style
 
+    print("✅ Sport selection callback registered")
+except Exception as e:
+    print(f"❌ ERROR registering sport callback: {e}", file=sys.stderr)
+    print(traceback.format_exc(), file=sys.stderr)
+    sys.exit(1)
+
 # Main callback to render content
-@app.callback(
+try:
+    @app.callback(
     [Output('main-content-fixed', 'children'),
      Output('view-individual', 'style'),
      Output('view-parlays', 'style')],
@@ -574,6 +626,12 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
         parlays_style = active_style
     
     return content, individual_style, parlays_style
+
+    print("✅ Main content callback registered")
+except Exception as e:
+    print(f"❌ ERROR registering main callback: {e}", file=sys.stderr)
+    print(traceback.format_exc(), file=sys.stderr)
+    sys.exit(1)
 
 def render_individual_evs(sport):
     """Render individual EVs for the selected sport - FIXED VERSION"""
@@ -781,7 +839,8 @@ def create_evs_table(data, selected_filter):
     })
 
 # FIXED Callback for market filtering
-@app.callback(
+try:
+    @app.callback(
     Output({'type': 'evs-table-container', 'sport': dash.MATCH}, 'children'),
     [Input({'type': 'market-filter-btn', 'index': dash.ALL, 'sport': dash.MATCH}, 'n_clicks')],
     [State('current-sport', 'data')],
@@ -802,6 +861,12 @@ def update_market_filter(n_clicks, current_sport):
     individualEVs = read_ev_results(current_sport)
     
     return create_evs_table(individualEVs, selected_market)
+
+    print("✅ Market filter callback registered")
+except Exception as e:
+    print(f"❌ ERROR registering filter callback: {e}", file=sys.stderr)
+    print(traceback.format_exc(), file=sys.stderr)
+    sys.exit(1)
 
 def render_parlays(sport):
     """Render correlation parlays for the selected sport"""
@@ -927,6 +992,17 @@ def render_parlay_card(parlay):
     })
 
 # For deployment
+print("Step 5: Starting server...")
+print("=" * 60)
+print("✅ DASH APP INITIALIZATION COMPLETE")
+print("=" * 60)
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8050))
-    app.run_server(debug=False, host='0.0.0.0', port=port)
+    try:
+        port = int(os.environ.get('PORT', 8050))
+        print(f"Starting server on port {port}...")
+        app.run_server(debug=False, host='0.0.0.0', port=port)
+    except Exception as e:
+        print(f"❌ ERROR starting server: {e}", file=sys.stderr)
+        print(traceback.format_exc(), file=sys.stderr)
+        sys.exit(1)

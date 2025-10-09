@@ -1,4 +1,4 @@
-# dash_app.py - COMPLETE FIX with all requested changes
+# dash_app.py - COMPLETE FIX for sticky headers and buttons
 import sys
 import traceback
 
@@ -335,7 +335,7 @@ try:
         # Store for current sport selection
         dcc.Store(id='current-sport', data='MLB'),
         
-        # Header
+        # Header (FIXED at top)
         html.Div([
             html.Div([
                 html.H1("EV Sports", style={
@@ -373,7 +373,7 @@ try:
             'zIndex': '1000'
         }),
         
-        # Two stacked ribbons
+        # Two stacked ribbons (FIXED below header)
         html.Div([
             html.Div([
                 # Ribbon 1: League Selection
@@ -461,13 +461,10 @@ try:
         # Spacer for fixed headers
         html.Div(style={'height': '156px'}),
         
-        # Main Content Area
+        # Main Content Area (scrollable)
         html.Div([
             html.Div(id='main-content-fixed')
         ], style={
-            'maxWidth': '1280px',
-            'margin': '0 auto',
-            'padding': '0',  # Changed from '24px 24px 48px 24px'
             'fontFamily': 'Inter, sans-serif'
         })
     ], style={
@@ -591,7 +588,7 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
 print("✅ Main content callback registered")
 
 def render_individual_evs(sport):
-    """Render individual EVs for the selected sport with CLEAN text-only filters"""
+    """Render individual EVs with FIXED filter buttons"""
     individualEVs = read_ev_results(sport)
     
     if not individualEVs:
@@ -618,7 +615,7 @@ def render_individual_evs(sport):
     
     print(f"🔍 DEBUG: Found {len(all_markets)} unique markets: {all_markets}")
     
-    # Create filter buttons - PURE TEXT, NO BOXES
+    # Filter buttons container - ABSOLUTELY FIXED
     filter_buttons_container = html.Div([
         html.Div([
             html.Button(
@@ -672,23 +669,35 @@ def render_individual_evs(sport):
     ], style={
         'background': 'white',
         'borderBottom': '1px solid #f3f4f6',
-        'position': 'sticky',
-        'top': '156px',
+        'position': 'fixed',  # FIXED position
+        'top': '156px',  # Below ribbons
         'left': '0',
         'right': '0',
         'width': '100%',
         'zIndex': '998'
     })
     
-    # Create initial table (showing all data)
-    table = create_evs_table(individualEVs)
+    # Spacer for filter buttons
+    filter_spacer = html.Div(style={'height': '64px'})
+    
+    # Table container with padding
+    table_container = html.Div(
+        id='evs-table-container',
+        children=[create_evs_table(individualEVs)],
+        style={
+            'maxWidth': '1280px',
+            'margin': '0 auto',
+            'padding': '0 24px 48px 24px'
+        }
+    )
     
     return html.Div([
         filter_buttons_container,
-        html.Div(id='evs-table-container', children=[table], style={'padding': '0 24px 48px 24px'})
+        filter_spacer,
+        table_container
     ])
 
-# Market filter callback - WITH BUTTON STYLE UPDATES
+# Market filter callback
 @app.callback(
     [Output('evs-table-container', 'children'),
      Output({'type': 'market-filter', 'index': ALL}, 'style')],
@@ -719,7 +728,7 @@ def update_market_filter(n_clicks, current_sport):
                 'padding': '24px',
                 'fontFamily': 'Inter, sans-serif'
             })
-        ], style={'padding': '0 24px 48px 24px'})
+        ])
         return empty_div, dash.no_update
     
     # Get unique markets
@@ -733,15 +742,15 @@ def update_market_filter(n_clicks, current_sport):
         filtered_data = [ev for ev in individualEVs if ev['Market'] == selected_market]
     
     # Create table
-    table_div = html.Div([create_evs_table(filtered_data)], style={'padding': '0 24px 48px 24px'})
+    table = create_evs_table(filtered_data)
     
-    # Update button styles - Active button is BLACK
+    # Update button styles
     active_style = {
         'background': 'transparent',
         'border': 'none',
         'boxShadow': 'none',
         'outline': 'none',
-        'color': '#111827',  # BLACK
+        'color': '#111827',
         'fontSize': '14px',
         'fontWeight': '600',
         'padding': '8px 16px',
@@ -757,7 +766,7 @@ def update_market_filter(n_clicks, current_sport):
         'border': 'none',
         'boxShadow': 'none',
         'outline': 'none',
-        'color': '#9ca3af',  # GRAY
+        'color': '#9ca3af',
         'fontSize': '14px',
         'fontWeight': '400',
         'padding': '8px 16px',
@@ -768,9 +777,9 @@ def update_market_filter(n_clicks, current_sport):
         'MozAppearance': 'none'
     }
     
-    # Create styles list for all buttons (All + all markets)
+    # Create styles list for all buttons
     button_styles = []
-    total_buttons = len(all_markets) + 1  # +1 for "All" button
+    total_buttons = len(all_markets) + 1
     
     for i in range(total_buttons):
         if i == button_index:
@@ -778,12 +787,12 @@ def update_market_filter(n_clicks, current_sport):
         else:
             button_styles.append(inactive_style)
     
-    return table_div, button_styles
+    return table, button_styles
 
 print("✅ Market filter callback registered")
 
 def create_evs_table(data):
-    """Create the EVs table with STICKY header"""
+    """Create table with NO sticky header (buttons handle stickiness)"""
     if not data:
         return html.Div([
             html.P("No data matches this filter.", style={
@@ -796,7 +805,7 @@ def create_evs_table(data):
         ])
     
     return html.Div([
-        # Table header (STICKY)
+        # Table header (NOT STICKY - just regular header)
         html.Div([
             html.Div('PLAYER', style={
                 'flex': '1',
@@ -839,14 +848,10 @@ def create_evs_table(data):
         ], style={
             'display': 'flex',
             'backgroundColor': '#f9fafb',
-            'borderBottom': '1px solid #e5e7eb',
-            'position': 'sticky',
-            'top': '220px',  # Below ribbons (156px) + filter buttons (~64px)
-            'zIndex': '997',
-            'background': '#f9fafb'
+            'borderBottom': '1px solid #e5e7eb'
         }),
         
-        # Table body (scrollable)
+        # Table body (scrollable rows)
         html.Div([
             html.Div([
                 html.Div(row['Player'], style={
@@ -921,7 +926,11 @@ def render_parlays(sport):
     return html.Div([
         html.Div([
             render_parlay_card(parlay) for parlay in parlays
-        ], style={'padding': '0 24px 48px 24px'})
+        ], style={
+            'maxWidth': '1280px',
+            'margin': '0 auto',
+            'padding': '24px'
+        })
     ])
 
 def render_parlay_card(parlay):

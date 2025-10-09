@@ -564,7 +564,7 @@ def update_sport(mlb_clicks, nfl_clicks):
     else:
         return 'MLB', active_style, inactive_style
 
-    print("✅ Sport selection callback registered")
+print("✅ Sport selection callback registered")  # ✅ CORRECT - outside function
 except Exception as e:
     print(f"❌ ERROR registering sport callback: {e}", file=sys.stderr)
     print(traceback.format_exc(), file=sys.stderr)

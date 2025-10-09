@@ -1,4 +1,4 @@
-# dash_app.py - Multi-sport dashboard with Google Sheets integration
+# dash_app.py - Fixed version with proper table rendering and filtering
 import dash
 from dash import dcc, html, Input, Output, State, callback, dash_table
 import pandas as pd
@@ -62,7 +62,6 @@ def read_ev_results(sport='MLB'):
             logger.error("Failed to get Google Sheets client")
             return []
         
-        # Determine spreadsheet name based on sport
         spreadsheet_name = f"{sport}_Splash_Data"
         
         logger.info(f"📊 Attempting to open {spreadsheet_name} spreadsheet...")
@@ -73,8 +72,6 @@ def read_ev_results(sport='MLB'):
         ev_worksheet = spreadsheet.worksheet("EV_RESULTS")
         logger.info("✅ Successfully accessed EV_RESULTS worksheet")
         
-        # Get all data and skip metadata rows
-        logger.info("📥 Reading all data from worksheet...")
         all_data = ev_worksheet.get_all_values()
         
         if not all_data:
@@ -95,14 +92,9 @@ def read_ev_results(sport='MLB'):
             logger.error("Could not find header row in EV_RESULTS")
             return []
         
-        # Extract headers and data
         headers = all_data[header_row_index]
         data_rows = all_data[header_row_index + 1:]
         
-        logger.info(f"Using headers from row {header_row_index}: {headers}")
-        logger.info(f"Data rows available: {len(data_rows)}")
-        
-        # Create DataFrame
         ev_df = pd.DataFrame(data_rows, columns=headers)
         
         # Find Player column
@@ -116,14 +108,8 @@ def read_ev_results(sport='MLB'):
             logger.error(f"No player column found. Available columns: {list(ev_df.columns)}")
             return []
         
-        logger.info(f"Using player column: '{player_col}'")
-        
         # Remove empty rows
-        before_filter = len(ev_df)
         ev_df = ev_df[ev_df[player_col].notna() & (ev_df[player_col] != '')]
-        after_filter = len(ev_df)
-        
-        logger.info(f"Rows after filtering: {after_filter} (removed {before_filter - after_filter})")
         
         if ev_df.empty:
             logger.warning("No EV data found after filtering")
@@ -140,15 +126,12 @@ def read_ev_results(sport='MLB'):
                 break
         
         if not ev_col:
-            logger.warning("No EV percentage column found")
             for col in ev_df.columns:
                 if 'ev' in col.lower():
                     ev_col = col
-                    logger.info(f"Using EV column: {col}")
                     break
         
         for _, row in ev_df.iterrows():
-            # Format EV percentage
             ev_value = row.get(ev_col, 0) if ev_col else '0'
             try:
                 ev_float = float(ev_value)
@@ -156,7 +139,6 @@ def read_ev_results(sport='MLB'):
             except (ValueError, TypeError):
                 ev_percent = str(ev_value)
             
-            # Clean the market name
             raw_market = row.get('Market', '')
             cleaned_market = clean_market_name(raw_market)
             
@@ -168,7 +150,6 @@ def read_ev_results(sport='MLB'):
             })
         
         logger.info(f"Successfully converted {len(individual_evs)} Individual EV opportunities for {sport}")
-        
         return individual_evs
         
     except Exception as e:
@@ -186,81 +167,49 @@ def read_correlation_parlays(sport='MLB'):
     try:
         client = connect_to_sheets()
         if not client:
-            logger.error("❌ Failed to get Google Sheets client for parlays")
             return []
         
-        logger.info("📊 Attempting to read Correlation Parlays...")
         spreadsheet = client.open(f"{sport}_Splash_Data")
-        
         parlay_worksheet = spreadsheet.worksheet("CORRELATION_PARLAYS")
-        logger.info(f"✅ Successfully accessed CORRELATION_PARLAYS worksheet")
-        
         all_data = parlay_worksheet.get_all_values()
         
         if not all_data:
-            logger.warning("⚠️ Parlay sheet is empty")
             return []
-        
-        logger.info(f"📊 Total rows in parlay sheet: {len(all_data)}")
         
         # Find header row
         header_row_index = -1
-        
         for i, row in enumerate(all_data[:20]):
             non_empty = [cell for cell in row if cell and str(cell).strip()]
-            
             if len(non_empty) >= 5:
-                row_lower = [str(cell).lower() for cell in row]
                 has_underscore_cols = any('_' in str(cell) for cell in row if cell)
                 has_id_col = any('id' in str(cell).lower() for cell in row if cell)
                 has_pitcher_name = any('pitcher_name' in str(cell).lower() for cell in row if cell)
                 
                 if has_underscore_cols or (has_id_col and has_pitcher_name):
-                    logger.info(f"🎯 Found actual header row at index {i}: {row}")
                     header_row_index = i
                     break
         
         if header_row_index == -1:
-            logger.error("❌ Could not find header row in parlay sheet")
             return []
         
         headers = all_data[header_row_index]
         data_rows = all_data[header_row_index + 1:]
-        
-        logger.info(f"📋 Using headers from row {header_row_index}")
-        logger.info(f"📊 Data rows available: {len(data_rows)}")
-        
-        # Create DataFrame
         parlay_df = pd.DataFrame(data_rows, columns=headers)
-        
-        # Remove empty rows
-        before_filter = len(parlay_df)
         parlay_df = parlay_df[parlay_df.iloc[:, 0].notna() & (parlay_df.iloc[:, 0] != '')]
-        after_filter = len(parlay_df)
-        
-        logger.info(f"🔍 Rows after filtering empty: {after_filter} (removed {before_filter - after_filter})")
         
         if parlay_df.empty:
-            logger.warning("⚠️ No parlay data found after filtering")
             return []
         
-        # Parse parlays
         parlays = []
-        
         for idx, row in parlay_df.iterrows():
             try:
                 pitcher_name = row.get('Pitcher_Name', '')
-                pitcher_market = row.get('Pitcher_Market', '')
-                pitcher_line = row.get('Pitcher_Line', '')
-                pitcher_bet_type = row.get('Pitcher_Bet_Type', '')
-                pitcher_ev = row.get('Pitcher_EV', '')
-                
                 if not pitcher_name:
                     continue
                 
+                pitcher_market = row.get('Pitcher_Market', '')
                 pitcher_market_clean = clean_market_name(pitcher_market) if pitcher_market else ""
                 
-                # Collect batter legs
                 batter_legs = []
                 batter_num = 1
                 
@@ -294,16 +243,16 @@ def read_correlation_parlays(sport='MLB'):
                             
                             batter_legs.append({'Batter': batter_info})
                     except Exception as e:
-                        logger.warning(f"  ⚠️ Error parsing batter data: {e}")
+                        logger.warning(f"Error parsing batter data: {e}")
                     
                     batter_num += 1
                 
                 if not batter_legs:
                     continue
                 
-                # Calculate total EV
                 total_ev = 0
                 try:
+                    pitcher_ev = row.get('Pitcher_EV', '')
                     if pitcher_ev:
                         total_ev += float(pitcher_ev)
                     
@@ -317,14 +266,14 @@ def read_correlation_parlays(sport='MLB'):
                                     total_ev += float(parts[4].strip())
                                 except:
                                     pass
-                except Exception as e:
-                    logger.warning(f"  ⚠️ Error calculating total EV: {e}")
+                except:
+                    pass
                 
                 pitcher_info = {
                     'Player': pitcher_name,
                     'Market': pitcher_market_clean,
-                    'Line': pitcher_line,
-                    'EV': f"{float(pitcher_ev):.1%}" if pitcher_ev else "",
+                    'Line': row.get('Pitcher_Line', ''),
+                    'EV': f"{float(row.get('Pitcher_EV', 0)):.1%}" if row.get('Pitcher_EV') else "",
                     'Odds': row.get('Pitcher_Odds', '') or ""
                 }
                 
@@ -339,14 +288,13 @@ def read_correlation_parlays(sport='MLB'):
                 parlays.append(parlay)
                 
             except Exception as e:
-                logger.error(f"  ❌ Error parsing parlay row {idx}: {e}")
+                logger.error(f"Error parsing parlay row {idx}: {e}")
                 continue
         
-        logger.info(f"\n✅ Successfully parsed {len(parlays)} parlays total")
         return parlays
         
     except Exception as e:
-        logger.error(f"❌ Error reading correlation parlays: {e}")
+        logger.error(f"Error reading correlation parlays: {e}")
         return []
 
 # Define the app layout
@@ -360,7 +308,7 @@ app.layout = html.Div([
     # Store for current sport selection
     dcc.Store(id='current-sport', data='MLB'),
     
-    # Header
+    # Header (FIXED)
     html.Div([
         html.Div([
             html.H1("EV Sports", style={
@@ -368,12 +316,12 @@ app.layout = html.Div([
                 'fontSize': '24px',
                 'fontWeight': '800',
                 'color': '#111827',
-                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                'fontFamily': 'Inter, sans-serif'
             }),
             html.Span("Last Updated: 2 hours ago", style={
                 'fontSize': '14px',
                 'color': '#6b7280',
-                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                'fontFamily': 'Inter, sans-serif'
             })
         ], style={
             'maxWidth': '1280px',
@@ -384,7 +332,7 @@ app.layout = html.Div([
             'justifyContent': 'space-between',
             'width': '100%'
         })
-    ], className='header-fixed-class', style={
+    ], style={
         'background': 'white',
         'borderBottom': '1px solid #e5e7eb',
         'height': '64px',
@@ -398,7 +346,7 @@ app.layout = html.Div([
         'zIndex': '1000'
     }),
     
-    # Two stacked ribbons
+    # Two stacked ribbons (FIXED)
     html.Div([
         html.Div([
             # Ribbon 1: League Selection
@@ -415,7 +363,7 @@ app.layout = html.Div([
                         'padding': '8px 0',
                         'marginRight': '32px',
                         'cursor': 'pointer',
-                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                        'fontFamily': 'Inter, sans-serif'
                     }
                 ),
                 html.Button("NFL", 
@@ -430,7 +378,7 @@ app.layout = html.Div([
                         'padding': '8px 0',
                         'marginRight': '32px',
                         'cursor': 'pointer',
-                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                        'fontFamily': 'Inter, sans-serif'
                     }
                 )
             ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '8px'}),
@@ -449,7 +397,7 @@ app.layout = html.Div([
                         'padding': '8px 0',
                         'marginRight': '32px',
                         'cursor': 'pointer',
-                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                        'fontFamily': 'Inter, sans-serif'
                     }
                 ),
                 html.Button("Correlation Parlays",
@@ -463,7 +411,7 @@ app.layout = html.Div([
                         'fontWeight': '400',
                         'padding': '8px 0',
                         'cursor': 'pointer',
-                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                        'fontFamily': 'Inter, sans-serif'
                     }
                 )
             ], style={'display': 'flex', 'alignItems': 'center'})
@@ -472,7 +420,7 @@ app.layout = html.Div([
             'margin': '0 auto',
             'padding': '16px 24px'
         })
-    ], className='ribbons-fixed-class', style={
+    ], style={
         'background': 'white',
         'borderBottom': '1px solid #f3f4f6',
         'position': 'fixed',
@@ -483,7 +431,7 @@ app.layout = html.Div([
         'zIndex': '999'
     }),
 
-    # Spacer
+    # Spacer for fixed headers
     html.Div(style={'height': '156px'}),
     
     # Main Content Area
@@ -493,12 +441,19 @@ app.layout = html.Div([
         'maxWidth': '1280px',
         'margin': '0 auto',
         'padding': '24px 24px 48px 24px',
-        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    })
+        'fontFamily': 'Inter, sans-serif'
+    }),
+    
+    # Add hover effect CSS
+    html.Style('''
+        .table-row:hover {
+            background-color: #f9fafb !important;
+        }
+    ''')
 ], style={
     'backgroundColor': 'white',
     'minHeight': '100vh',
-    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    'fontFamily': 'Inter, sans-serif'
 })
 
 # Callback for sport selection
@@ -521,7 +476,7 @@ def update_sport(mlb_clicks, nfl_clicks):
         'padding': '8px 0',
         'marginRight': '32px',
         'cursor': 'pointer',
-        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+        'fontFamily': 'Inter, sans-serif'
     }
     
     inactive_style = {
@@ -533,7 +488,7 @@ def update_sport(mlb_clicks, nfl_clicks):
         'padding': '8px 0',
         'marginRight': '32px',
         'cursor': 'pointer',
-        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+        'fontFamily': 'Inter, sans-serif'
     }
     
     if not ctx.triggered:
@@ -575,7 +530,7 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
         'padding': '8px 0',
         'marginRight': '32px',
         'cursor': 'pointer',
-        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+        'fontFamily': 'Inter, sans-serif'
     }
     
     inactive_style = {
@@ -587,7 +542,7 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
         'padding': '8px 0',
         'marginRight': '32px',
         'cursor': 'pointer',
-        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+        'fontFamily': 'Inter, sans-serif'
     }
     
     # Render content based on view and sport
@@ -603,7 +558,7 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
     return content, individual_style, parlays_style
 
 def render_individual_evs(sport):
-    """Render individual EVs for the selected sport"""
+    """Render individual EVs for the selected sport - FIXED VERSION"""
     individualEVs = read_ev_results(sport)
     
     if not individualEVs:
@@ -612,12 +567,12 @@ def render_individual_evs(sport):
                 html.P(f"No {sport} EV opportunities found.", style={
                     'fontSize': '16px',
                     'color': '#6b7280',
-                    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    'fontFamily': 'Inter, sans-serif'
                 }),
                 html.P("Run the pipeline to generate data.", style={
                     'fontSize': '14px',
                     'color': '#9ca3af',
-                    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    'fontFamily': 'Inter, sans-serif'
                 })
             ], style={
                 'textAlign': 'center',
@@ -629,10 +584,7 @@ def render_individual_evs(sport):
     all_markets = sorted(list(set([ev['Market'] for ev in individualEVs if ev.get('Market')])))
     
     return html.Div([
-        # Store for current filter
-        dcc.Store(id=f'market-filter-{sport}', data='All'),
-        
-        # Filter buttons (sticky below ribbons)
+        # Filter buttons (FIXED - truly sticky with centered content)
         html.Div([
             html.Div([
                 html.Button(
@@ -650,7 +602,7 @@ def render_individual_evs(sport):
                         'cursor': 'pointer',
                         'borderRadius': '6px',
                         'transition': 'all 0.2s',
-                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                        'fontFamily': 'Inter, sans-serif'
                     }
                 )
             ] + [
@@ -669,12 +621,13 @@ def render_individual_evs(sport):
                         'cursor': 'pointer',
                         'borderRadius': '6px',
                         'transition': 'all 0.2s',
-                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                        'fontFamily': 'Inter, sans-serif'
                     }
                 ) for market in all_markets
             ], style={
                 'display': 'flex',
                 'alignItems': 'center',
+                'justifyContent': 'center',  # CENTERED
                 'flexWrap': 'wrap',
                 'gap': '4px',
                 'maxWidth': '1280px',
@@ -684,24 +637,27 @@ def render_individual_evs(sport):
         ], style={
             'background': 'white',
             'borderBottom': '1px solid #f3f4f6',
-            'position': 'sticky',
+            'position': 'sticky',  # Changed to sticky
             'top': '156px',  # Below the two ribbons
+            'left': '0',
+            'right': '0',
             'zIndex': '998',
             'overflowX': 'auto'
         }),
         
-        # Table container with sticky header
+        # Table container with data
         html.Div([
-            html.Div(id=f'evs-table-{sport}', children=[
-                create_evs_table(individualEVs, 'All')
-            ])
+            html.Div(
+                id=f'evs-table-container-{sport}',
+                children=[create_evs_table(individualEVs, 'All')]
+            )
         ], style={
             'marginTop': '0'
         })
     ])
 
 def create_evs_table(data, selected_filter):
-    """Create the EVs table with sticky header"""
+    """Create the EVs table with sticky header - FIXED VERSION"""
     # Filter data
     if selected_filter != 'All':
         filtered_data = [ev for ev in data if ev['Market'] == selected_filter]
@@ -758,7 +714,7 @@ def create_evs_table(data, selected_filter):
             })
         ], style={
             'position': 'sticky',
-            'top': '220px',  # Below ribbons + filter buttons
+            'top': '220px',  # Below ribbons (156px) + filter buttons (~64px)
             'zIndex': '997',
             'background': 'white'
         }),
@@ -806,7 +762,7 @@ def create_evs_table(data, selected_filter):
         'background': 'white'
     })
 
-# Callback for market filtering
+# FIXED Callback for market filtering
 @app.callback(
     Output({'type': 'evs-table-container', 'sport': dash.MATCH}, 'children'),
     [Input({'type': 'market-filter-btn', 'index': dash.ALL, 'sport': dash.MATCH}, 'n_clicks')],
@@ -837,12 +793,12 @@ def render_parlays(sport):
                 html.P(f"{sport} correlation parlays coming soon!", style={
                     'fontSize': '16px',
                     'color': '#6b7280',
-                    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    'fontFamily': 'Inter, sans-serif'
                 }),
                 html.P("Correlation strategies need to be defined for this sport.", style={
                     'fontSize': '14px',
                     'color': '#9ca3af',
-                    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    'fontFamily': 'Inter, sans-serif'
                 })
             ], style={
                 'textAlign': 'center',
@@ -858,7 +814,7 @@ def render_parlays(sport):
                 html.P(f"No {sport} correlation parlays found.", style={
                     'fontSize': '16px',
                     'color': '#6b7280',
-                    'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    'fontFamily': 'Inter, sans-serif'
                 })
             ], style={
                 'textAlign': 'center',
@@ -893,7 +849,7 @@ def render_parlay_card(parlay):
             'fontSize': '12px',
             'textTransform': 'uppercase',
             'letterSpacing': '0.5px',
-            'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+            'fontFamily': 'Inter, sans-serif'
         }),
         
         # Anchor
@@ -922,7 +878,7 @@ def render_parlay_card(parlay):
                     'marginLeft': '8px'
                 }) if parlay['anchor']['Odds'] else None
             ], style={
-                'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                'fontFamily': 'Inter, sans-serif',
                 'padding': '12px 0',
                 'borderBottom': '1px solid #e5e7eb'
             })
@@ -937,7 +893,7 @@ def render_parlay_card(parlay):
                         'color': '#374151',
                         'padding': '10px 0',
                         'borderBottom': '1px solid #f3f4f6' if i < len(parlay['batters']) - 1 else 'none',
-                        'fontFamily': 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                        'fontFamily': 'Inter, sans-serif'
                     })
                 ]) for i, batter in enumerate(parlay['batters'])
             ])

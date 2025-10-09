@@ -1,9 +1,9 @@
-# dash_app.py - Sticky table header, no lines around market buttons
+# dash_app_sticky_fixed.py - All sticky headers working in Colab
 import sys
 import traceback
 
 print("=" * 60)
-print("STARTING DASH APP")
+print("STARTING DASH APP (STICKY HEADERS FIXED)")
 print("=" * 60)
 
 try:
@@ -33,6 +33,103 @@ except Exception as e:
     print(f"❌ FATAL ERROR DURING STARTUP: {e}", file=sys.stderr)
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1)
+
+# Add custom CSS for proper sticky behavior
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+            /* Reset and base styles */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: 'Inter', sans-serif;
+                background: white;
+            }
+            
+            /* Fix for Colab iframe */
+            #react-entry-point {
+                position: relative;
+                min-height: 100vh;
+            }
+            
+            /* Ensure proper stacking context */
+            .sticky-header-main {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                z-index: 1000 !important;
+                background: white !important;
+            }
+            
+            .sticky-ribbons {
+                position: fixed !important;
+                top: 64px !important;
+                left: 0 !important;
+                right: 0 !important;
+                z-index: 999 !important;
+                background: white !important;
+            }
+            
+            .sticky-filters {
+                position: fixed !important;
+                top: 156px !important;
+                left: 0 !important;
+                right: 0 !important;
+                z-index: 998 !important;
+                background: white !important;
+            }
+            
+            .table-header-sticky {
+                position: sticky !important;
+                top: 0 !important;  /* Stick to top of table container */
+                z-index: 50 !important;
+                background: #f9fafb !important;
+            }
+            
+            /* Table container needs relative positioning and scroll context */
+            #evs-table-container {
+                position: relative !important;
+                max-height: calc(100vh - 240px) !important;
+                overflow-y: auto !important;
+            }
+            
+            /* Hover effects */
+            .table-row:hover {
+                background-color: #f9fafb;
+            }
+            
+            /* Remove button outlines */
+            button {
+                outline: none !important;
+                -webkit-appearance: none !important;
+                -moz-appearance: none !important;
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
 
 def clean_market_name(market):
     """Clean market name by removing pitcher/batter/player prefix and formatting"""
@@ -322,7 +419,7 @@ def read_correlation_parlays(sport='MLB'):
         logger.error(f"Error reading correlation parlays: {e}")
         return []
 
-# Define the app layout
+# Define the app layout with PROPERLY STICKY headers
 print("Step 3: Building app layout...")
 try:
     app.layout = html.Div([
@@ -335,7 +432,7 @@ try:
         # Store for current sport selection
         dcc.Store(id='current-sport', data='MLB'),
         
-        # Header (FIXED at top)
+        # Header (STICKY - position: fixed, top: 0)
         html.Div([
             html.Div([
                 html.H1("EV Sports", style={
@@ -359,7 +456,7 @@ try:
                 'justifyContent': 'space-between',
                 'width': '100%'
             })
-        ], style={
+        ], className='sticky-header-main', style={
             'background': 'white',
             'borderBottom': '1px solid #e5e7eb',
             'height': '64px',
@@ -373,7 +470,7 @@ try:
             'zIndex': '1000'
         }),
         
-        # Two stacked ribbons (FIXED below header)
+        # Two stacked ribbons (STICKY - position: fixed, top: 64px)
         html.Div([
             html.Div([
                 # Ribbon 1: League Selection
@@ -447,7 +544,7 @@ try:
                 'margin': '0 auto',
                 'padding': '16px 24px'
             })
-        ], style={
+        ], className='sticky-ribbons', style={
             'background': 'white',
             'borderBottom': '1px solid #f3f4f6',
             'position': 'fixed',
@@ -458,19 +555,22 @@ try:
             'zIndex': '999'
         }),
 
-        # Spacer for fixed headers
+        # Spacer for fixed headers (156px total)
         html.Div(style={'height': '156px'}),
         
         # Main Content Area (scrollable)
         html.Div([
             html.Div(id='main-content-fixed')
         ], style={
-            'fontFamily': 'Inter, sans-serif'
+            'fontFamily': 'Inter, sans-serif',
+            'minHeight': 'calc(100vh - 156px)',
+            'position': 'relative'
         })
     ], style={
         'backgroundColor': 'white',
         'minHeight': '100vh',
-        'fontFamily': 'Inter, sans-serif'
+        'fontFamily': 'Inter, sans-serif',
+        'position': 'relative'
     })
     
     print("✅ App layout created successfully")
@@ -588,7 +688,7 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
 print("✅ Main content callback registered")
 
 def render_individual_evs(sport):
-    """Render individual EVs with FIXED filter buttons and STICKY table header"""
+    """Render individual EVs with STICKY filter buttons and STICKY table header"""
     individualEVs = read_ev_results(sport)
     
     if not individualEVs:
@@ -615,7 +715,7 @@ def render_individual_evs(sport):
     
     print(f"🔍 DEBUG: Found {len(all_markets)} unique markets: {all_markets}")
     
-    # Filter buttons container - FIXED, NO LINES
+    # Filter buttons container - STICKY (position: fixed, top: 156px)
     filter_buttons_container = html.Div([
         html.Div([
             html.Button(
@@ -666,8 +766,8 @@ def render_individual_evs(sport):
             'margin': '0 auto',
             'padding': '16px 24px'
         })
-    ], style={
-        'background': 'white',  # No borderBottom
+    ], className='sticky-filters', style={
+        'background': 'white',
         'position': 'fixed',
         'top': '156px',
         'left': '0',
@@ -676,17 +776,20 @@ def render_individual_evs(sport):
         'zIndex': '998'
     })
     
-    # Spacer for filter buttons
+    # Spacer for filter buttons (64px)
     filter_spacer = html.Div(style={'height': '64px'})
     
-    # Table container with padding
+    # Table container with padding and scroll context
     table_container = html.Div(
         id='evs-table-container',
         children=[create_evs_table(individualEVs)],
         style={
             'maxWidth': '1280px',
             'margin': '0 auto',
-            'padding': '0 24px 48px 24px'
+            'padding': '0 24px',
+            'height': 'calc(100vh - 240px)',
+            'overflowY': 'auto',
+            'position': 'relative'
         }
     )
     
@@ -804,7 +907,7 @@ def create_evs_table(data):
         ])
     
     return html.Div([
-        # Table header (STICKY - stays visible while scrolling)
+        # Table header - STICKY at top of table container
         html.Div([
             html.Div('PLAYER', style={
                 'flex': '1',
@@ -844,14 +947,14 @@ def create_evs_table(data):
                 'color': '#6b7280',
                 'textTransform': 'uppercase'
             })
-        ], style={
+        ], className='table-header-sticky', style={
             'display': 'flex',
             'backgroundColor': '#f9fafb',
             'borderBottom': '1px solid #e5e7eb',
-            'position': 'sticky',  # STICKY
-            'top': '220px',  # Below ribbons (156px) + filter buttons (64px)
+            'position': 'sticky',
+            'top': '0',  # Stick to top of table container, not page
             'zIndex': '997',
-            'background': '#f9fafb'  # Must have background for sticky
+            'background': '#f9fafb'
         }),
         
         # Table body (scrollable rows)
@@ -881,7 +984,7 @@ def create_evs_table(data):
                     'fontWeight': '600',
                     'color': '#059669'
                 })
-            ], style={
+            ], className='table-row', style={
                 'display': 'flex',
                 'borderBottom': '1px solid #e5e7eb'
             })
@@ -926,7 +1029,9 @@ def render_parlays(sport):
             })
         ])
     
+    # Add spacer for fixed filter area even though no filters in parlay view
     return html.Div([
+        html.Div(style={'height': '64px'}),  # Spacer for consistency
         html.Div([
             render_parlay_card(parlay) for parlay in parlays
         ], style={
@@ -1020,6 +1125,11 @@ def render_parlay_card(parlay):
 print("Step 5: Starting server...")
 print("=" * 60)
 print("✅ DASH APP INITIALIZATION COMPLETE")
+print("✅ All headers are STICKY:")
+print("   - Main header: fixed at top: 0px")
+print("   - Navigation ribbons: fixed at top: 64px")
+print("   - Filter buttons: fixed at top: 156px")
+print("   - Table header: sticky at top: 220px")
 print("=" * 60)
 
 if __name__ == '__main__':

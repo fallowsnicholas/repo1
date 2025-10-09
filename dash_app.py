@@ -1,20 +1,38 @@
-# dash_app.py - Fixed version with proper table rendering and filtering
-import dash
-from dash import dcc, html, Input, Output, State, callback, dash_table
-import pandas as pd
-import os
-import gspread
-from google.oauth2.service_account import Credentials
-import json
-import logging
+# dash_app.py - Fixed version with comprehensive error logging
+import sys
+import traceback
 
-# Initialize the Dash app with server configuration
-app = dash.Dash(__name__)
-server = app.server  # Expose server for deployment
+print("=" * 60)
+print("STARTING DASH APP")
+print("=" * 60)
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+try:
+    print("Step 1: Importing libraries...")
+    import dash
+    from dash import dcc, html, Input, Output, State, dash_table
+    import pandas as pd
+    import os
+    import gspread
+    from google.oauth2.service_account import Credentials
+    import json
+    import logging
+    print("✅ All imports successful")
+
+    # Initialize the Dash app with server configuration
+    print("Step 2: Initializing Dash app...")
+    app = dash.Dash(__name__)
+    server = app.server  # Expose server for deployment
+    print("✅ Dash app initialized")
+
+    # Setup logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    print("✅ Logging configured")
+
+except Exception as e:
+    print(f"❌ FATAL ERROR DURING STARTUP: {e}", file=sys.stderr)
+    print(traceback.format_exc(), file=sys.stderr)
+    sys.exit(1)
 
 def clean_market_name(market):
     """Clean market name by removing pitcher/batter/player prefix and formatting"""

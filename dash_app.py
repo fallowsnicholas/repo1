@@ -1,4 +1,4 @@
-# dash_app.py - Fixed version with visible market filtering
+# dash_app.py - Fixed version with clean market filtering
 import sys
 import traceback
 
@@ -335,9 +335,6 @@ try:
         # Store for current sport selection
         dcc.Store(id='current-sport', data='MLB'),
         
-        # Store for current market filter
-        dcc.Store(id='current-filter', data='All'),
-        
         # Header
         html.Div([
             html.Div([
@@ -593,9 +590,90 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
 
 print("✅ Main content callback registered")
 
-"Clear Build Cache" or "Reset Service"
+def render_individual_evs(sport):
+    """Render individual EVs for the selected sport with clean market filters"""
+    individualEVs = read_ev_results(sport)
+    
+    if not individualEVs:
+        return html.Div([
+            html.Div([
+                html.P(f"No {sport} EV opportunities found.", style={
+                    'fontSize': '16px',
+                    'color': '#6b7280',
+                    'fontFamily': 'Inter, sans-serif'
+                }),
+                html.P("Run the pipeline to generate data.", style={
+                    'fontSize': '14px',
+                    'color': '#9ca3af',
+                    'fontFamily': 'Inter, sans-serif'
+                })
+            ], style={
+                'textAlign': 'center',
+                'padding': '48px 24px'
+            })
+        ])
+    
+    # Get unique markets for filtering
+    all_markets = sorted(list(set([ev['Market'] for ev in individualEVs if ev.get('Market')])))
+    
+    print(f"🔍 DEBUG: Found {len(all_markets)} unique markets: {all_markets}")
+    
+    # Create filter buttons - NO BOXES, just text
+    filter_buttons = html.Div([
+        html.Button(
+            "All",
+            id={'type': 'market-filter', 'index': 0},
+            style={
+                'background': 'none',
+                'border': 'none',
+                'color': '#111827',  # Black for active "All" button
+                'fontSize': '14px',
+                'fontWeight': '600',
+                'padding': '8px 16px',
+                'marginRight': '16px',
+                'cursor': 'pointer',
+                'fontFamily': 'Inter, sans-serif'
+            }
+        )
+    ] + [
+        html.Button(
+            market,
+            id={'type': 'market-filter', 'index': i+1},
+            style={
+                'background': 'none',
+                'border': 'none',
+                'color': '#9ca3af',  # Gray for inactive buttons
+                'fontSize': '14px',
+                'fontWeight': '400',
+                'padding': '8px 16px',
+                'marginRight': '16px',
+                'cursor': 'pointer',
+                'fontFamily': 'Inter, sans-serif'
+            }
+        ) for i, market in enumerate(all_markets)
+    ], style={
+        'display': 'flex',
+        'alignItems': 'center',
+        'justifyContent': 'center',
+        'flexWrap': 'wrap',
+        'padding': '16px 24px',
+        'background': 'white',
+        'borderBottom': '1px solid #f3f4f6',
+        'position': 'sticky',
+        'top': '156px',
+        'left': '0',
+        'right': '0',
+        'zIndex': '998'
+    })
+    
+    # Create initial table (showing all data)
+    table = create_evs_table(individualEVs)
+    
+    return html.Div([
+        filter_buttons,
+        html.Div(id='evs-table-container', children=[table])
+    ])
 
-# Market filter callback - SIMPLIFIED
 # Market filter callback - WITH BUTTON STYLE UPDATES
 @app.callback(
     [Output('evs-table-container', 'children'),
@@ -680,6 +758,8 @@ def update_market_filter(n_clicks, current_sport):
     
     return table, button_styles
 
+print("✅ Market filter callback registered")
+
 def create_evs_table(data):
     """Create the EVs table with STICKY header"""
     if not data:
@@ -738,10 +818,10 @@ def create_evs_table(data):
             'display': 'flex',
             'backgroundColor': '#f9fafb',
             'borderBottom': '1px solid #e5e7eb',
-            'position': 'sticky',  # STICKY
+            'position': 'sticky',
             'top': '220px',  # Below ribbons (156px) + filter buttons (~64px)
             'zIndex': '997',
-            'background': '#f9fafb'  # Must have background for sticky to work
+            'background': '#f9fafb'
         }),
         
         # Table body (scrollable)

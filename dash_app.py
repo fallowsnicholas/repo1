@@ -1,4 +1,4 @@
-# dash_app.py - COMPLETE FIX for sticky headers and buttons
+# dash_app.py - Sticky table header, no lines around market buttons
 import sys
 import traceback
 
@@ -588,7 +588,7 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
 print("✅ Main content callback registered")
 
 def render_individual_evs(sport):
-    """Render individual EVs with FIXED filter buttons"""
+    """Render individual EVs with FIXED filter buttons and STICKY table header"""
     individualEVs = read_ev_results(sport)
     
     if not individualEVs:
@@ -615,7 +615,7 @@ def render_individual_evs(sport):
     
     print(f"🔍 DEBUG: Found {len(all_markets)} unique markets: {all_markets}")
     
-    # Filter buttons container - ABSOLUTELY FIXED
+    # Filter buttons container - FIXED, NO LINES
     filter_buttons_container = html.Div([
         html.Div([
             html.Button(
@@ -667,10 +667,9 @@ def render_individual_evs(sport):
             'padding': '16px 24px'
         })
     ], style={
-        'background': 'white',
-        'borderBottom': '1px solid #f3f4f6',
-        'position': 'fixed',  # FIXED position
-        'top': '156px',  # Below ribbons
+        'background': 'white',  # No borderBottom
+        'position': 'fixed',
+        'top': '156px',
         'left': '0',
         'right': '0',
         'width': '100%',
@@ -792,7 +791,7 @@ def update_market_filter(n_clicks, current_sport):
 print("✅ Market filter callback registered")
 
 def create_evs_table(data):
-    """Create table with NO sticky header (buttons handle stickiness)"""
+    """Create table with STICKY header"""
     if not data:
         return html.Div([
             html.P("No data matches this filter.", style={
@@ -805,7 +804,7 @@ def create_evs_table(data):
         ])
     
     return html.Div([
-        # Table header (NOT STICKY - just regular header)
+        # Table header (STICKY - stays visible while scrolling)
         html.Div([
             html.Div('PLAYER', style={
                 'flex': '1',
@@ -848,7 +847,11 @@ def create_evs_table(data):
         ], style={
             'display': 'flex',
             'backgroundColor': '#f9fafb',
-            'borderBottom': '1px solid #e5e7eb'
+            'borderBottom': '1px solid #e5e7eb',
+            'position': 'sticky',  # STICKY
+            'top': '220px',  # Below ribbons (156px) + filter buttons (64px)
+            'zIndex': '997',
+            'background': '#f9fafb'  # Must have background for sticky
         }),
         
         # Table body (scrollable rows)

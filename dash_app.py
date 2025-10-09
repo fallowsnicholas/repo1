@@ -593,94 +593,13 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
 
 print("✅ Main content callback registered")
 
-def render_individual_evs(sport):
-    """Render individual EVs for the selected sport with VISIBLE market filters"""
-    individualEVs = read_ev_results(sport)
-    
-    if not individualEVs:
-        return html.Div([
-            html.Div([
-                html.P(f"No {sport} EV opportunities found.", style={
-                    'fontSize': '16px',
-                    'color': '#6b7280',
-                    'fontFamily': 'Inter, sans-serif'
-                }),
-                html.P("Run the pipeline to generate data.", style={
-                    'fontSize': '14px',
-                    'color': '#9ca3af',
-                    'fontFamily': 'Inter, sans-serif'
-                })
-            ], style={
-                'textAlign': 'center',
-                'padding': '48px 24px'
-            })
-        ])
-    
-    # Get unique markets for filtering
-    all_markets = sorted(list(set([ev['Market'] for ev in individualEVs if ev.get('Market')])))
-    
-    print(f"🔍 DEBUG: Found {len(all_markets)} unique markets: {all_markets}")
-    
-    # Create filter buttons - ALWAYS VISIBLE
-    filter_buttons = html.Div([
-        html.Button(
-            "All",
-            id={'type': 'market-filter', 'index': 0},
-            style={
-                'background': '#f3f4f6',
-                'border': '1px solid #e5e7eb',
-                'color': '#111827',
-                'fontSize': '14px',
-                'fontWeight': '600',
-                'padding': '8px 16px',
-                'marginRight': '12px',
-                'marginBottom': '8px',
-                'cursor': 'pointer',
-                'borderRadius': '6px',
-                'fontFamily': 'Inter, sans-serif'
-            }
-        )
-    ] + [
-        html.Button(
-            market,
-            id={'type': 'market-filter', 'index': i+1},
-            style={
-                'background': 'white',
-                'border': '1px solid #e5e7eb',
-                'color': '#6b7280',
-                'fontSize': '14px',
-                'fontWeight': '400',
-                'padding': '8px 16px',
-                'marginRight': '12px',
-                'marginBottom': '8px',
-                'cursor': 'pointer',
-                'borderRadius': '6px',
-                'fontFamily': 'Inter, sans-serif'
-            }
-        ) for i, market in enumerate(all_markets)
-    ], style={
-        'display': 'flex',
-        'alignItems': 'center',
-        'justifyContent': 'center',
-        'flexWrap': 'wrap',
-        'marginBottom': '32px',
-        'padding': '16px',
-        'background': 'white',
-        'borderRadius': '8px',
-        'border': '1px solid #e5e7eb'
-    })
-    
-    # Create initial table (showing all data)
-    table = create_evs_table(individualEVs)
-    
-    return html.Div([
-        filter_buttons,
-        html.Div(id='evs-table-container', children=[table])
-    ])
+"Clear Build Cache" or "Reset Service"
 
 # Market filter callback - SIMPLIFIED
+# Market filter callback - WITH BUTTON STYLE UPDATES
 @app.callback(
-    Output('evs-table-container', 'children'),
+    [Output('evs-table-container', 'children'),
+     Output({'type': 'market-filter', 'index': ALL}, 'style')],
     [Input({'type': 'market-filter', 'index': ALL}, 'n_clicks')],
     [State('current-sport', 'data')],
     prevent_initial_call=True
@@ -689,7 +608,7 @@ def update_market_filter(n_clicks, current_sport):
     ctx = dash.callback_context
     
     if not ctx.triggered:
-        return dash.no_update
+        return dash.no_update, dash.no_update
     
     # Get which button was clicked
     triggered_id = ctx.triggered[0]['prop_id']
@@ -700,7 +619,7 @@ def update_market_filter(n_clicks, current_sport):
     individualEVs = read_ev_results(current_sport)
     
     if not individualEVs:
-        return html.Div([
+        empty_div = html.Div([
             html.P("No data available.", style={
                 'fontSize': '14px',
                 'color': '#9ca3af',
@@ -709,6 +628,7 @@ def update_market_filter(n_clicks, current_sport):
                 'fontFamily': 'Inter, sans-serif'
             })
         ])
+        return empty_div, dash.no_update
     
     # Get unique markets
     all_markets = sorted(list(set([ev['Market'] for ev in individualEVs if ev.get('Market')])))
@@ -720,12 +640,48 @@ def update_market_filter(n_clicks, current_sport):
         selected_market = all_markets[button_index - 1]
         filtered_data = [ev for ev in individualEVs if ev['Market'] == selected_market]
     
-    return create_evs_table(filtered_data)
-
-print("✅ Market filter callback registered")
+    # Create table
+    table = create_evs_table(filtered_data)
+    
+    # Update button styles - Active button is BLACK
+    active_style = {
+        'background': 'none',
+        'border': 'none',
+        'color': '#111827',  # BLACK for active
+        'fontSize': '14px',
+        'fontWeight': '600',
+        'padding': '8px 16px',
+        'marginRight': '16px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, sans-serif'
+    }
+    
+    inactive_style = {
+        'background': 'none',
+        'border': 'none',
+        'color': '#9ca3af',  # GRAY for inactive
+        'fontSize': '14px',
+        'fontWeight': '400',
+        'padding': '8px 16px',
+        'marginRight': '16px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, sans-serif'
+    }
+    
+    # Create styles list for all buttons (All + all markets)
+    button_styles = []
+    total_buttons = len(all_markets) + 1  # +1 for "All" button
+    
+    for i in range(total_buttons):
+        if i == button_index:
+            button_styles.append(active_style)
+        else:
+            button_styles.append(inactive_style)
+    
+    return table, button_styles
 
 def create_evs_table(data):
-    """Create the EVs table"""
+    """Create the EVs table with STICKY header"""
     if not data:
         return html.Div([
             html.P("No data matches this filter.", style={
@@ -738,7 +694,7 @@ def create_evs_table(data):
         ])
     
     return html.Div([
-        # Table header
+        # Table header (STICKY)
         html.Div([
             html.Div('Player', style={
                 'flex': '1',
@@ -781,10 +737,14 @@ def create_evs_table(data):
         ], style={
             'display': 'flex',
             'backgroundColor': '#f9fafb',
-            'borderBottom': '1px solid #e5e7eb'
+            'borderBottom': '1px solid #e5e7eb',
+            'position': 'sticky',  # STICKY
+            'top': '220px',  # Below ribbons (156px) + filter buttons (~64px)
+            'zIndex': '997',
+            'background': '#f9fafb'  # Must have background for sticky to work
         }),
         
-        # Table body
+        # Table body (scrollable)
         html.Div([
             html.Div([
                 html.Div(row['Player'], style={

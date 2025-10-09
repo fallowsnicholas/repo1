@@ -1,6 +1,6 @@
 # dash_app.py - Multi-sport dashboard with Google Sheets integration
 import dash
-from dash import dcc, html, Input, Output, callback, dash_table
+from dash import dcc, html, Input, Output, State, callback, dash_table
 import pandas as pd
 import os
 import gspread

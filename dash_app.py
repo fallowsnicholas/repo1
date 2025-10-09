@@ -1,4 +1,4 @@
-# dash_app.py - Fixed version with comprehensive error logging
+# dash_app.py - Fixed version based on your working legacy code
 import sys
 import traceback
 
@@ -9,7 +9,7 @@ print("=" * 60)
 try:
     print("Step 1: Importing libraries...")
     import dash
-    from dash import dcc, html, Input, Output, State, dash_table
+    from dash import dcc, html, Input, Output, State
     import pandas as pd
     import os
     import gspread
@@ -326,201 +326,167 @@ def read_correlation_parlays(sport='MLB'):
 print("Step 3: Building app layout...")
 try:
     app.layout = html.Div([
-    # Add modern font import
-    html.Link(
-        rel='stylesheet',
-        href='https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap'
-    ),
-    
-    # Store for current sport selection
-    dcc.Store(id='current-sport', data='MLB'),
-    
-    # Header (FIXED)
-    html.Div([
+        # Add modern font import
+        html.Link(
+            rel='stylesheet',
+            href='https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap'
+        ),
+        
+        # Store for current sport selection
+        dcc.Store(id='current-sport', data='MLB'),
+        
+        # Header
         html.Div([
-            html.H1("EV Sports", style={
-                'margin': '0',
-                'fontSize': '24px',
-                'fontWeight': '800',
-                'color': '#111827',
-                'fontFamily': 'Inter, sans-serif'
-            }),
-            html.Span("Last Updated: 2 hours ago", style={
-                'fontSize': '14px',
-                'color': '#6b7280',
-                'fontFamily': 'Inter, sans-serif'
+            html.Div([
+                html.H1("EV Sports", style={
+                    'margin': '0',
+                    'fontSize': '24px',
+                    'fontWeight': '800',
+                    'color': '#111827',
+                    'fontFamily': 'Inter, sans-serif'
+                }),
+                html.Span("Last Updated: 2 hours ago", style={
+                    'fontSize': '14px',
+                    'color': '#6b7280',
+                    'fontFamily': 'Inter, sans-serif'
+                })
+            ], style={
+                'maxWidth': '1280px',
+                'margin': '0 auto',
+                'padding': '0 24px',
+                'display': 'flex',
+                'alignItems': 'center',
+                'justifyContent': 'space-between',
+                'width': '100%'
             })
         ], style={
-            'maxWidth': '1280px',
-            'margin': '0 auto',
-            'padding': '0 24px',
+            'background': 'white',
+            'borderBottom': '1px solid #e5e7eb',
+            'height': '64px',
             'display': 'flex',
             'alignItems': 'center',
-            'justifyContent': 'space-between',
-            'width': '100%'
-        })
-    ], style={
-        'background': 'white',
-        'borderBottom': '1px solid #e5e7eb',
-        'height': '64px',
-        'display': 'flex',
-        'alignItems': 'center',
-        'position': 'fixed',
-        'top': '0',
-        'left': '0',
-        'right': '0',
-        'width': '100%',
-        'zIndex': '1000'
-    }),
-    
-    # Two stacked ribbons (FIXED)
-    html.Div([
+            'position': 'fixed',
+            'top': '0',
+            'left': '0',
+            'right': '0',
+            'width': '100%',
+            'zIndex': '1000'
+        }),
+        
+        # Two stacked ribbons
         html.Div([
-            # Ribbon 1: League Selection
             html.Div([
-                html.Button("MLB", 
-                    id="league-mlb",
-                    n_clicks=0,
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'color': '#111827',
-                        'fontSize': '14px',
-                        'fontWeight': '600',
-                        'padding': '8px 0',
-                        'marginRight': '32px',
-                        'cursor': 'pointer',
-                        'fontFamily': 'Inter, sans-serif'
-                    }
-                ),
-                html.Button("NFL", 
-                    id="league-nfl",
-                    n_clicks=0,
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'color': '#9ca3af',
-                        'fontSize': '14px',
-                        'fontWeight': '400',
-                        'padding': '8px 0',
-                        'marginRight': '32px',
-                        'cursor': 'pointer',
-                        'fontFamily': 'Inter, sans-serif'
-                    }
-                )
-            ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '8px'}),
-            
-            # Ribbon 2: View Selection
-            html.Div([
-                html.Button("Individual EVs",
-                    id="view-individual",
-                    n_clicks=0,
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'color': '#111827',
-                        'fontSize': '14px',
-                        'fontWeight': '600',
-                        'padding': '8px 0',
-                        'marginRight': '32px',
-                        'cursor': 'pointer',
-                        'fontFamily': 'Inter, sans-serif'
-                    }
-                ),
-                html.Button("Correlation Parlays",
-                    id="view-parlays",
-                    n_clicks=0,
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'color': '#9ca3af',
-                        'fontSize': '14px',
-                        'fontWeight': '400',
-                        'padding': '8px 0',
-                        'cursor': 'pointer',
-                        'fontFamily': 'Inter, sans-serif'
-                    }
-                )
-            ], style={'display': 'flex', 'alignItems': 'center'})
+                # Ribbon 1: League Selection
+                html.Div([
+                    html.Button("MLB", 
+                        id="league-mlb",
+                        n_clicks=0,
+                        style={
+                            'background': 'none',
+                            'border': 'none',
+                            'color': '#111827',
+                            'fontSize': '14px',
+                            'fontWeight': '600',
+                            'padding': '8px 0',
+                            'marginRight': '32px',
+                            'cursor': 'pointer',
+                            'fontFamily': 'Inter, sans-serif'
+                        }
+                    ),
+                    html.Button("NFL", 
+                        id="league-nfl",
+                        n_clicks=0,
+                        style={
+                            'background': 'none',
+                            'border': 'none',
+                            'color': '#9ca3af',
+                            'fontSize': '14px',
+                            'fontWeight': '400',
+                            'padding': '8px 0',
+                            'marginRight': '32px',
+                            'cursor': 'pointer',
+                            'fontFamily': 'Inter, sans-serif'
+                        }
+                    )
+                ], style={'display': 'flex', 'alignItems': 'center', 'marginBottom': '8px'}),
+                
+                # Ribbon 2: View Selection
+                html.Div([
+                    html.Button("Individual EVs",
+                        id="view-individual",
+                        n_clicks=0,
+                        style={
+                            'background': 'none',
+                            'border': 'none',
+                            'color': '#111827',
+                            'fontSize': '14px',
+                            'fontWeight': '600',
+                            'padding': '8px 0',
+                            'marginRight': '32px',
+                            'cursor': 'pointer',
+                            'fontFamily': 'Inter, sans-serif'
+                        }
+                    ),
+                    html.Button("Correlation Parlays",
+                        id="view-parlays",
+                        n_clicks=0,
+                        style={
+                            'background': 'none',
+                            'border': 'none',
+                            'color': '#9ca3af',
+                            'fontSize': '14px',
+                            'fontWeight': '400',
+                            'padding': '8px 0',
+                            'cursor': 'pointer',
+                            'fontFamily': 'Inter, sans-serif'
+                        }
+                    )
+                ], style={'display': 'flex', 'alignItems': 'center'})
+            ], style={
+                'maxWidth': '1280px',
+                'margin': '0 auto',
+                'padding': '16px 24px'
+            })
+        ], style={
+            'background': 'white',
+            'borderBottom': '1px solid #f3f4f6',
+            'position': 'fixed',
+            'top': '64px',
+            'left': '0',
+            'right': '0',
+            'width': '100%',
+            'zIndex': '999'
+        }),
+
+        # Spacer for fixed headers
+        html.Div(style={'height': '156px'}),
+        
+        # Main Content Area
+        html.Div([
+            html.Div(id='main-content-fixed')
         ], style={
             'maxWidth': '1280px',
             'margin': '0 auto',
-            'padding': '16px 24px'
+            'padding': '24px 24px 48px 24px',
+            'fontFamily': 'Inter, sans-serif'
         })
     ], style={
-        'background': 'white',
-        'borderBottom': '1px solid #f3f4f6',
-        'position': 'fixed',
-        'top': '64px',
-        'left': '0',
-        'right': '0',
-        'width': '100%',
-        'zIndex': '999'
-    }),
-
-    # Spacer for fixed headers
-    html.Div(style={'height': '156px'}),
-    
-    # Main Content Area
-    html.Div([
-        html.Div(id='main-content-fixed')
-    ], style={
-        'maxWidth': '1280px',
-        'margin': '0 auto',
-        'padding': '24px 24px 48px 24px',
+        'backgroundColor': 'white',
+        'minHeight': '100vh',
         'fontFamily': 'Inter, sans-serif'
-    }),
+    })
     
-    # Add hover effect CSS using the correct method
-    html.Div([
-        html.Style('''
-        .table-row:hover {
-            background-color: #f9fafb !important;
-        }
-    ''')
-    ], style={'display': 'none'})  # Hidden div to hold the style tag
-], style={
-    'backgroundColor': 'white',
-    'minHeight': '100vh',
-    'fontFamily': 'Inter, sans-serif'
-})
     print("✅ App layout created successfully")
-    
-    # Inject custom CSS for hover effects
-    app.index_string = '''
-    <!DOCTYPE html>
-    <html>
-        <head>
-            {%metas%}
-            <title>{%title%}</title>
-            {%favicon%}
-            {%css%}
-            <style>
-                .table-row:hover {
-                    background-color: #f9fafb !important;
-                }
-            </style>
-        </head>
-        <body>
-            {%app_entry%}
-            <footer>
-                {%config%}
-                {%scripts%}
-                {%renderer%}
-            </footer>
-        </body>
-    </html>
-    '''
     
 except Exception as e:
     print(f"❌ ERROR creating layout: {e}", file=sys.stderr)
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1)
 
-# Callback for sport selection
+# Callback for sport selection - NO TRY/EXCEPT WRAPPER
 print("Step 4: Registering callbacks...")
-try:
-    @app.callback(
+
+@app.callback(
     [Output('current-sport', 'data'),
      Output('league-mlb', 'style'),
      Output('league-nfl', 'style')],
@@ -564,15 +530,10 @@ def update_sport(mlb_clicks, nfl_clicks):
     else:
         return 'MLB', active_style, inactive_style
 
-print("✅ Sport selection callback registered")  # ✅ CORRECT - outside function
-except Exception as e:
-    print(f"❌ ERROR registering sport callback: {e}", file=sys.stderr)
-    print(traceback.format_exc(), file=sys.stderr)
-    sys.exit(1)
+print("✅ Sport selection callback registered")
 
-# Main callback to render content
-try:
-    @app.callback(
+# Main callback to render content - NO TRY/EXCEPT WRAPPER
+@app.callback(
     [Output('main-content-fixed', 'children'),
      Output('view-individual', 'style'),
      Output('view-parlays', 'style')],
@@ -627,14 +588,10 @@ def render_main_content(individual_clicks, parlays_clicks, current_sport):
     
     return content, individual_style, parlays_style
 
-    print("✅ Main content callback registered")
-except Exception as e:
-    print(f"❌ ERROR registering main callback: {e}", file=sys.stderr)
-    print(traceback.format_exc(), file=sys.stderr)
-    sys.exit(1)
+print("✅ Main content callback registered")
 
 def render_individual_evs(sport):
-    """Render individual EVs for the selected sport - FIXED VERSION"""
+    """Render individual EVs for the selected sport"""
     individualEVs = read_ev_results(sport)
     
     if not individualEVs:
@@ -656,217 +613,25 @@ def render_individual_evs(sport):
             })
         ])
     
-    # Get unique markets for filtering
-    all_markets = sorted(list(set([ev['Market'] for ev in individualEVs if ev.get('Market')])))
-    
+    # Create simple table rows
     return html.Div([
-        # Filter buttons (FIXED - truly sticky with centered content)
         html.Div([
             html.Div([
-                html.Button(
-                    "All",
-                    id={'type': 'market-filter-btn', 'index': 'All', 'sport': sport},
-                    n_clicks=0,
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'color': '#111827',
-                        'fontSize': '14px',
-                        'fontWeight': '600',
-                        'padding': '8px 16px',
-                        'marginRight': '12px',
-                        'cursor': 'pointer',
-                        'borderRadius': '6px',
-                        'transition': 'all 0.2s',
-                        'fontFamily': 'Inter, sans-serif'
-                    }
-                )
-            ] + [
-                html.Button(
-                    market,
-                    id={'type': 'market-filter-btn', 'index': market, 'sport': sport},
-                    n_clicks=0,
-                    style={
-                        'background': 'none',
-                        'border': 'none',
-                        'color': '#6b7280',
-                        'fontSize': '14px',
-                        'fontWeight': '400',
-                        'padding': '8px 16px',
-                        'marginRight': '12px',
-                        'cursor': 'pointer',
-                        'borderRadius': '6px',
-                        'transition': 'all 0.2s',
-                        'fontFamily': 'Inter, sans-serif'
-                    }
-                ) for market in all_markets
-            ], style={
-                'display': 'flex',
-                'alignItems': 'center',
-                'justifyContent': 'center',  # CENTERED
-                'flexWrap': 'wrap',
-                'gap': '4px',
-                'maxWidth': '1280px',
-                'margin': '0 auto',
-                'padding': '16px 24px'
-            })
-        ], style={
-            'background': 'white',
-            'borderBottom': '1px solid #f3f4f6',
-            'position': 'sticky',  # Changed to sticky
-            'top': '156px',  # Below the two ribbons
-            'left': '0',
-            'right': '0',
-            'zIndex': '998',
-            'overflowX': 'auto'
-        }),
-        
-        # Table container with data
-        html.Div([
-            html.Div(
-                id=f'evs-table-container-{sport}',
-                children=[create_evs_table(individualEVs, 'All')]
-            )
-        ], style={
-            'marginTop': '0'
-        })
+                html.Div('Player', style={'flex': '1', 'fontWeight': '500', 'padding': '16px', 'color': '#6b7280'}),
+                html.Div('Market', style={'flex': '1', 'fontWeight': '500', 'padding': '16px', 'color': '#6b7280'}),
+                html.Div('Line', style={'flex': '0 0 120px', 'fontWeight': '500', 'padding': '16px', 'color': '#6b7280'}),
+                html.Div('EV %', style={'flex': '0 0 100px', 'fontWeight': '500', 'padding': '16px', 'color': '#6b7280'})
+            ], style={'display': 'flex', 'backgroundColor': '#f9fafb', 'borderBottom': '1px solid #e5e7eb'})
+        ] + [
+            html.Div([
+                html.Div(row['Player'], style={'flex': '1', 'padding': '16px'}),
+                html.Div(row['Market'], style={'flex': '1', 'padding': '16px'}),
+                html.Div(row['Line'], style={'flex': '0 0 120px', 'padding': '16px'}),
+                html.Div(row['EV %'], style={'flex': '0 0 100px', 'padding': '16px', 'color': '#059669', 'fontWeight': '600'})
+            ], style={'display': 'flex', 'borderBottom': '1px solid #e5e7eb'})
+            for row in individualEVs
+        ], style={'border': '1px solid #e5e7eb', 'borderRadius': '4px', 'overflow': 'hidden', 'background': 'white'})
     ])
-
-def create_evs_table(data, selected_filter):
-    """Create the EVs table with sticky header - FIXED VERSION"""
-    # Filter data
-    if selected_filter != 'All':
-        filtered_data = [ev for ev in data if ev['Market'] == selected_filter]
-    else:
-        filtered_data = data
-    
-    # Create custom table structure with sticky header
-    return html.Div([
-        # Table header (sticky)
-        html.Div([
-            html.Div([
-                html.Div('Player', style={
-                    'flex': '1',
-                    'minWidth': '200px',
-                    'padding': '16px 24px',
-                    'fontWeight': '500',
-                    'textTransform': 'uppercase',
-                    'fontSize': '12px',
-                    'letterSpacing': '0.5px',
-                    'color': '#6b7280'
-                }),
-                html.Div('Market', style={
-                    'flex': '1',
-                    'minWidth': '150px',
-                    'padding': '16px 24px',
-                    'fontWeight': '500',
-                    'textTransform': 'uppercase',
-                    'fontSize': '12px',
-                    'letterSpacing': '0.5px',
-                    'color': '#6b7280'
-                }),
-                html.Div('Line', style={
-                    'flex': '0 0 120px',
-                    'padding': '16px 24px',
-                    'fontWeight': '500',
-                    'textTransform': 'uppercase',
-                    'fontSize': '12px',
-                    'letterSpacing': '0.5px',
-                    'color': '#6b7280'
-                }),
-                html.Div('EV %', style={
-                    'flex': '0 0 100px',
-                    'padding': '16px 24px',
-                    'fontWeight': '500',
-                    'textTransform': 'uppercase',
-                    'fontSize': '12px',
-                    'letterSpacing': '0.5px',
-                    'color': '#6b7280'
-                })
-            ], style={
-                'display': 'flex',
-                'backgroundColor': '#f9fafb',
-                'borderBottom': '1px solid #e5e7eb'
-            })
-        ], style={
-            'position': 'sticky',
-            'top': '220px',  # Below ribbons (156px) + filter buttons (~64px)
-            'zIndex': '997',
-            'background': 'white'
-        }),
-        
-        # Table body (scrollable)
-        html.Div([
-            html.Div([
-                html.Div([
-                    html.Div(row['Player'], style={
-                        'flex': '1',
-                        'minWidth': '200px',
-                        'padding': '16px 24px',
-                        'fontWeight': '500',
-                        'color': '#111827'
-                    }),
-                    html.Div(row['Market'], style={
-                        'flex': '1',
-                        'minWidth': '150px',
-                        'padding': '16px 24px',
-                        'color': '#374151'
-                    }),
-                    html.Div(row['Line'], style={
-                        'flex': '0 0 120px',
-                        'padding': '16px 24px',
-                        'color': '#374151'
-                    }),
-                    html.Div(row['EV %'], style={
-                        'flex': '0 0 100px',
-                        'padding': '16px 24px',
-                        'fontWeight': '600',
-                        'color': '#059669'
-                    })
-                ], style={
-                    'display': 'flex',
-                    'borderBottom': '1px solid #e5e7eb',
-                    'transition': 'background-color 0.15s',
-                    'cursor': 'default'
-                }, className='table-row')
-            ]) for row in filtered_data
-        ])
-    ], style={
-        'border': '1px solid #e5e7eb',
-        'borderRadius': '4px',
-        'overflow': 'hidden',
-        'background': 'white'
-    })
-
-# FIXED Callback for market filtering
-try:
-    @app.callback(
-    Output({'type': 'evs-table-container', 'sport': dash.MATCH}, 'children'),
-    [Input({'type': 'market-filter-btn', 'index': dash.ALL, 'sport': dash.MATCH}, 'n_clicks')],
-    [State('current-sport', 'data')],
-    prevent_initial_call=True
-)
-def update_market_filter(n_clicks, current_sport):
-    ctx = dash.callback_context
-    
-    if not ctx.triggered:
-        return dash.no_update
-    
-    # Get which button was clicked
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    button_data = json.loads(button_id)
-    selected_market = button_data['index']
-    
-    # Reload data and filter
-    individualEVs = read_ev_results(current_sport)
-    
-    return create_evs_table(individualEVs, selected_market)
-
-    print("✅ Market filter callback registered")
-except Exception as e:
-    print(f"❌ ERROR registering filter callback: {e}", file=sys.stderr)
-    print(traceback.format_exc(), file=sys.stderr)
-    sys.exit(1)
 
 def render_parlays(sport):
     """Render correlation parlays for the selected sport"""
@@ -876,11 +641,6 @@ def render_parlays(sport):
                 html.P(f"{sport} correlation parlays coming soon!", style={
                     'fontSize': '16px',
                     'color': '#6b7280',
-                    'fontFamily': 'Inter, sans-serif'
-                }),
-                html.P("Correlation strategies need to be defined for this sport.", style={
-                    'fontSize': '14px',
-                    'color': '#9ca3af',
                     'fontFamily': 'Inter, sans-serif'
                 })
             ], style={

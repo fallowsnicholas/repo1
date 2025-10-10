@@ -12,6 +12,7 @@ on:
         options:
         - MLB
         - NFL
+        - WNBA
         - All Sports
       
       step:
@@ -42,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        sport: ${{ github.event.inputs.sport == 'All Sports' && fromJSON('["MLB", "NFL"]') || fromJSON(format('["{0}"]', github.event.inputs.sport)) }}
+        sport: ${{ github.event.inputs.sport == 'All Sports' && fromJSON('["MLB", "NFL", "WNBA"]') || fromJSON(format('["{0}"]', github.event.inputs.sport)) }}
       fail-fast: false
     
     steps:

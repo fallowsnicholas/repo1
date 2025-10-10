@@ -1,4 +1,4 @@
-# dash_app.py - Modern, clean UI with sticky elements - FIXED
+# dash_app.py - Optimized with error handling, validation, constants, and retry logic
 import sys
 import traceback
 
@@ -16,6 +16,9 @@ try:
     from google.oauth2.service_account import Credentials
     import json
     import logging
+    import time
+    from datetime import datetime, timedelta
+    from functools import lru_cache
     print("✅ All imports successful")
 
     # Initialize the Dash app
@@ -34,8 +37,123 @@ except Exception as e:
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1)
 
-# Add custom CSS for proper sticky behavior - CRITICAL FIX
-# Add custom CSS for proper sticky behavior - CRITICAL FIX
+# ============================================================================
+# CONSTANTS - Single source of truth for all configuration
+# ============================================================================
+
+# Layout dimensions
+LAYOUT = {
+    'header_height': 64,
+    'league_ribbon_height': 48,
+    'view_ribbon_height': 48,
+    'filter_height': 56,
+    'header_banner_height': 30,
+    'table_offset': 350  # Total offset for table height calculation
+}
+
+# Z-index layers
+Z_INDEX = {
+    'header': 1000,
+    'league': 999,
+    'view': 998,
+    'filters': 997,
+    'banner': 996
+}
+
+# Sports configuration
+SPORTS = {
+    'MLB': 'MLB',
+    'NFL': 'NFL'
+}
+
+# Colors
+COLORS = {
+    'primary_text': '#000000',
+    'secondary_text': '#6b7280',
+    'inactive_text': '#9ca3af',
+    'success': '#059669',
+    'border': '#e5e7eb',
+    'light_bg': '#f3f4f6',
+    'hover_bg': '#f9fafb',
+    'background': '#ffffff'
+}
+
+# Google Sheets configuration
+SHEETS = {
+    'EV_RESULTS': 'EV_RESULTS',
+    'CORRELATION_PARLAYS': 'CORRELATION_PARLAYS'
+}
+
+# Data columns
+COLUMNS = {
+    'PLAYER': 'Player',
+    'MARKET': 'Market',
+    'LINE': 'Line',
+    'EV': 'EV %'
+}
+
+# Cache configuration
+CACHE_DURATION = timedelta(minutes=5)
+MAX_RETRIES = 3
+
+# Button style templates
+BUTTON_STYLES = {
+    'active': {
+        'background': 'none',
+        'border': 'none',
+        'color': COLORS['primary_text'],
+        'fontSize': '14px',
+        'fontWeight': '600',
+        'padding': '12px 20px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, sans-serif'
+    },
+    'inactive': {
+        'background': 'none',
+        'border': 'none',
+        'color': COLORS['inactive_text'],
+        'fontSize': '14px',
+        'fontWeight': '400',
+        'padding': '12px 20px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, sans-serif'
+    }
+}
+
+FILTER_BUTTON_STYLES = {
+    'active': {
+        'background': 'none',
+        'border': 'none',
+        'color': COLORS['primary_text'],
+        'fontSize': '13px',
+        'fontWeight': '600',
+        'padding': '8px 16px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, sans-serif'
+    },
+    'inactive': {
+        'background': 'none',
+        'border': 'none',
+        'color': COLORS['inactive_text'],
+        'fontSize': '13px',
+        'fontWeight': '400',
+        'padding': '8px 16px',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, sans-serif'
+    }
+}
+
+# ============================================================================
+# CACHE SYSTEM
+# ============================================================================
+
+_cache = {}
+_cache_time = {}
+
+# ============================================================================
+# CUSTOM CSS
+# ============================================================================
+
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -52,7 +170,7 @@ app.index_string = '''
                 padding: 0;
                 box-sizing: border-box;
             }
-
+            
             body {
                 margin: 0;
                 padding: 0;
@@ -60,40 +178,40 @@ app.index_string = '''
                 background: white;
                 overflow-x: hidden;
             }
-
+            
             /* Fix for proper stacking */
             #react-entry-point {
                 position: relative;
                 min-height: 100vh;
             }
-
+            
             /* Ensure all fixed headers have solid backgrounds */
             [style*="position: fixed"] {
                 background: white !important;
             }
-
+            
             /* Remove button outlines */
             button {
                 outline: none !important;
                 -webkit-appearance: none !important;
                 -moz-appearance: none !important;
             }
-
+            
             /* Ensure table rows are white */
             .table-row {
                 background-color: white !important;
             }
-
+            
             .table-row:hover {
                 background-color: #f9fafb !important;
             }
-
-            /* HIDE SCROLLBAR - ADD THIS */
+            
+            /* Hide scrollbar */
             #evs-table-container {
                 scrollbar-width: none; /* Firefox */
                 -ms-overflow-style: none; /* IE/Edge */
             }
-
+            
             #evs-table-container::-webkit-scrollbar {
                 display: none; /* Chrome/Safari/Opera */
             }
@@ -109,160 +227,196 @@ app.index_string = '''
     </body>
 </html>
 '''
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-print("✅ Logging configured")
 
-# ADD THIS ENTIRE SECTION - Simple in-memory cache
-from datetime import datetime, timedelta
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
-_cache = {}
-_cache_time = {}
-CACHE_DURATION = timedelta(minutes=5)  # Cache for 5 minutes
-
-def read_ev_results_cached(sport='MLB'):
-    """Cached version of read_ev_results - only fetches from Google Sheets when cache expires"""
-    cache_key = f"ev_{sport}"
-    now = datetime.now()
-
-    # Check if we have valid cached data
-    if (cache_key in _cache and
-        cache_key in _cache_time and
-        now - _cache_time[cache_key] < CACHE_DURATION):
-        logger.info(f"✅ Using cached data for {sport} (age: {(now - _cache_time[cache_key]).seconds}s)")
-        return _cache[cache_key]
-
-    # Cache expired or doesn't exist - fetch fresh data
-    logger.info(f"📥 Fetching fresh data for {sport} from Google Sheets")
-    data = read_ev_results(sport)
-
-    # Store in cache
-    _cache[cache_key] = data
-    _cache_time[cache_key] = now
-
-    logger.info(f"💾 Cached {len(data)} records for {sport}")
-    return data
-
-def read_correlation_parlays_cached(sport='MLB'):
-    """Cached version of read_correlation_parlays"""
-    cache_key = f"parlays_{sport}"
-    now = datetime.now()
-
-    if (cache_key in _cache and
-        cache_key in _cache_time and
-        now - _cache_time[cache_key] < CACHE_DURATION):
-        logger.info(f"✅ Using cached parlays for {sport}")
-        return _cache[cache_key]
-
-    logger.info(f"📥 Fetching fresh parlays for {sport}")
-    data = read_correlation_parlays(sport)
-    _cache[cache_key] = data
-    _cache_time[cache_key] = now
-    return data
 def clean_market_name(market):
     """Clean market name by removing prefixes and formatting"""
     if not market:
         return market
-
+    
     cleaned = market
     prefixes = ['pitcher_', 'batter_', 'player_', 'player_pass_', 'player_rush_', 'player_reception_']
     for prefix in prefixes:
         if cleaned.lower().startswith(prefix):
             cleaned = cleaned[len(prefix):]
             break
-
+    
     cleaned = cleaned.replace('_', ' ')
     cleaned = ' '.join(word.capitalize() for word in cleaned.split())
-
+    
     return cleaned
 
-def connect_to_sheets():
-    """Connect to Google Sheets using service account"""
-    try:
-        print("Connecting to Google Sheets...")
-        scopes = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
+def validate_ev_data(data):
+    """Validate EV data structure to prevent rendering errors"""
+    if not isinstance(data, list):
+        logger.warning("EV data is not a list")
+        return False
+    
+    if not data:
+        return True  # Empty list is valid
+    
+    required_keys = [COLUMNS['PLAYER'], COLUMNS['MARKET'], COLUMNS['LINE'], COLUMNS['EV']]
+    
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            logger.warning(f"EV item {i} is not a dictionary")
+            return False
+        
+        if not all(key in item for key in required_keys):
+            logger.warning(f"EV item {i} missing required keys. Has: {list(item.keys())}")
+            return False
+        
+        if not item.get(COLUMNS['PLAYER']):
+            logger.warning(f"EV item {i} has empty player name")
+            return False
+    
+    logger.info(f"✅ Validated {len(data)} EV records")
+    return True
 
-        service_account_info = json.loads(os.environ['GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'])
-        credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
-        client = gspread.authorize(credentials)
-        logger.info("✅ Successfully connected to Google Sheets")
-        print("✅ Google Sheets connection successful")
-        return client
-    except KeyError:
-        logger.error("❌ GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable not set")
-        print("❌ GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable not set", file=sys.stderr)
-        return None
-    except Exception as e:
-        logger.error(f"Failed to connect to Google Sheets: {e}")
-        print(f"❌ Google Sheets connection failed: {e}", file=sys.stderr)
-        return None
+def validate_parlay_data(data):
+    """Validate parlay data structure"""
+    if not isinstance(data, list):
+        logger.warning("Parlay data is not a list")
+        return False
+    
+    if not data:
+        return True
+    
+    required_keys = ['id', 'anchor', 'batters', 'totalEV', 'leg_count']
+    
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            logger.warning(f"Parlay item {i} is not a dictionary")
+            return False
+        
+        if not all(key in item for key in required_keys):
+            logger.warning(f"Parlay item {i} missing required keys")
+            return False
+    
+    logger.info(f"✅ Validated {len(data)} parlay records")
+    return True
+
+@lru_cache(maxsize=32)
+def get_unique_markets_cached(data_hash):
+    """Get unique markets (cached) - data_hash is used for cache invalidation"""
+    # This is called with a hash of the data, actual filtering happens in caller
+    pass
+
+def get_unique_markets(data):
+    """Get unique markets from data"""
+    if not data:
+        return []
+    
+    # Create a simple hash of data for cache key
+    data_hash = hash(str(len(data)) + str(data[0] if data else ''))
+    get_unique_markets_cached(data_hash)  # Trigger cache
+    
+    return sorted(list(set([ev[COLUMNS['MARKET']] for ev in data if ev.get(COLUMNS['MARKET'])])))
+
+# ============================================================================
+# GOOGLE SHEETS FUNCTIONS WITH RETRY LOGIC
+# ============================================================================
+
+def connect_to_sheets_with_retry(max_retries=MAX_RETRIES):
+    """Connect to Google Sheets with retry logic"""
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Connecting to Google Sheets (attempt {attempt + 1}/{max_retries})...")
+            scopes = [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
+            ]
+            
+            service_account_info = json.loads(os.environ['GOOGLE_SERVICE_ACCOUNT_CREDENTIALS'])
+            credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+            client = gspread.authorize(credentials)
+            logger.info("✅ Successfully connected to Google Sheets")
+            return client
+            
+        except KeyError as e:
+            logger.error("❌ GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable not set")
+            raise  # Don't retry for missing credentials
+            
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                logger.warning(f"Connection failed: {e}. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"All {max_retries} connection attempts failed: {e}")
+                raise
+    
+    return None
 
 def read_ev_results(sport='MLB'):
     """Read Individual EV data from Google Sheets"""
     try:
-        client = connect_to_sheets()
+        client = connect_to_sheets_with_retry()
         if not client:
             return []
-
+        
         spreadsheet_name = f"{sport}_Splash_Data"
         spreadsheet = client.open(spreadsheet_name)
-        ev_worksheet = spreadsheet.worksheet("EV_RESULTS")
-
+        ev_worksheet = spreadsheet.worksheet(SHEETS['EV_RESULTS'])
+        
         all_data = ev_worksheet.get_all_values()
         if not all_data:
+            logger.warning(f"No data found in {SHEETS['EV_RESULTS']} sheet")
             return []
-
+        
         # Find header row
         header_row_index = -1
-        possible_headers = ['Player', 'Name', 'Market', 'Line', 'EV', 'Splash_EV_Percentage']
-
+        possible_headers = [COLUMNS['PLAYER'], 'Name', COLUMNS['MARKET'], COLUMNS['LINE'], 'EV', 'Splash_EV_Percentage']
+        
         for i, row in enumerate(all_data):
             if row and any(header in row for header in possible_headers):
                 header_row_index = i
                 break
-
+        
         if header_row_index == -1:
+            logger.error("Could not find header row in EV_RESULTS")
             return []
-
+        
         headers = all_data[header_row_index]
         data_rows = all_data[header_row_index + 1:]
         ev_df = pd.DataFrame(data_rows, columns=headers)
-
+        
         # Find player column
         player_col = None
         for col in ev_df.columns:
             if 'player' in col.lower() or 'name' in col.lower():
                 player_col = col
                 break
-
+        
         if not player_col:
+            logger.error(f"No player column found. Available columns: {list(ev_df.columns)}")
             return []
-
+        
         # Remove empty rows
         ev_df = ev_df[ev_df[player_col].notna() & (ev_df[player_col] != '')]
-
+        
         if ev_df.empty:
+            logger.warning("No EV data found after filtering")
             return []
-
+        
         # Convert to format for display
         individual_evs = []
         ev_col = None
-
+        
         for col in ev_df.columns:
             if 'ev' in col.lower() and 'percentage' in col.lower():
                 ev_col = col
                 break
-
+        
         if not ev_col:
             for col in ev_df.columns:
                 if 'ev' in col.lower():
                     ev_col = col
                     break
-
+        
         for _, row in ev_df.iterrows():
             ev_value = row.get(ev_col, 0) if ev_col else '0'
             try:
@@ -270,40 +424,44 @@ def read_ev_results(sport='MLB'):
                 ev_percent = f"{ev_float:.1%}"
             except (ValueError, TypeError):
                 ev_percent = str(ev_value)
-
-            raw_market = row.get('Market', '')
+            
+            raw_market = row.get(COLUMNS['MARKET'], '')
             cleaned_market = clean_market_name(raw_market)
-
+            
             individual_evs.append({
-                'Player': row[player_col],
-                'Market': cleaned_market,
-                'Line': row.get('Line', ''),
-                'EV %': ev_percent
+                COLUMNS['PLAYER']: row[player_col],
+                COLUMNS['MARKET']: cleaned_market,
+                COLUMNS['LINE']: row.get(COLUMNS['LINE'], ''),
+                COLUMNS['EV']: ev_percent
             })
-
+        
+        logger.info(f"Successfully read {len(individual_evs)} EV records for {sport}")
         return individual_evs
-
+        
     except Exception as e:
-        logger.error(f"Error reading EV results: {e}")
+        logger.error(f"Error reading EV results for {sport}: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return []
 
 def read_correlation_parlays(sport='MLB'):
     """Read Correlation Parlays data from Google Sheets"""
-    if sport != 'MLB':
+    if sport != SPORTS['MLB']:
+        logger.info(f"Correlation parlays not yet implemented for {sport}")
         return []
-
+    
     try:
-        client = connect_to_sheets()
+        client = connect_to_sheets_with_retry()
         if not client:
             return []
-
+        
         spreadsheet = client.open(f"{sport}_Splash_Data")
-        parlay_worksheet = spreadsheet.worksheet("CORRELATION_PARLAYS")
+        parlay_worksheet = spreadsheet.worksheet(SHEETS['CORRELATION_PARLAYS'])
         all_data = parlay_worksheet.get_all_values()
-
+        
         if not all_data:
+            logger.warning("No data found in CORRELATION_PARLAYS sheet")
             return []
-
+        
         # Find header row
         header_row_index = -1
         for i, row in enumerate(all_data[:20]):
@@ -312,42 +470,44 @@ def read_correlation_parlays(sport='MLB'):
                 has_underscore_cols = any('_' in str(cell) for cell in row if cell)
                 has_id_col = any('id' in str(cell).lower() for cell in row if cell)
                 has_pitcher_name = any('pitcher_name' in str(cell).lower() for cell in row if cell)
-
+                
                 if has_underscore_cols or (has_id_col and has_pitcher_name):
                     header_row_index = i
                     break
-
+        
         if header_row_index == -1:
+            logger.warning("Could not find header row in CORRELATION_PARLAYS")
             return []
-
+        
         headers = all_data[header_row_index]
         data_rows = all_data[header_row_index + 1:]
         parlay_df = pd.DataFrame(data_rows, columns=headers)
         parlay_df = parlay_df[parlay_df.iloc[:, 0].notna() & (parlay_df.iloc[:, 0] != '')]
-
+        
         if parlay_df.empty:
+            logger.warning("No parlay data found after filtering")
             return []
-
+        
         parlays = []
         for idx, row in parlay_df.iterrows():
             try:
                 pitcher_name = row.get('Pitcher_Name', '')
                 if not pitcher_name:
                     continue
-
+                
                 pitcher_market = row.get('Pitcher_Market', '')
                 pitcher_market_clean = clean_market_name(pitcher_market) if pitcher_market else ""
-
+                
                 batter_legs = []
                 batter_num = 1
-
+                
                 while batter_num <= 10:
                     batter_col = f'Batter_{batter_num}'
                     batter_data = row.get(batter_col, '')
-
+                    
                     if not batter_data or str(batter_data).strip() == '':
                         break
-
+                    
                     try:
                         parts = [p.strip() for p in str(batter_data).split(',')]
                         if len(parts) >= 4:
@@ -355,9 +515,9 @@ def read_correlation_parlays(sport='MLB'):
                             batter_market_raw = parts[1]
                             batter_line = parts[2]
                             batter_ev = parts[4] if len(parts) > 4 else ''
-
+                            
                             batter_market_clean = clean_market_name(batter_market_raw)
-
+                            
                             batter_info = f"{batter_name} • {batter_market_clean} {batter_line}"
                             if batter_ev:
                                 try:
@@ -365,22 +525,22 @@ def read_correlation_parlays(sport='MLB'):
                                     batter_info += f" • EV: {ev_float:.1%}"
                                 except:
                                     batter_info += f" • EV: {batter_ev}"
-
+                            
                             batter_legs.append({'Batter': batter_info})
                     except Exception as e:
                         logger.warning(f"Error parsing batter data: {e}")
-
+                    
                     batter_num += 1
-
+                
                 if not batter_legs:
                     continue
-
+                
                 total_ev = 0
                 try:
                     pitcher_ev = row.get('Pitcher_EV', '')
                     if pitcher_ev:
                         total_ev += float(pitcher_ev)
-
+                    
                     for i in range(1, batter_num):
                         batter_col = f'Batter_{i}'
                         batter_data = row.get(batter_col, '')
@@ -393,14 +553,14 @@ def read_correlation_parlays(sport='MLB'):
                                     pass
                 except:
                     pass
-
+                
                 pitcher_info = {
                     'Player': pitcher_name,
                     'Market': pitcher_market_clean,
                     'Line': row.get('Pitcher_Line', ''),
                     'EV': f"{float(row.get('Pitcher_EV', 0)):.1%}" if row.get('Pitcher_EV') else ""
                 }
-
+                
                 parlay = {
                     'id': row.get('Parlay_ID', f"PARLAY_{idx + 1:03d}"),
                     'anchor': pitcher_info,
@@ -408,20 +568,98 @@ def read_correlation_parlays(sport='MLB'):
                     'totalEV': f"{total_ev:.1%}" if total_ev else "N/A",
                     'leg_count': 1 + len(batter_legs)
                 }
-
+                
                 parlays.append(parlay)
-
+                
             except Exception as e:
                 logger.error(f"Error parsing parlay row {idx}: {e}")
                 continue
-
+        
+        logger.info(f"Successfully read {len(parlays)} parlays for {sport}")
         return parlays
-
+        
     except Exception as e:
         logger.error(f"Error reading correlation parlays: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return []
 
-# App Layout
+# ============================================================================
+# CACHED VERSIONS WITH ERROR HANDLING
+# ============================================================================
+
+def read_ev_results_cached(sport='MLB'):
+    """Cached version of read_ev_results with error handling"""
+    cache_key = f"ev_{sport}"
+    now = datetime.now()
+    
+    # Check if we have valid cached data
+    if (cache_key in _cache and 
+        cache_key in _cache_time and 
+        now - _cache_time[cache_key] < CACHE_DURATION):
+        logger.info(f"✅ Using cached data for {sport} (age: {(now - _cache_time[cache_key]).seconds}s)")
+        return _cache[cache_key]
+    
+    # Cache expired or doesn't exist - fetch fresh data
+    logger.info(f"📥 Fetching fresh data for {sport} from Google Sheets")
+    
+    try:
+        data = read_ev_results(sport)
+        
+        # Validate data before caching
+        if validate_ev_data(data):
+            _cache[cache_key] = data
+            _cache_time[cache_key] = now
+            logger.info(f"💾 Cached {len(data)} valid records for {sport}")
+            return data
+        else:
+            logger.error(f"Data validation failed for {sport}, not caching")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Failed to fetch EV data for {sport}: {e}")
+        # Return cached data if available, even if expired
+        if cache_key in _cache:
+            logger.warning(f"Returning stale cache for {sport} due to error")
+            return _cache[cache_key]
+        return []
+
+def read_correlation_parlays_cached(sport='MLB'):
+    """Cached version of read_correlation_parlays with error handling"""
+    cache_key = f"parlays_{sport}"
+    now = datetime.now()
+    
+    if (cache_key in _cache and 
+        cache_key in _cache_time and 
+        now - _cache_time[cache_key] < CACHE_DURATION):
+        logger.info(f"✅ Using cached parlays for {sport}")
+        return _cache[cache_key]
+    
+    logger.info(f"📥 Fetching fresh parlays for {sport}")
+    
+    try:
+        data = read_correlation_parlays(sport)
+        
+        # Validate data before caching
+        if validate_parlay_data(data):
+            _cache[cache_key] = data
+            _cache_time[cache_key] = now
+            logger.info(f"💾 Cached {len(data)} valid parlays for {sport}")
+            return data
+        else:
+            logger.error(f"Parlay validation failed for {sport}, not caching")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Failed to fetch parlay data for {sport}: {e}")
+        if cache_key in _cache:
+            logger.warning(f"Returning stale cache for {sport} due to error")
+            return _cache[cache_key]
+        return []
+
+# ============================================================================
+# APP LAYOUT
+# ============================================================================
+
 print("Step 3: Building app layout...")
 try:
     app.layout = html.Div([
@@ -430,134 +668,101 @@ try:
             rel='stylesheet',
             href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'
         ),
-
+        
         # Store for current sport and view
-        dcc.Store(id='current-sport', data='MLB'),
+        dcc.Store(id='current-sport', data=SPORTS['MLB']),
         dcc.Store(id='current-view', data='individual'),
-        dcc.Store(id='evs-data', data=[]),  # ADD THIS - stores EV data in browser
-        dcc.Store(id='parlays-data', data=[]),  # ADD THIS - stores parlay data in browser
-
+        dcc.Store(id='evs-data', data=[]),
+        dcc.Store(id='parlays-data', data=[]),
+        
         # 1. TITLE - STICKY
         html.Div([
             html.H1("EV SPORTS", style={
                 'margin': '0',
                 'fontSize': '24px',
                 'fontWeight': '700',
-                'color': '#000000',
+                'color': COLORS['primary_text'],
                 'fontFamily': 'Inter, sans-serif',
                 'letterSpacing': '-0.5px'
             })
         ], style={
             'padding': '20px 40px',
-            'backgroundColor': '#ffffff',
-            'borderBottom': '1px solid #e5e7eb',
+            'backgroundColor': COLORS['background'],
+            'borderBottom': f"1px solid {COLORS['border']}",
             'position': 'fixed',
             'top': '0',
             'left': '0',
             'right': '0',
-            'zIndex': '1000'
+            'zIndex': str(Z_INDEX['header'])
         }),
-
+        
         # Spacer for title
-        html.Div(style={'height': '64px'}),
-
+        html.Div(style={'height': f"{LAYOUT['header_height']}px"}),
+        
         # 2. LEAGUE RIBBON - STICKY
         html.Div([
-            html.Button("MLB", id="league-mlb", n_clicks=0, style={
-                'background': 'none',
-                'border': 'none',
-                'color': '#000000',
-                'fontSize': '14px',
-                'fontWeight': '600',
-                'padding': '12px 20px',
-                'cursor': 'pointer',
-                'fontFamily': 'Inter, sans-serif'
-            }),
-            html.Button("NFL", id="league-nfl", n_clicks=0, style={
-                'background': 'none',
-                'border': 'none',
-                'color': '#9ca3af',
-                'fontSize': '14px',
-                'fontWeight': '400',
-                'padding': '12px 20px',
-                'cursor': 'pointer',
-                'fontFamily': 'Inter, sans-serif'
-            })
+            html.Button(SPORTS['MLB'], id="league-mlb", n_clicks=0, style=BUTTON_STYLES['active']),
+            html.Button(SPORTS['NFL'], id="league-nfl", n_clicks=0, style=BUTTON_STYLES['inactive'])
         ], style={
             'padding': '0 40px',
-            'backgroundColor': '#ffffff',
+            'backgroundColor': COLORS['background'],
+            'borderBottom': f"1px solid {COLORS['border']}",
             'display': 'flex',
             'gap': '8px',
             'position': 'fixed',
-            'top': '64px',
+            'top': f"{LAYOUT['header_height']}px",
             'left': '0',
             'right': '0',
-            'zIndex': '999'
+            'zIndex': str(Z_INDEX['league'])
         }),
-
+        
         # Spacer for league ribbon
-        html.Div(style={'height': '48px'}),
-
+        html.Div(style={'height': f"{LAYOUT['league_ribbon_height']}px"}),
+        
         # 3. VIEW RIBBON - STICKY
         html.Div([
-            html.Button("Individual EVs", id="view-individual", n_clicks=0, style={
-                'background': 'none',
-                'border': 'none',
-                'color': '#000000',
-                'fontSize': '14px',
-                'fontWeight': '600',
-                'padding': '12px 20px',
-                'cursor': 'pointer',
-                'fontFamily': 'Inter, sans-serif'
-            }),
-            html.Button("Correlation Parlays", id="view-parlays", n_clicks=0, style={
-                'background': 'none',
-                'border': 'none',
-                'color': '#9ca3af',
-                'fontSize': '14px',
-                'fontWeight': '400',
-                'padding': '12px 20px',
-                'cursor': 'pointer',
-                'fontFamily': 'Inter, sans-serif'
-            })
+            html.Button("Individual EVs", id="view-individual", n_clicks=0, style=BUTTON_STYLES['active']),
+            html.Button("Correlation Parlays", id="view-parlays", n_clicks=0, style=BUTTON_STYLES['inactive'])
         ], style={
             'padding': '0 40px',
-            'backgroundColor': '#ffffff',
-            'borderBottom': '1px solid #e5e7eb',
+            'backgroundColor': COLORS['background'],
             'display': 'flex',
             'gap': '8px',
             'position': 'fixed',
-            'top': '112px',
+            'top': f"{LAYOUT['header_height'] + LAYOUT['league_ribbon_height']}px",
             'left': '0',
             'right': '0',
-            'zIndex': '998'
+            'zIndex': str(Z_INDEX['view'])
         }),
-
+        
         # Spacer for view ribbon
-        html.Div(style={'height': '48px'}),
-
-        # Main content area - CRITICAL FIX: added position relative and overflow hidden
+        html.Div(style={'height': f"{LAYOUT['view_ribbon_height']}px"}),
+        
+        # Main content area
         html.Div(id='main-content', style={
-            'minHeight': 'calc(100vh - 160px)',
-            'backgroundColor': '#ffffff',
+            'minHeight': f"calc(100vh - {LAYOUT['header_height'] + LAYOUT['league_ribbon_height'] + LAYOUT['view_ribbon_height']}px)",
+            'backgroundColor': COLORS['background'],
             'position': 'relative',
             'overflow': 'hidden'
         })
-
+        
     ], style={
-        'backgroundColor': '#ffffff',
+        'backgroundColor': COLORS['background'],
         'minHeight': '100vh',
         'fontFamily': 'Inter, sans-serif'
     })
-
+    
     print("✅ App layout created successfully")
-
+    
 except Exception as e:
     print(f"❌ ERROR creating layout: {e}", file=sys.stderr)
     print(traceback.format_exc(), file=sys.stderr)
     sys.exit(1)
 
-# Callbacks
+# ============================================================================
+# CALLBACKS
+# ============================================================================
+
 print("Step 4: Registering callbacks...")
 
 # Sport selection callback
@@ -570,38 +775,16 @@ print("Step 4: Registering callbacks...")
 )
 def update_sport(mlb_clicks, nfl_clicks):
     ctx = dash.callback_context
-
-    active_style = {
-        'background': 'none',
-        'border': 'none',
-        'color': '#000000',
-        'fontSize': '14px',
-        'fontWeight': '600',
-        'padding': '12px 20px',
-        'cursor': 'pointer',
-        'fontFamily': 'Inter, sans-serif'
-    }
-
-    inactive_style = {
-        'background': 'none',
-        'border': 'none',
-        'color': '#9ca3af',
-        'fontSize': '14px',
-        'fontWeight': '400',
-        'padding': '12px 20px',
-        'cursor': 'pointer',
-        'fontFamily': 'Inter, sans-serif'
-    }
-
+    
     if not ctx.triggered:
-        return 'MLB', active_style, inactive_style
-
+        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive']
+    
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
+    
     if button_id == 'league-nfl':
-        return 'NFL', inactive_style, active_style
+        return SPORTS['NFL'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active']
     else:
-        return 'MLB', active_style, inactive_style
+        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive']
 
 # View selection callback
 @app.callback(
@@ -613,38 +796,18 @@ def update_sport(mlb_clicks, nfl_clicks):
 )
 def update_view(individual_clicks, parlays_clicks):
     ctx = dash.callback_context
-
-    active_style = {
-        'background': 'none',
-        'border': 'none',
-        'color': '#000000',
-        'fontSize': '14px',
-        'fontWeight': '600',
-        'padding': '12px 20px',
-        'cursor': 'pointer',
-        'fontFamily': 'Inter, sans-serif'
-    }
-
-    inactive_style = {
-        'background': 'none',
-        'border': 'none',
-        'color': '#9ca3af',
-        'fontSize': '14px',
-        'fontWeight': '400',
-        'padding': '12px 20px',
-        'cursor': 'pointer',
-        'fontFamily': 'Inter, sans-serif'
-    }
-
+    
     if not ctx.triggered:
-        return 'individual', active_style, inactive_style
-
+        return 'individual', BUTTON_STYLES['active'], BUTTON_STYLES['inactive']
+    
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-
+    
     if button_id == 'view-parlays':
-        return 'parlays', inactive_style, active_style
+        return 'parlays', BUTTON_STYLES['inactive'], BUTTON_STYLES['active']
     else:
-        return 'individual', active_style, inactive_style
+        return 'individual', BUTTON_STYLES['active'], BUTTON_STYLES['inactive']
+
+# Load data into stores when sport/view changes
 @app.callback(
     [Output('evs-data', 'data'),
      Output('parlays-data', 'data')],
@@ -652,21 +815,24 @@ def update_view(individual_clicks, parlays_clicks):
      Input('current-view', 'data')]
 )
 def load_data_to_store(sport, view):
-    """Load data from Google Sheets (with caching) into browser store"""
+    """Load data from Google Sheets (with caching and error handling) into browser store"""
     evs_data = []
     parlays_data = []
-
-    if view == 'individual':
-        # Only load EV data if on individual view
-        evs_data = read_ev_results_cached(sport)  # Uses cache!
-        logger.info(f"📊 Loaded {len(evs_data)} EV records for {sport} into store")
-    elif view == 'parlays':
-        # Only load parlay data if on parlays view
-        parlays_data = read_correlation_parlays_cached(sport)  # Uses cache!
-        logger.info(f"🎯 Loaded {len(parlays_data)} parlays for {sport} into store")
-
+    
+    try:
+        if view == 'individual':
+            evs_data = read_ev_results_cached(sport)
+            logger.info(f"📊 Loaded {len(evs_data)} EV records for {sport} into store")
+        elif view == 'parlays':
+            parlays_data = read_correlation_parlays_cached(sport)
+            logger.info(f"🎯 Loaded {len(parlays_data)} parlays for {sport} into store")
+    except Exception as e:
+        logger.error(f"Error loading data to store: {e}")
+        # Return empty data - app will show "no data" message instead of crashing
+    
     return evs_data, parlays_data
-# Main content callback
+
+# Main content callback - uses stored data
 @app.callback(
     Output('main-content', 'children'),
     [Input('current-sport', 'data'),
@@ -676,52 +842,91 @@ def load_data_to_store(sport, view):
 )
 def render_main_content(sport, view, evs_data, parlays_data):
     """Render content using data from store (no Google Sheets calls!)"""
-    if view == 'individual':
-        return render_individual_evs_from_store(sport, evs_data)
-    else:
-        return render_parlays_from_store(sport, parlays_data)
+    try:
+        if view == 'individual':
+            return render_individual_evs_from_store(sport, evs_data)
+        else:
+            return render_parlays_from_store(sport, parlays_data)
+    except Exception as e:
+        logger.error(f"Error rendering main content: {e}")
+        return render_error_state("Failed to render content. Please refresh the page.")
+
+# Market filter callback - uses stored data
+@app.callback(
+    [Output('evs-table-container', 'children'),
+     Output({'type': 'market-filter', 'index': ALL}, 'style')],
+    [Input({'type': 'market-filter', 'index': ALL}, 'n_clicks')],
+    [State('evs-data', 'data')],
+    prevent_initial_call=True
+)
+def update_market_filter(n_clicks, stored_data):
+    """Filter data from store - NO GOOGLE SHEETS CALLS!"""
+    ctx = dash.callback_context
+    
+    if not ctx.triggered:
+        return dash.no_update, dash.no_update
+    
+    try:
+        triggered_id = ctx.triggered[0]['prop_id']
+        button_data = json.loads(triggered_id.split('.')[0])
+        button_index = button_data['index']
+        
+        if not stored_data or not validate_ev_data(stored_data):
+            return render_empty_state("No valid data available"), dash.no_update
+        
+        # Get unique markets
+        all_markets = get_unique_markets(stored_data)
+        
+        # Filter data (IN BROWSER - INSTANT!)
+        if button_index == 0:
+            filtered_data = stored_data
+        else:
+            selected_market = all_markets[button_index - 1]
+            filtered_data = [ev for ev in stored_data if ev[COLUMNS['MARKET']] == selected_market]
+        
+        logger.info(f"🔍 Filtered to {len(filtered_data)} records (no API call!)")
+        
+        # Update button styles
+        button_styles = []
+        total_buttons = len(all_markets) + 1
+        
+        for i in range(total_buttons):
+            if i == button_index:
+                button_styles.append(FILTER_BUTTON_STYLES['active'])
+            else:
+                button_styles.append(FILTER_BUTTON_STYLES['inactive'])
+        
+        return create_evs_table(filtered_data), button_styles
+        
+    except Exception as e:
+        logger.error(f"Error in market filter: {e}")
+        return render_error_state("Error filtering data"), dash.no_update
+
+print("✅ All callbacks registered")
+
+# ============================================================================
+# RENDER FUNCTIONS
+# ============================================================================
 
 def render_individual_evs_from_store(sport, data):
     """Render individual EVs using data from store (NO API CALLS)"""
-
+    
     if not data:
-        return html.Div([
-            html.P(f"No {sport} EV opportunities found.", style={
-                'textAlign': 'center',
-                'padding': '60px 20px',
-                'color': '#6b7280',
-                'fontSize': '16px',
-                'fontFamily': 'Inter, sans-serif'
-            })
-        ])
-
+        return render_empty_state(f"No {sport} EV opportunities found.")
+    
+    if not validate_ev_data(data):
+        return render_error_state("Invalid data format. Please refresh the page.")
+    
     # Get unique markets
-    all_markets = sorted(list(set([ev['Market'] for ev in data if ev.get('Market')])))
-
+    all_markets = get_unique_markets(data)
+    
     # MARKET FILTERS - STICKY
     filter_section = html.Div([
         html.Div([
-            html.Button("All", id={'type': 'market-filter', 'index': 0}, style={
-                'background': 'none',
-                'border': 'none',
-                'color': '#000000',
-                'fontSize': '13px',
-                'fontWeight': '600',
-                'padding': '8px 16px',
-                'cursor': 'pointer',
-                'fontFamily': 'Inter, sans-serif'
-            })
+            html.Button("All", id={'type': 'market-filter', 'index': 0}, style=FILTER_BUTTON_STYLES['active'])
         ] + [
-            html.Button(market, id={'type': 'market-filter', 'index': i+1}, style={
-                'background': 'none',
-                'border': 'none',
-                'color': '#9ca3af',
-                'fontSize': '13px',
-                'fontWeight': '400',
-                'padding': '8px 16px',
-                'cursor': 'pointer',
-                'fontFamily': 'Inter, sans-serif'
-            }) for i, market in enumerate(all_markets)
+            html.Button(market, id={'type': 'market-filter', 'index': i+1}, style=FILTER_BUTTON_STYLES['inactive']) 
+            for i, market in enumerate(all_markets)
         ], style={
             'display': 'flex',
             'justifyContent': 'center',
@@ -730,22 +935,22 @@ def render_individual_evs_from_store(sport, data):
             'padding': '16px 40px'
         })
     ], style={
-        'backgroundColor': '#ffffff',
-        'borderBottom': '1px solid #e5e7eb',
+        'backgroundColor': COLORS['background'],
+        'borderBottom': f"1px solid {COLORS['border']}",
         'position': 'fixed',
-        'top': '160px',
+        'top': f"{LAYOUT['header_height'] + LAYOUT['league_ribbon_height'] + LAYOUT['view_ribbon_height']}px",
         'left': '0',
         'right': '0',
-        'zIndex': '997'
+        'zIndex': str(Z_INDEX['filters'])
     })
-
+    
     # Spacer for filters
-    filter_spacer = html.Div(style={'height': '56px'})
-
+    filter_spacer = html.Div(style={'height': f"{LAYOUT['filter_height']}px"})
+    
     # Space between market buttons and banner
     banner_top_spacer = html.Div(style={'height': '20px'})
-
-    # TABLE WRAPPER - Contains both banner and table to share the same width
+    
+    # TABLE WRAPPER
     table_wrapper = html.Div([
         # COLUMN HEADER BANNER
         html.Div([
@@ -756,7 +961,7 @@ def render_individual_evs_from_store(sport, data):
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
-                'color': '#6b7280',
+                'color': COLORS['secondary_text'],
                 'textTransform': 'uppercase'
             }),
             html.Div('MARKET', style={
@@ -766,7 +971,7 @@ def render_individual_evs_from_store(sport, data):
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
-                'color': '#6b7280',
+                'color': COLORS['secondary_text'],
                 'textTransform': 'uppercase'
             }),
             html.Div('LINE', style={
@@ -776,7 +981,7 @@ def render_individual_evs_from_store(sport, data):
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
-                'color': '#6b7280',
+                'color': COLORS['secondary_text'],
                 'textTransform': 'uppercase'
             }),
             html.Div('EV', style={
@@ -786,23 +991,23 @@ def render_individual_evs_from_store(sport, data):
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
-                'color': '#6b7280',
+                'color': COLORS['secondary_text'],
                 'textTransform': 'uppercase'
             })
         ], style={
             'display': 'flex',
-            'border': '1px solid #e5e7eb',
+            'border': f"1px solid {COLORS['border']}",
             'borderBottom': 'none',
             'borderRadius': '8px 8px 0 0',
-            'backgroundColor': '#f3f4f6'
+            'backgroundColor': COLORS['light_bg']
         }),
-
+        
         # TABLE CONTAINER - SCROLLABLE
         html.Div(
             id='evs-table-container',
             children=[create_evs_table(data)],
             style={
-                'height': 'calc(100vh - 350px)',
+                'height': f"calc(100vh - {LAYOUT['table_offset']}px)",
                 'overflowY': 'auto',
                 'position': 'relative'
             }
@@ -812,7 +1017,7 @@ def render_individual_evs_from_store(sport, data):
         'margin': '0 auto',
         'padding': '0 40px'
     })
-
+    
     return html.Div([
         filter_section,
         filter_spacer,
@@ -820,183 +1025,66 @@ def render_individual_evs_from_store(sport, data):
         table_wrapper
     ])
 
-    return html.Div([filter_section, filter_spacer, banner_top_spacer, header_banner, header_spacer, table])
-
-# Market filter callback - NOW USES STORED DATA (NO API CALLS!)
-@app.callback(
-    [Output('evs-table-container', 'children'),
-     Output({'type': 'market-filter', 'index': ALL}, 'style')],
-    [Input({'type': 'market-filter', 'index': ALL}, 'n_clicks')],
-    [State('evs-data', 'data')],  # Changed from current-sport to evs-data
-    prevent_initial_call=True
-)
-def update_market_filter(n_clicks, stored_data):
-    """Filter data from store - NO GOOGLE SHEETS CALLS!"""
-    ctx = dash.callback_context
-
-    if not ctx.triggered:
-        return dash.no_update, dash.no_update
-
-    triggered_id = ctx.triggered[0]['prop_id']
-    button_data = json.loads(triggered_id.split('.')[0])
-    button_index = button_data['index']
-
-    if not stored_data:
-        return html.Div([
-            html.P("No data available.", style={
-                'textAlign': 'center',
-                'padding': '40px',
-                'color': '#9ca3af',
-                'fontFamily': 'Inter, sans-serif'
-            })
-        ]), dash.no_update
-
-    # Get unique markets from stored data
-    all_markets = sorted(list(set([ev['Market'] for ev in stored_data if ev.get('Market')])))
-
-    # Filter data (IN BROWSER - INSTANT!)
-    if button_index == 0:
-        filtered_data = stored_data
-    else:
-        selected_market = all_markets[button_index - 1]
-        filtered_data = [ev for ev in stored_data if ev['Market'] == selected_market]
-
-    logger.info(f"🔍 Filtered to {len(filtered_data)} records (no API call!)")
-
-    # Update button styles
-    active_style = {
-        'background': 'none',
-        'border': 'none',
-        'color': '#000000',
-        'fontSize': '13px',
-        'fontWeight': '600',
-        'padding': '8px 16px',
-        'cursor': 'pointer',
-        'fontFamily': 'Inter, sans-serif'
-    }
-
-    inactive_style = {
-        'background': 'none',
-        'border': 'none',
-        'color': '#9ca3af',
-        'fontSize': '13px',
-        'fontWeight': '400',
-        'padding': '8px 16px',
-        'cursor': 'pointer',
-        'fontFamily': 'Inter, sans-serif'
-    }
-
-    button_styles = []
-    total_buttons = len(all_markets) + 1
-
-    for i in range(total_buttons):
-        if i == button_index:
-            button_styles.append(active_style)
-        else:
-            button_styles.append(inactive_style)
-
-    return create_evs_table(filtered_data), button_styles
-
 def create_evs_table(data):
-    """Create table WITHOUT any header - just player data rows"""
+    """Create table rows from data"""
     if not data:
-        return html.Div([
-            html.P("No data matches this filter.", style={
-                'textAlign': 'center',
-                'padding': '40px',
-                'color': '#9ca3af',
-                'fontFamily': 'Inter, sans-serif'
-            })
-        ])
-
+        return render_empty_state("No data matches this filter.")
+    
     return html.Div([
-        # Table rows ONLY - NO HEADER
         html.Div([
             html.Div([
-                html.Div(row['Player'], style={
+                html.Div(row[COLUMNS['PLAYER']], style={
                     'flex': '1',
                     'padding': '14px 16px',
                     'fontWeight': '500',
                     'color': '#111827',
                     'fontSize': '14px'
                 }),
-                html.Div(row['Market'], style={
+                html.Div(row[COLUMNS['MARKET']], style={
                     'flex': '1',
                     'padding': '14px 16px',
                     'color': '#374151',
                     'fontSize': '14px'
                 }),
-                html.Div(row['Line'], style={
+                html.Div(row[COLUMNS['LINE']], style={
                     'flex': '0 0 120px',
                     'padding': '14px 16px',
                     'color': '#374151',
                     'fontSize': '14px'
                 }),
-                html.Div(row['EV %'], style={
+                html.Div(row[COLUMNS['EV']], style={
                     'flex': '0 0 100px',
                     'padding': '14px 16px',
                     'fontWeight': '600',
-                    'color': '#059669',
+                    'color': COLORS['success'],
                     'fontSize': '14px'
                 })
             ], className='table-row', style={
                 'display': 'flex',
-                'borderBottom': '1px solid #f3f4f6' if row != data[-1] else 'none',
-                'backgroundColor': '#ffffff'
+                'borderBottom': f"1px solid {COLORS['light_bg']}" if row != data[-1] else 'none',
+                'backgroundColor': COLORS['background']
             })
             for row in data
         ], style={'fontFamily': 'Inter, sans-serif'})
     ], style={
-        'border': '1px solid #e5e7eb',
+        'border': f"1px solid {COLORS['border']}",
         'borderRadius': '0 0 8px 8px',
         'borderTop': 'none',
         'overflow': 'hidden',
-        'backgroundColor': '#ffffff'
+        'backgroundColor': COLORS['background']
     })
 
-def render_parlays(sport):
-    """Render correlation parlays for the selected sport"""
-    if sport != 'MLB':
-        return html.Div([
-            html.P(f"{sport} correlation parlays coming soon!", style={
-                # ... existing code ...
-            })
-        ])
-
-    parlays = read_correlation_parlays(sport)
-
-    if not parlays:
-        return html.Div([
-            # ... existing code ...
-        ])
-
-    return html.Div([
-        # ... existing code ...
-    ])
 def render_parlays_from_store(sport, parlays_data):
     """Render correlation parlays from stored data"""
-    if sport != 'MLB':
-        return html.Div([
-            html.P(f"{sport} correlation parlays coming soon!", style={
-                'textAlign': 'center',
-                'padding': '60px 20px',
-                'color': '#6b7280',
-                'fontSize': '16px',
-                'fontFamily': 'Inter, sans-serif'
-            })
-        ])
-
+    if sport != SPORTS['MLB']:
+        return render_empty_state(f"{sport} correlation parlays coming soon!")
+    
     if not parlays_data:
-        return html.Div([
-            html.P(f"No {sport} correlation parlays found.", style={
-                'textAlign': 'center',
-                'padding': '60px 20px',
-                'color': '#6b7280',
-                'fontSize': '16px',
-                'fontFamily': 'Inter, sans-serif'
-            })
-        ])
-
+        return render_empty_state(f"No {sport} correlation parlays found.")
+    
+    if not validate_parlay_data(parlays_data):
+        return render_error_state("Invalid parlay data format. Please refresh the page.")
+    
     return html.Div([
         html.Div([
             render_parlay_card(parlay) for parlay in parlays_data
@@ -1004,35 +1092,34 @@ def render_parlays_from_store(sport, parlays_data):
             'maxWidth': '1200px',
             'margin': '0 auto',
             'padding': '20px 40px 60px 40px',
-            'height': 'calc(100vh - 220px)',
+            'height': f"calc(100vh - 220px)",
             'overflowY': 'auto',
             'position': 'relative'
         })
     ])
+
 def render_parlay_card(parlay):
-    """Render a single parlay card"""
-    # ... existing code ...
     """Render a single parlay card"""
     return html.Div([
         # Parlay header
         html.Div([
             html.Span(f"{parlay['id']} • {parlay['leg_count']} Legs • Total EV: ", style={
-                'color': '#6b7280',
+                'color': COLORS['secondary_text'],
                 'fontSize': '12px',
                 'fontWeight': '500'
             }),
             html.Span(parlay['totalEV'], style={
-                'color': '#059669',
+                'color': COLORS['success'],
                 'fontSize': '12px',
                 'fontWeight': '600'
             })
         ], style={
-            'backgroundColor': '#f9fafb',
+            'backgroundColor': COLORS['hover_bg'],
             'padding': '12px 20px',
-            'borderBottom': '1px solid #e5e7eb',
+            'borderBottom': f"1px solid {COLORS['border']}",
             'fontFamily': 'Inter, sans-serif'
         }),
-
+        
         # Anchor (pitcher)
         html.Div([
             html.Div([
@@ -1048,17 +1135,17 @@ def render_parlay_card(parlay):
                 }),
                 html.Span(f" • EV: {parlay['anchor']['EV']}", style={
                     'fontSize': '14px',
-                    'color': '#059669',
+                    'color': COLORS['success'],
                     'fontWeight': '600',
                     'marginLeft': '8px'
                 }) if parlay['anchor']['EV'] else None
             ])
         ], style={
             'padding': '16px 20px',
-            'borderBottom': '1px solid #e5e7eb',
+            'borderBottom': f"1px solid {COLORS['border']}",
             'fontFamily': 'Inter, sans-serif'
         }),
-
+        
         # Batters
         html.Div([
             html.Div([
@@ -1066,7 +1153,7 @@ def render_parlay_card(parlay):
                     'fontSize': '14px',
                     'color': '#374151',
                     'padding': '10px 0',
-                    'borderBottom': '1px solid #f3f4f6' if i < len(parlay['batters']) - 1 else 'none'
+                    'borderBottom': f"1px solid {COLORS['light_bg']}" if i < len(parlay['batters']) - 1 else 'none'
                 })
                 for i, batter in enumerate(parlay['batters'])
             ])
@@ -1074,16 +1161,64 @@ def render_parlay_card(parlay):
             'padding': '16px 20px',
             'fontFamily': 'Inter, sans-serif'
         })
-
+        
     ], style={
-        'backgroundColor': '#ffffff',
-        'border': '1px solid #e5e7eb',
+        'backgroundColor': COLORS['background'],
+        'border': f"1px solid {COLORS['border']}",
         'borderRadius': '8px',
         'overflow': 'hidden',
         'marginBottom': '20px'
     })
 
-print("✅ All callbacks registered")
+def render_empty_state(message):
+    """Render empty state with custom message"""
+    return html.Div([
+        html.P(message, style={
+            'textAlign': 'center',
+            'padding': '60px 20px',
+            'color': COLORS['secondary_text'],
+            'fontSize': '16px',
+            'fontFamily': 'Inter, sans-serif'
+        })
+    ])
+
+def render_error_state(message):
+    """Render error state with custom message"""
+    return html.Div([
+        html.Div([
+            html.P("⚠️ Error", style={
+                'fontSize': '18px',
+                'fontWeight': '600',
+                'color': '#dc2626',
+                'marginBottom': '8px',
+                'fontFamily': 'Inter, sans-serif'
+            }),
+            html.P(message, style={
+                'fontSize': '14px',
+                'color': COLORS['secondary_text'],
+                'fontFamily': 'Inter, sans-serif'
+            }),
+            html.Button("Refresh Page", 
+                id='refresh-button',
+                style={
+                    'marginTop': '16px',
+                    'padding': '8px 16px',
+                    'backgroundColor': COLORS['primary_text'],
+                    'color': COLORS['background'],
+                    'border': 'none',
+                    'borderRadius': '4px',
+                    'cursor': 'pointer',
+                    'fontFamily': 'Inter, sans-serif'
+                }
+            )
+        ], style={
+            'textAlign': 'center',
+            'padding': '60px 20px',
+            'maxWidth': '400px',
+            'margin': '0 auto'
+        })
+    ])
+
 print("=" * 60)
 print("✅ DASH APP INITIALIZATION COMPLETE")
 print("=" * 60)

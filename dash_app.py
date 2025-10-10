@@ -930,7 +930,7 @@ def create_evs_table(data):
                 'textTransform': 'uppercase'
             }),
             html.Div('LINE', style={
-                'flex': '0 0 150px',  # Increased width for "Under 12.5" type values
+                'flex': '0 0 120px',
                 'padding': '16px 24px',
                 'fontWeight': '500',
                 'fontSize': '11px',
@@ -974,10 +974,9 @@ def create_evs_table(data):
                     'color': '#374151'
                 }),
                 html.Div(row['Line'], style={
-                    'flex': '0 0 150px',  # Match header width
+                    'flex': '0 0 120px',
                     'padding': '16px 24px',
-                    'color': '#374151',
-                    'whiteSpace': 'nowrap'  # Prevent text wrapping
+                    'color': '#374151'
                 }),
                 html.Div(row['EV %'], style={
                     'flex': '0 0 100px',

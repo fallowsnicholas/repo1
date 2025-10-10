@@ -434,7 +434,6 @@ try:
         ], style={
             'padding': '0 40px',
             'backgroundColor': '#ffffff',
-            'borderBottom': '1px solid #e5e7eb',
             'display': 'flex',
             'gap': '8px',
             'position': 'fixed',
@@ -658,7 +657,6 @@ def render_individual_evs(sport):
         })
     ], style={
         'backgroundColor': '#ffffff',
-        'borderBottom': '1px solid #e5e7eb',
         'position': 'fixed',
         'top': '160px',
         'left': '0',

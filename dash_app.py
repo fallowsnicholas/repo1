@@ -689,7 +689,7 @@ def render_individual_evs(sport):
             html.Div('MARKET', style={
                 'flex': '1',
                 'padding': '12px 16px',
-                'paddingLeft': '0px',  # ADD THIS
+                'paddingLeft': '17px',  # ADD THIS
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
@@ -699,7 +699,7 @@ def render_individual_evs(sport):
             html.Div('LINE', style={
                 'flex': '0 0 120px',
                 'padding': '12px 16px',
-                'paddingLeft': '0px',  # ADD THIS
+                'paddingLeft': '17px',  # ADD THIS
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
@@ -709,7 +709,7 @@ def render_individual_evs(sport):
             html.Div('EV', style={
                 'flex': '0 0 100px',
                 'padding': '12px 16px',
-                'paddingLeft': '0px',  # ADD THIS
+                'paddingLeft': '17px',  # ADD THIS
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',

@@ -177,8 +177,7 @@ SPORTS_CONFIG = {
             'betrivers', 'unibet', 'bovada', 'mybookieag', 'betus',
             'williamhill_us', 'wynnbet', 'betway', 'foxbet', 'barstool'
         ]
-    }
-}
+    },
 
     'WNBA': {
             # Data source configurations

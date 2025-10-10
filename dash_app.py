@@ -52,7 +52,7 @@ app.index_string = '''
                 padding: 0;
                 box-sizing: border-box;
             }
-            
+
             body {
                 margin: 0;
                 padding: 0;
@@ -60,40 +60,40 @@ app.index_string = '''
                 background: white;
                 overflow-x: hidden;
             }
-            
+
             /* Fix for proper stacking */
             #react-entry-point {
                 position: relative;
                 min-height: 100vh;
             }
-            
+
             /* Ensure all fixed headers have solid backgrounds */
             [style*="position: fixed"] {
                 background: white !important;
             }
-            
+
             /* Remove button outlines */
             button {
                 outline: none !important;
                 -webkit-appearance: none !important;
                 -moz-appearance: none !important;
             }
-            
+
             /* Ensure table rows are white */
             .table-row {
                 background-color: white !important;
             }
-            
+
             .table-row:hover {
                 background-color: #f9fafb !important;
             }
-            
+
             /* HIDE SCROLLBAR - ADD THIS */
             #evs-table-container {
                 scrollbar-width: none; /* Firefox */
                 -ms-overflow-style: none; /* IE/Edge */
             }
-            
+
             #evs-table-container::-webkit-scrollbar {
                 display: none; /* Chrome/Safari/Opera */
             }
@@ -109,7 +109,57 @@ app.index_string = '''
     </body>
 </html>
 '''
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+print("✅ Logging configured")
 
+# ADD THIS ENTIRE SECTION - Simple in-memory cache
+from datetime import datetime, timedelta
+
+_cache = {}
+_cache_time = {}
+CACHE_DURATION = timedelta(minutes=5)  # Cache for 5 minutes
+
+def read_ev_results_cached(sport='MLB'):
+    """Cached version of read_ev_results - only fetches from Google Sheets when cache expires"""
+    cache_key = f"ev_{sport}"
+    now = datetime.now()
+
+    # Check if we have valid cached data
+    if (cache_key in _cache and
+        cache_key in _cache_time and
+        now - _cache_time[cache_key] < CACHE_DURATION):
+        logger.info(f"✅ Using cached data for {sport} (age: {(now - _cache_time[cache_key]).seconds}s)")
+        return _cache[cache_key]
+
+    # Cache expired or doesn't exist - fetch fresh data
+    logger.info(f"📥 Fetching fresh data for {sport} from Google Sheets")
+    data = read_ev_results(sport)
+
+    # Store in cache
+    _cache[cache_key] = data
+    _cache_time[cache_key] = now
+
+    logger.info(f"💾 Cached {len(data)} records for {sport}")
+    return data
+
+def read_correlation_parlays_cached(sport='MLB'):
+    """Cached version of read_correlation_parlays"""
+    cache_key = f"parlays_{sport}"
+    now = datetime.now()
+
+    if (cache_key in _cache and
+        cache_key in _cache_time and
+        now - _cache_time[cache_key] < CACHE_DURATION):
+        logger.info(f"✅ Using cached parlays for {sport}")
+        return _cache[cache_key]
+
+    logger.info(f"📥 Fetching fresh parlays for {sport}")
+    data = read_correlation_parlays(sport)
+    _cache[cache_key] = data
+    _cache_time[cache_key] = now
+    return data
 def clean_market_name(market):
     """Clean market name by removing prefixes and formatting"""
     if not market:
@@ -384,6 +434,8 @@ try:
         # Store for current sport and view
         dcc.Store(id='current-sport', data='MLB'),
         dcc.Store(id='current-view', data='individual'),
+        dcc.Store(id='evs-data', data=[]),  # ADD THIS - stores EV data in browser
+        dcc.Store(id='parlays-data', data=[]),  # ADD THIS - stores parlay data in browser
 
         # 1. TITLE - STICKY
         html.Div([
@@ -593,22 +645,44 @@ def update_view(individual_clicks, parlays_clicks):
         return 'parlays', inactive_style, active_style
     else:
         return 'individual', active_style, inactive_style
+@app.callback(
+    [Output('evs-data', 'data'),
+     Output('parlays-data', 'data')],
+    [Input('current-sport', 'data'),
+     Input('current-view', 'data')]
+)
+def load_data_to_store(sport, view):
+    """Load data from Google Sheets (with caching) into browser store"""
+    evs_data = []
+    parlays_data = []
 
+    if view == 'individual':
+        # Only load EV data if on individual view
+        evs_data = read_ev_results_cached(sport)  # Uses cache!
+        logger.info(f"📊 Loaded {len(evs_data)} EV records for {sport} into store")
+    elif view == 'parlays':
+        # Only load parlay data if on parlays view
+        parlays_data = read_correlation_parlays_cached(sport)  # Uses cache!
+        logger.info(f"🎯 Loaded {len(parlays_data)} parlays for {sport} into store")
+
+    return evs_data, parlays_data
 # Main content callback
 @app.callback(
     Output('main-content', 'children'),
     [Input('current-sport', 'data'),
-     Input('current-view', 'data')]
+     Input('current-view', 'data'),
+     Input('evs-data', 'data'),
+     Input('parlays-data', 'data')]
 )
-def render_main_content(sport, view):
+def render_main_content(sport, view, evs_data, parlays_data):
+    """Render content using data from store (no Google Sheets calls!)"""
     if view == 'individual':
-        return render_individual_evs(sport)
+        return render_individual_evs_from_store(sport, evs_data)
     else:
-        return render_parlays(sport)
+        return render_parlays_from_store(sport, parlays_data)
 
-def render_individual_evs(sport):
-    """Render individual EVs with market filters, banner, and table"""
-    data = read_ev_results(sport)
+def render_individual_evs_from_store(sport, data):
+    """Render individual EVs using data from store (NO API CALLS)"""
 
     if not data:
         return html.Div([
@@ -657,6 +731,7 @@ def render_individual_evs(sport):
         })
     ], style={
         'backgroundColor': '#ffffff',
+        'borderBottom': '1px solid #e5e7eb',
         'position': 'fixed',
         'top': '160px',
         'left': '0',
@@ -677,7 +752,7 @@ def render_individual_evs(sport):
             html.Div('NAME', style={
                 'flex': '1',
                 'padding': '12px 16px',
-                'paddingLeft': '17px',  # Compensates for 1px border
+                'paddingLeft': '17px',
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
@@ -687,7 +762,7 @@ def render_individual_evs(sport):
             html.Div('MARKET', style={
                 'flex': '1',
                 'padding': '12px 16px',
-                'paddingLeft': '17px',  # ADD THIS
+                'paddingLeft': '17px',
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
@@ -697,7 +772,7 @@ def render_individual_evs(sport):
             html.Div('LINE', style={
                 'flex': '0 0 120px',
                 'padding': '12px 16px',
-                'paddingLeft': '17px',  # ADD THIS
+                'paddingLeft': '17px',
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
@@ -707,7 +782,7 @@ def render_individual_evs(sport):
             html.Div('EV', style={
                 'flex': '0 0 100px',
                 'padding': '12px 16px',
-                'paddingLeft': '17px',  # ADD THIS
+                'paddingLeft': '17px',
                 'fontWeight': '600',
                 'fontSize': '11px',
                 'letterSpacing': '0.5px',
@@ -747,15 +822,16 @@ def render_individual_evs(sport):
 
     return html.Div([filter_section, filter_spacer, banner_top_spacer, header_banner, header_spacer, table])
 
-# Market filter callback
+# Market filter callback - NOW USES STORED DATA (NO API CALLS!)
 @app.callback(
     [Output('evs-table-container', 'children'),
      Output({'type': 'market-filter', 'index': ALL}, 'style')],
     [Input({'type': 'market-filter', 'index': ALL}, 'n_clicks')],
-    [State('current-sport', 'data')],
+    [State('evs-data', 'data')],  # Changed from current-sport to evs-data
     prevent_initial_call=True
 )
-def update_market_filter(n_clicks, sport):
+def update_market_filter(n_clicks, stored_data):
+    """Filter data from store - NO GOOGLE SHEETS CALLS!"""
     ctx = dash.callback_context
 
     if not ctx.triggered:
@@ -765,9 +841,7 @@ def update_market_filter(n_clicks, sport):
     button_data = json.loads(triggered_id.split('.')[0])
     button_index = button_data['index']
 
-    data = read_ev_results(sport)
-
-    if not data:
+    if not stored_data:
         return html.Div([
             html.P("No data available.", style={
                 'textAlign': 'center',
@@ -777,14 +851,17 @@ def update_market_filter(n_clicks, sport):
             })
         ]), dash.no_update
 
-    all_markets = sorted(list(set([ev['Market'] for ev in data if ev.get('Market')])))
+    # Get unique markets from stored data
+    all_markets = sorted(list(set([ev['Market'] for ev in stored_data if ev.get('Market')])))
 
-    # Filter data
+    # Filter data (IN BROWSER - INSTANT!)
     if button_index == 0:
-        filtered_data = data
+        filtered_data = stored_data
     else:
         selected_market = all_markets[button_index - 1]
-        filtered_data = [ev for ev in data if ev['Market'] == selected_market]
+        filtered_data = [ev for ev in stored_data if ev['Market'] == selected_market]
+
+    logger.info(f"🔍 Filtered to {len(filtered_data)} records (no API call!)")
 
     # Update button styles
     active_style = {
@@ -878,7 +955,26 @@ def create_evs_table(data):
     })
 
 def render_parlays(sport):
-    """Render correlation parlays"""
+    """Render correlation parlays for the selected sport"""
+    if sport != 'MLB':
+        return html.Div([
+            html.P(f"{sport} correlation parlays coming soon!", style={
+                # ... existing code ...
+            })
+        ])
+
+    parlays = read_correlation_parlays(sport)
+
+    if not parlays:
+        return html.Div([
+            # ... existing code ...
+        ])
+
+    return html.Div([
+        # ... existing code ...
+    ])
+def render_parlays_from_store(sport, parlays_data):
+    """Render correlation parlays from stored data"""
     if sport != 'MLB':
         return html.Div([
             html.P(f"{sport} correlation parlays coming soon!", style={
@@ -890,9 +986,7 @@ def render_parlays(sport):
             })
         ])
 
-    parlays = read_correlation_parlays(sport)
-
-    if not parlays:
+    if not parlays_data:
         return html.Div([
             html.P(f"No {sport} correlation parlays found.", style={
                 'textAlign': 'center',
@@ -905,7 +999,7 @@ def render_parlays(sport):
 
     return html.Div([
         html.Div([
-            render_parlay_card(parlay) for parlay in parlays
+            render_parlay_card(parlay) for parlay in parlays_data
         ], style={
             'maxWidth': '1200px',
             'margin': '0 auto',
@@ -915,8 +1009,9 @@ def render_parlays(sport):
             'position': 'relative'
         })
     ])
-
 def render_parlay_card(parlay):
+    """Render a single parlay card"""
+    # ... existing code ...
     """Render a single parlay card"""
     return html.Div([
         # Parlay header

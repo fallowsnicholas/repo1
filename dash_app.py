@@ -63,7 +63,8 @@ Z_INDEX = {
 # Sports configuration
 SPORTS = {
     'MLB': 'MLB',
-    'NFL': 'NFL'
+    'NFL': 'NFL',
+    'WNBA': 'WNBA'
 }
 
 # Colors
@@ -702,7 +703,8 @@ try:
         # 2. LEAGUE RIBBON - STICKY
         html.Div([
             html.Button(SPORTS['MLB'], id="league-mlb", n_clicks=0, style=BUTTON_STYLES['active']),
-            html.Button(SPORTS['NFL'], id="league-nfl", n_clicks=0, style=BUTTON_STYLES['inactive'])
+            html.Button(SPORTS['NFL'], id="league-nfl", n_clicks=0, style=BUTTON_STYLES['inactive']),
+            html.Button(SPORTS['WNBA'], id="league-wnba", n_clicks=0, style=BUTTON_STYLES['inactive'])
         ], style={
             'padding': '0 40px',
             'backgroundColor': COLORS['background'],
@@ -770,22 +772,34 @@ print("Step 4: Registering callbacks...")
     [Output('current-sport', 'data'),
      Output('league-mlb', 'style'),
      Output('league-nfl', 'style')],
+     Output('league-wnba', 'style')],  # ADD THIS
     [Input('league-mlb', 'n_clicks'),
-     Input('league-nfl', 'n_clicks')]
+     Input('league-nfl', 'n_clicks')],
+     Input('league-wnba', 'n_clicks')]  # ADD THIS
 )
-def update_sport(mlb_clicks, nfl_clicks):
+@app.callback(
+    [Output('current-sport', 'data'),
+     Output('league-mlb', 'style'),
+     Output('league-nfl', 'style'),
+     Output('league-wnba', 'style')],  # ADD THIS
+    [Input('league-mlb', 'n_clicks'),
+     Input('league-nfl', 'n_clicks'),
+     Input('league-wnba', 'n_clicks')]  # ADD THIS
+)
+def update_sport(mlb_clicks, nfl_clicks, wnba_clicks):  # ADD wnba_clicks parameter
     ctx = dash.callback_context
     
     if not ctx.triggered:
-        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive']
+        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
     
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
     
     if button_id == 'league-nfl':
-        return SPORTS['NFL'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active']
+        return SPORTS['NFL'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive']
+    elif button_id == 'league-wnba':
+        return SPORTS['WNBA'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active']
     else:
-        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive']
-
+        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
 # View selection callback
 @app.callback(
     [Output('current-view', 'data'),
@@ -1074,9 +1088,10 @@ def create_evs_table(data):
         'backgroundColor': COLORS['background']
     })
 
-def render_parlays_from_store(sport, parlays_data):
+ddef render_parlays_from_store(sport, parlays_data):
     """Render correlation parlays from stored data"""
-    if sport != SPORTS['MLB']:
+    # Only MLB has correlation parlays for now
+    if sport not in [SPORTS['MLB']]:
         return render_empty_state(f"{sport} correlation parlays coming soon!")
     
     if not parlays_data:

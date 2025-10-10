@@ -180,6 +180,69 @@ SPORTS_CONFIG = {
     }
 }
 
+'WNBA': {
+        # Data source configurations
+        'spreadsheet_name': 'WNBA_Splash_Data',
+        'odds_api_sport': 'basketball_wnba',
+        'espn_sport': 'basketball',
+        'espn_league': 'wnba',
+        'splash_league': 'wnba',
+        
+        # Active season months (May=5 through October=10)
+        'season_active': [5, 6, 7, 8, 9, 10],
+        
+        # Days of week that games typically occur
+        'game_days': [0, 1, 2, 3, 4, 5, 6],  # WNBA plays throughout the week
+        
+        # Market mappings (Splash Sports name -> Odds API name)
+        'market_mappings': {
+            'points': 'player_points',
+            'rebounds': 'player_rebounds',
+            'assists': 'player_assists',
+            'threes': 'player_threes',
+            'blocks': 'player_blocks',
+            'steals': 'player_steals',
+            'points_rebounds_assists': 'player_points_rebounds_assists',
+            'points_rebounds': 'player_points_rebounds',
+            'points_assists': 'player_points_assists',
+            'rebounds_assists': 'player_rebounds_assists'
+        },
+        
+        # Markets to fetch from Odds API
+        'odds_markets': [
+            'player_points',
+            'player_rebounds',
+            'player_assists',
+            'player_threes',
+            'player_blocks',
+            'player_steals',
+            'player_points_rebounds_assists',
+            'player_points_rebounds',
+            'player_points_assists',
+            'player_rebounds_assists'
+        ],
+        
+        # No correlations defined yet for WNBA (can add later)
+        'correlations': {},
+        
+        # EV calculation parameters
+        'ev_params': {
+            'min_books': 3,
+            'min_true_prob': 0.45,
+            'ev_threshold': 0.01,
+            'min_anchor_ev': 0.01,
+            'min_batter_ev': 0.005,  # Not used for WNBA but keeping for consistency
+            'max_parlays': 10
+        },
+        
+        # Sportsbooks to include
+        'sportsbooks': [
+            'fanduel', 'draftkings', 'betmgm', 'caesars', 'pointsbetus',
+            'betrivers', 'unibet', 'bovada', 'mybookieag', 'betus',
+            'williamhill_us', 'wynnbet', 'betway', 'foxbet', 'barstool'
+        ]
+    }
+}
 def get_sport_config(sport):
     """
     Get configuration for a specific sport.

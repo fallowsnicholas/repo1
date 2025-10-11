@@ -300,7 +300,7 @@ def main():
     """Main execution for Step 1 - configurable date and sport"""
     # Add argument parser for sport selection
     parser = argparse.ArgumentParser(description='Fetch sports matchups from ESPN')
-    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL', 'WNBA'],
                        help='Sport to fetch matchups for (default: MLB)')
     args = parser.parse_args()
     

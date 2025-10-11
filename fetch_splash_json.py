@@ -18,7 +18,7 @@ class SplashJSONFetcher:
         
         # Load sport-specific configuration
         config = get_sport_config(self.sport)
-        self.splash_league = config['splash_league']  # 'mlb' or 'nfl'
+        self.splash_league = config['splash_league']  # 'mlb', 'nfl', or 'wnba'
         
         print(f"🏈 Initialized {self.sport} Splash Fetcher")
         print(f"   League parameter: {self.splash_league}")
@@ -300,8 +300,8 @@ class SplashJSONFetcher:
 
 def main():
     """Main execution for JSON fetching only"""
-    parser = argparse.ArgumentParser(description='Fetch Splash Sports JSON for MLB or NFL')
-    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+    parser = argparse.ArgumentParser(description='Fetch Splash Sports JSON for MLB, NFL, or WNBA')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL', 'WNBA'],
                        help='Sport to fetch data for (default: MLB)')
     args = parser.parse_args()
     

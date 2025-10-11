@@ -777,15 +777,7 @@ print("Step 4: Registering callbacks...")
      Input('league-nfl', 'n_clicks')],
      Input('league-wnba', 'n_clicks')]  # ADD THIS
 )
-@app.callback(
-    [Output('current-sport', 'data'),
-     Output('league-mlb', 'style'),
-     Output('league-nfl', 'style'),
-     Output('league-wnba', 'style')],  # ADD THIS
-    [Input('league-mlb', 'n_clicks'),
-     Input('league-nfl', 'n_clicks'),
-     Input('league-wnba', 'n_clicks')]  # ADD THIS
-)
+
 def update_sport(mlb_clicks, nfl_clicks, wnba_clicks):  # ADD wnba_clicks parameter
     ctx = dash.callback_context
     
@@ -1088,7 +1080,7 @@ def create_evs_table(data):
         'backgroundColor': COLORS['background']
     })
 
-ddef render_parlays_from_store(sport, parlays_data):
+def render_parlays_from_store(sport, parlays_data):
     """Render correlation parlays from stored data"""
     # Only MLB has correlation parlays for now
     if sport not in [SPORTS['MLB']]:

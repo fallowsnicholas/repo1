@@ -336,15 +336,20 @@ def main():
         matched_df = calculator.read_matched_lines(client)
         
         if matched_df.empty:
-            print("❌ No matched lines found from Step 4")
-            return
+            print("⚠️ No matched lines found from Step 4")
+            print("💡 This is expected when no games are scheduled")
+            print(f"✅ {args.sport} EV calculation complete - no data to process")
+            print("🔄 Pipeline will continue to next steps")
+            exit(0)  # ← EXIT SUCCESS
         
         # Calculate Expected Values
         ev_df = calculator.calculate_expected_values(matched_df)
         
         if ev_df.empty:
-            print("❌ No positive EV opportunities found")
-            return
+            print("⚠️ No positive EV opportunities found")
+            print("💡 This is expected when no games are scheduled")
+            print(f"✅ {args.sport} EV calculation complete - no opportunities available")
+            exit(0)  # ← EXIT SUCCESS
         
         # Save EV results for Steps 6-7
         calculator.save_ev_results(ev_df, client)

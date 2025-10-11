@@ -31,6 +31,8 @@ class RobustSplashDataProcessor:
             self.worksheet_name = 'SPLASH_MLB'
         elif self.sport == 'NFL':
             self.worksheet_name = 'SPLASH_NFL'
+        elif self.sport == 'WNBA':
+            self.worksheet_name = 'SPLASH_WNBA'
         else:
             self.worksheet_name = f'SPLASH_{self.sport}'
         
@@ -335,8 +337,8 @@ class RobustSplashDataProcessor:
 
 def main():
     """Main processing execution with robust handling"""
-    parser = argparse.ArgumentParser(description='Process Splash Sports data for MLB or NFL')
-    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+    parser = argparse.ArgumentParser(description='Process Splash Sports data for MLB, NFL, or WNBA')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL', 'WNBA'],
                        help='Sport to process data for (default: MLB)')
     args = parser.parse_args()
     

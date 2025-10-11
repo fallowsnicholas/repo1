@@ -771,11 +771,11 @@ print("Step 4: Registering callbacks...")
 @app.callback(
     [Output('current-sport', 'data'),
      Output('league-mlb', 'style'),
-     Output('league-nfl', 'style')],
-     Output('league-wnba', 'style')],  # ADD THIS
+     Output('league-nfl', 'style'),
+     Output('league-wnba', 'style')],    # All outputs in one list
     [Input('league-mlb', 'n_clicks'),
-     Input('league-nfl', 'n_clicks')],
-     Input('league-wnba', 'n_clicks')]  # ADD THIS
+     Input('league-nfl', 'n_clicks'),
+     Input('league-wnba', 'n_clicks')]   # All inputs in one list
 )
 
 def update_sport(mlb_clicks, nfl_clicks, wnba_clicks):  # ADD wnba_clicks parameter

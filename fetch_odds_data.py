@@ -80,7 +80,7 @@ def read_sheet_with_metadata_skip(worksheet, sheet_name):
 
 
 class OddsFetcher:
-    """Multi-sport odds fetcher - works for MLB, NFL, etc."""
+    """Multi-sport odds fetcher - works for MLB, NFL, WNBA, etc."""
     
     def __init__(self, api_key: str, sport='MLB'):
         self.api_key = api_key
@@ -317,9 +317,6 @@ class OddsFetcher:
         # For pitcher markets, we could try to match pitcher names to teams
         # For batter markets, it's harder without roster data
         
-        # For demo purposes, we'll alternate or use some basic logic
-        # In production, you'd want to maintain team rosters or use additional API calls
-        
         if 'pitcher' in market.lower() or 'pass' in market.lower():
             # Pitchers/QBs - we could maintain a pitcher-to-team mapping
             # For now, we'll just assign alternately or use some heuristic
@@ -418,8 +415,8 @@ class OddsFetcher:
 
 def run_odds_fetcher():
     """Main function with sport parameter"""
-    parser = argparse.ArgumentParser(description='Fetch odds data for MLB or NFL')
-    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+    parser = argparse.ArgumentParser(description='Fetch odds data for MLB, NFL, or WNBA')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL', 'WNBA'],
                        help='Sport to fetch odds for (default: MLB)')
     args = parser.parse_args()
     

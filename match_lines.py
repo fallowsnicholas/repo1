@@ -28,6 +28,8 @@ class LineMatching:
             self.splash_worksheet_name = 'SPLASH_MLB'
         elif self.sport == 'NFL':
             self.splash_worksheet_name = 'SPLASH_NFL'
+        elif self.sport == 'WNBA':
+            self.splash_worksheet_name = 'SPLASH_WNBA'
         else:
             self.splash_worksheet_name = f'SPLASH_{self.sport}'
         
@@ -362,8 +364,8 @@ class LineMatching:
 
 def main():
     """Main function for Step 4 - matching data from Google Sheets"""
-    parser = argparse.ArgumentParser(description='Match Splash to Odds data for MLB or NFL')
-    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+    parser = argparse.ArgumentParser(description='Match Splash to Odds data for MLB, NFL, or WNBA')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL', 'WNBA'],
                        help='Sport to match data for (default: MLB)')
     args = parser.parse_args()
     

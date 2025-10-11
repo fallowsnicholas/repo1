@@ -321,8 +321,8 @@ class EVCalculator:
 
 def main():
     """Main function for Step 5"""
-    parser = argparse.ArgumentParser(description='Calculate EV for MLB or NFL')
-    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL'],
+    parser = argparse.ArgumentParser(description='Calculate EV for MLB, NFL, or WNBA')
+    parser.add_argument('--sport', default='MLB', choices=['MLB', 'NFL', 'WNBA'],
                        help='Sport to calculate EV for (default: MLB)')
     args = parser.parse_args()
     

@@ -172,7 +172,7 @@ class RobustSplashDataProcessor:
         print(f"📊 Total raw items: {len(all_props)}")
         
         if not all_props:
-            print("❌ No props data to process")
+            print("⚠️ No props data to process")
             return pd.DataFrame()
         
         # Show sample of first item for debugging
@@ -196,7 +196,7 @@ class RobustSplashDataProcessor:
         print(f"🏈 {self.sport} props: {len(sport_props)}")
         
         if not sport_props:
-            print(f"❌ No {self.sport} props found")
+            print(f"⚠️ No {self.sport} props found")
             print(f"   Expected league: {self.splash_league}")
             # Show what leagues we found
             leagues_found = set(prop.get('league', 'unknown') for prop in all_props if isinstance(prop, dict))
@@ -249,7 +249,7 @@ class RobustSplashDataProcessor:
     def save_to_google_sheets(self, df):
         """Save processed data to Google Sheets with helpful metadata"""
         if df.empty:
-            print("❌ No data to save to Google Sheets")
+            print("⚠️ No data to save to Google Sheets")
             return False
         
         print(f"\n💾 SAVING TO GOOGLE SHEETS")
@@ -350,8 +350,13 @@ def main():
         # Load and analyze JSON
         df = processor.load_and_analyze_json()
         if df is None or df.empty:
-            print("❌ No valid data after processing")
-            exit(1)
+            print("⚠️ No valid data after processing")
+            print("💡 This is expected during off-season or when no games are scheduled")
+            print(f"✅ {args.sport} processing complete - no data to save")
+            print("🔄 Pipeline will continue to next steps")
+            # Cleanup and exit successfully
+            processor.cleanup_files()
+            exit(0)  # ← EXIT SUCCESS, NOT FAILURE
         
         # Save to Google Sheets
         success = processor.save_to_google_sheets(df)

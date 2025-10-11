@@ -60,8 +60,9 @@ def read_sheet_with_metadata_skip(worksheet, sheet_name):
         print(f"📈 Found {len(data_rows)} data rows in {sheet_name}")
         
         if not data_rows:
-            print(f"❌ No data rows found in {sheet_name}")
-            return None
+            print("❌ No matchup data found")
+            print("💡 This is expected when there are no games today")
+            return []
         
         # Create DataFrame
         import pandas as pd
@@ -443,7 +444,10 @@ def run_odds_fetcher():
         fetcher.write_to_google_sheets(df)
     else:
         print("❌ No odds data collected")
-        raise Exception("No odds data retrieved")
+        print("💡 This is expected when there are no games today")
+        print("🔄 Pipeline will skip remaining steps gracefully")
+        # Don't raise exception - exit gracefully
+        exit(0)
 
     print(f"\nTotal API calls made: {fetcher.api_call_count}")
 

@@ -1,4 +1,4 @@
-# dash_app.py - Optimized with error handling, validation, constants, and retry logic
+# dash_app.py - Optimized with GitHub Actions remote trigger
 import sys
 import traceback
 
@@ -17,6 +17,7 @@ try:
     import json
     import logging
     import time
+    import requests
     from datetime import datetime, timedelta
     from functools import lru_cache
     print("✅ All imports successful")
@@ -48,7 +49,7 @@ LAYOUT = {
     'view_ribbon_height': 48,
     'filter_height': 56,
     'header_banner_height': 30,
-    'table_offset': 350  # Total offset for table height calculation
+    'table_offset': 350
 }
 
 # Z-index layers
@@ -57,7 +58,8 @@ Z_INDEX = {
     'league': 999,
     'view': 998,
     'filters': 997,
-    'banner': 996
+    'banner': 996,
+    'notification': 9999
 }
 
 # Sports configuration
@@ -73,6 +75,8 @@ COLORS = {
     'secondary_text': '#6b7280',
     'inactive_text': '#9ca3af',
     'success': '#059669',
+    'warning': '#f59e0b',
+    'error': '#dc2626',
     'border': '#e5e7eb',
     'light_bg': '#f3f4f6',
     'hover_bg': '#f9fafb',
@@ -165,7 +169,6 @@ app.index_string = '''
         {%css%}
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
-            /* Reset and base styles */
             * {
                 margin: 0;
                 padding: 0;
@@ -180,25 +183,21 @@ app.index_string = '''
                 overflow-x: hidden;
             }
             
-            /* Fix for proper stacking */
             #react-entry-point {
                 position: relative;
                 min-height: 100vh;
             }
             
-            /* Ensure all fixed headers have solid backgrounds */
             [style*="position: fixed"] {
                 background: white !important;
             }
             
-            /* Remove button outlines */
             button {
                 outline: none !important;
                 -webkit-appearance: none !important;
                 -moz-appearance: none !important;
             }
             
-            /* Ensure table rows are white */
             .table-row {
                 background-color: white !important;
             }
@@ -207,14 +206,22 @@ app.index_string = '''
                 background-color: #f9fafb !important;
             }
             
-            /* Hide scrollbar */
             #evs-table-container {
-                scrollbar-width: none; /* Firefox */
-                -ms-overflow-style: none; /* IE/Edge */
+                scrollbar-width: none;
+                -ms-overflow-style: none;
             }
             
             #evs-table-container::-webkit-scrollbar {
-                display: none; /* Chrome/Safari/Opera */
+                display: none;
+            }
+            
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(-10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            
+            .notification-enter {
+                animation: fadeIn 0.3s ease-out;
             }
         </style>
     </head>
@@ -257,7 +264,7 @@ def validate_ev_data(data):
         return False
     
     if not data:
-        return True  # Empty list is valid
+        return True
     
     required_keys = [COLUMNS['PLAYER'], COLUMNS['MARKET'], COLUMNS['LINE'], COLUMNS['EV']]
     
@@ -267,7 +274,7 @@ def validate_ev_data(data):
             return False
         
         if not all(key in item for key in required_keys):
-            logger.warning(f"EV item {i} missing required keys. Has: {list(item.keys())}")
+            logger.warning(f"EV item {i} missing required keys")
             return False
         
         if not item.get(COLUMNS['PLAYER']):
@@ -303,7 +310,6 @@ def validate_parlay_data(data):
 @lru_cache(maxsize=32)
 def get_unique_markets_cached(data_hash):
     """Get unique markets (cached) - data_hash is used for cache invalidation"""
-    # This is called with a hash of the data, actual filtering happens in caller
     pass
 
 def get_unique_markets(data):
@@ -311,11 +317,84 @@ def get_unique_markets(data):
     if not data:
         return []
     
-    # Create a simple hash of data for cache key
     data_hash = hash(str(len(data)) + str(data[0] if data else ''))
-    get_unique_markets_cached(data_hash)  # Trigger cache
+    get_unique_markets_cached(data_hash)
     
     return sorted(list(set([ev[COLUMNS['MARKET']] for ev in data if ev.get(COLUMNS['MARKET'])])))
+
+# ============================================================================
+# GITHUB ACTIONS TRIGGER FUNCTIONS
+# ============================================================================
+
+def trigger_github_pipeline(sport='MLB', pipeline='steps-1-5-data-only'):
+    """
+    Trigger GitHub Actions workflow remotely
+    
+    Args:
+        sport: 'MLB', 'NFL', or 'WNBA'
+        pipeline: 'full-pipeline', 'steps-1-5-data-only', etc.
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        github_token = os.environ.get('GITHUB_TOKEN')
+        repo_owner = os.environ.get('GITHUB_REPO_OWNER')
+        repo_name = os.environ.get('GITHUB_REPO_NAME')
+        
+        if not all([github_token, repo_owner, repo_name]):
+            logger.error("Missing GitHub credentials in environment variables")
+            logger.error(f"GITHUB_TOKEN: {'✓' if github_token else '✗'}")
+            logger.error(f"GITHUB_REPO_OWNER: {'✓' if repo_owner else '✗'}")
+            logger.error(f"GITHUB_REPO_NAME: {'✓' if repo_name else '✗'}")
+            return False
+        
+        # GitHub API endpoint for repository dispatch
+        url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/dispatches"
+        
+        headers = {
+            'Authorization': f'token {github_token}',
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+        }
+        
+        # Payload to trigger workflow
+        payload = {
+            'event_type': pipeline,
+            'client_payload': {
+                'sport': sport,
+                'triggered_by': 'dash_app',
+                'timestamp': datetime.now().isoformat()
+            }
+        }
+        
+        logger.info(f"🚀 Triggering GitHub workflow: {sport} - {pipeline}")
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        
+        if response.status_code == 204:
+            logger.info(f"✅ Successfully triggered {sport} {pipeline}")
+            return True
+        else:
+            logger.error(f"❌ GitHub API error: {response.status_code}")
+            logger.error(f"Response: {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error triggering GitHub workflow: {e}")
+        logger.error(traceback.format_exc())
+        return False
+
+def invalidate_cache(sport='MLB'):
+    """Clear cached data for a sport to force refresh"""
+    cache_keys = [f"ev_{sport}", f"parlays_{sport}"]
+    for key in cache_keys:
+        if key in _cache:
+            del _cache[key]
+            logger.info(f"🗑️ Deleted cache: {key}")
+        if key in _cache_time:
+            del _cache_time[key]
+            logger.info(f"🗑️ Deleted cache time: {key}")
+    logger.info(f"✅ Cache cleared for {sport}")
 
 # ============================================================================
 # GOOGLE SHEETS FUNCTIONS WITH RETRY LOGIC
@@ -339,11 +418,11 @@ def connect_to_sheets_with_retry(max_retries=MAX_RETRIES):
             
         except KeyError as e:
             logger.error("❌ GOOGLE_SERVICE_ACCOUNT_CREDENTIALS environment variable not set")
-            raise  # Don't retry for missing credentials
+            raise
             
         except Exception as e:
             if attempt < max_retries - 1:
-                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                wait_time = 2 ** attempt
                 logger.warning(f"Connection failed: {e}. Retrying in {wait_time}s...")
                 time.sleep(wait_time)
             else:
@@ -593,20 +672,17 @@ def read_ev_results_cached(sport='MLB'):
     cache_key = f"ev_{sport}"
     now = datetime.now()
     
-    # Check if we have valid cached data
     if (cache_key in _cache and 
         cache_key in _cache_time and 
         now - _cache_time[cache_key] < CACHE_DURATION):
         logger.info(f"✅ Using cached data for {sport} (age: {(now - _cache_time[cache_key]).seconds}s)")
         return _cache[cache_key]
     
-    # Cache expired or doesn't exist - fetch fresh data
     logger.info(f"📥 Fetching fresh data for {sport} from Google Sheets")
     
     try:
         data = read_ev_results(sport)
         
-        # Validate data before caching
         if validate_ev_data(data):
             _cache[cache_key] = data
             _cache_time[cache_key] = now
@@ -618,7 +694,6 @@ def read_ev_results_cached(sport='MLB'):
             
     except Exception as e:
         logger.error(f"Failed to fetch EV data for {sport}: {e}")
-        # Return cached data if available, even if expired
         if cache_key in _cache:
             logger.warning(f"Returning stale cache for {sport} due to error")
             return _cache[cache_key]
@@ -640,7 +715,6 @@ def read_correlation_parlays_cached(sport='MLB'):
     try:
         data = read_correlation_parlays(sport)
         
-        # Validate data before caching
         if validate_parlay_data(data):
             _cache[cache_key] = data
             _cache_time[cache_key] = now
@@ -675,16 +749,42 @@ try:
         dcc.Store(id='current-view', data='individual'),
         dcc.Store(id='evs-data', data=[]),
         dcc.Store(id='parlays-data', data=[]),
+        dcc.Store(id='refresh-status', data={'refreshing': False, 'message': '', 'timestamp': ''}),
         
-        # 1. TITLE - STICKY
+        # Refresh notification
+        html.Div(id='refresh-notification', className='notification-enter', style={'display': 'none'}),
+        
+        # 1. TITLE - STICKY with Refresh Button
         html.Div([
-            html.H1("EV SPORTS", style={
-                'margin': '0',
-                'fontSize': '24px',
-                'fontWeight': '700',
-                'color': COLORS['primary_text'],
-                'fontFamily': 'Inter, sans-serif',
-                'letterSpacing': '-0.5px'
+            html.Div([
+                html.H1("EV SPORTS", style={
+                    'margin': '0',
+                    'fontSize': '24px',
+                    'fontWeight': '700',
+                    'color': COLORS['primary_text'],
+                    'fontFamily': 'Inter, sans-serif',
+                    'letterSpacing': '-0.5px'
+                }),
+                html.Button([
+                    "🔄 Refresh Data"
+                ], id='refresh-button', n_clicks=0, style={
+                    'marginLeft': 'auto',
+                    'padding': '10px 20px',
+                    'backgroundColor': COLORS['success'],
+                    'color': 'white',
+                    'border': 'none',
+                    'borderRadius': '8px',
+                    'fontSize': '14px',
+                    'fontWeight': '600',
+                    'cursor': 'pointer',
+                    'fontFamily': 'Inter, sans-serif',
+                    'transition': 'all 0.2s ease',
+                    'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                })
+            ], style={
+                'display': 'flex',
+                'alignItems': 'center',
+                'justifyContent': 'space-between'
             })
         ], style={
             'padding': '20px 40px',
@@ -772,13 +872,12 @@ print("Step 4: Registering callbacks...")
     [Output('current-sport', 'data'),
      Output('league-mlb', 'style'),
      Output('league-nfl', 'style'),
-     Output('league-wnba', 'style')],    # All outputs in one list
+     Output('league-wnba', 'style')],
     [Input('league-mlb', 'n_clicks'),
      Input('league-nfl', 'n_clicks'),
-     Input('league-wnba', 'n_clicks')]   # All inputs in one list
+     Input('league-wnba', 'n_clicks')]
 )
-
-def update_sport(mlb_clicks, nfl_clicks, wnba_clicks):  # ADD wnba_clicks parameter
+def update_sport(mlb_clicks, nfl_clicks, wnba_clicks):
     ctx = dash.callback_context
     
     if not ctx.triggered:
@@ -792,6 +891,7 @@ def update_sport(mlb_clicks, nfl_clicks, wnba_clicks):  # ADD wnba_clicks parame
         return SPORTS['WNBA'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active']
     else:
         return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
+
 # View selection callback
 @app.callback(
     [Output('current-view', 'data'),
@@ -834,9 +934,121 @@ def load_data_to_store(sport, view):
             logger.info(f"🎯 Loaded {len(parlays_data)} parlays for {sport} into store")
     except Exception as e:
         logger.error(f"Error loading data to store: {e}")
-        # Return empty data - app will show "no data" message instead of crashing
     
     return evs_data, parlays_data
+
+# Refresh button callback
+@app.callback(
+    [Output('refresh-status', 'data'),
+     Output('refresh-button', 'children'),
+     Output('refresh-button', 'disabled'),
+     Output('refresh-button', 'style')],
+    [Input('refresh-button', 'n_clicks')],
+    [State('current-sport', 'data'),
+     State('refresh-button', 'style')],
+    prevent_initial_call=True
+)
+def handle_refresh(n_clicks, sport, current_style):
+    """Handle refresh button click"""
+    if n_clicks > 0:
+        logger.info(f"🔄 Refresh triggered for {sport}")
+        
+        # Update button to show loading
+        loading_style = current_style.copy()
+        loading_style['backgroundColor'] = COLORS['warning']
+        loading_style['cursor'] = 'wait'
+        
+        # Trigger GitHub Actions
+        success = trigger_github_pipeline(sport=sport, pipeline='steps-1-5-data-only')
+        
+        if success:
+            # Clear cache so next load gets fresh data
+            invalidate_cache(sport)
+            
+            refresh_data = {
+                'refreshing': True,
+                'message': f'✅ Pipeline started for {sport}! Data will update in 2-3 minutes.',
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            success_style = current_style.copy()
+            success_style['backgroundColor'] = COLORS['success']
+            
+            return (
+                refresh_data,
+                "✅ Pipeline Started",
+                True,
+                success_style
+            )
+        else:
+            error_data = {
+                'refreshing': False,
+                'message': '❌ Failed to trigger refresh. Check that GitHub credentials are set correctly.',
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            error_style = current_style.copy()
+            error_style['backgroundColor'] = COLORS['error']
+            
+            return (
+                error_data,
+                "❌ Refresh Failed",
+                False,
+                error_style
+            )
+    
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+# Auto re-enable button after delay
+@app.callback(
+    [Output('refresh-button', 'children', allow_duplicate=True),
+     Output('refresh-button', 'disabled', allow_duplicate=True),
+     Output('refresh-button', 'style', allow_duplicate=True)],
+    [Input('refresh-status', 'data')],
+    prevent_initial_call=True
+)
+def reset_refresh_button(status):
+    """Reset refresh button after a delay"""
+    if status.get('refreshing'):
+        # Use a client-side callback for better UX in production
+        # For now, just reset immediately in next interaction
+        pass
+    return dash.no_update, dash.no_update, dash.no_update
+
+# Notification display callback
+@app.callback(
+    [Output('refresh-notification', 'children'),
+     Output('refresh-notification', 'style')],
+    [Input('refresh-status', 'data')]
+)
+def show_refresh_notification(status):
+    """Show notification when refresh is triggered"""
+    if status.get('message'):
+        is_success = '✅' in status['message']
+        is_error = '❌' in status['message']
+        
+        bg_color = COLORS['success'] if is_success else (COLORS['error'] if is_error else COLORS['warning'])
+        
+        style = {
+            'position': 'fixed',
+            'top': '80px',
+            'right': '20px',
+            'padding': '16px 24px',
+            'backgroundColor': bg_color,
+            'color': 'white',
+            'borderRadius': '8px',
+            'fontSize': '14px',
+            'fontWeight': '500',
+            'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
+            'zIndex': str(Z_INDEX['notification']),
+            'display': 'block',
+            'minWidth': '300px',
+            'maxWidth': '500px'
+        }
+        
+        return status['message'], style
+    
+    return "", {'display': 'none'}
 
 # Main content callback - uses stored data
 @app.callback(
@@ -883,14 +1095,14 @@ def update_market_filter(n_clicks, stored_data):
         # Get unique markets
         all_markets = get_unique_markets(stored_data)
         
-        # Filter data (IN BROWSER - INSTANT!)
+        # Filter data
         if button_index == 0:
             filtered_data = stored_data
         else:
             selected_market = all_markets[button_index - 1]
             filtered_data = [ev for ev in stored_data if ev[COLUMNS['MARKET']] == selected_market]
         
-        logger.info(f"🔍 Filtered to {len(filtered_data)} records (no API call!)")
+        logger.info(f"🔍 Filtered to {len(filtered_data)} records")
         
         # Update button styles
         button_styles = []
@@ -915,7 +1127,7 @@ print("✅ All callbacks registered")
 # ============================================================================
 
 def render_individual_evs_from_store(sport, data):
-    """Render individual EVs using data from store (NO API CALLS)"""
+    """Render individual EVs using data from store"""
     
     if not data:
         return render_empty_state(f"No {sport} EV opportunities found.")
@@ -923,10 +1135,8 @@ def render_individual_evs_from_store(sport, data):
     if not validate_ev_data(data):
         return render_error_state("Invalid data format. Please refresh the page.")
     
-    # Get unique markets
     all_markets = get_unique_markets(data)
     
-    # MARKET FILTERS - STICKY
     filter_section = html.Div([
         html.Div([
             html.Button("All", id={'type': 'market-filter', 'index': 0}, style=FILTER_BUTTON_STYLES['active'])
@@ -950,15 +1160,10 @@ def render_individual_evs_from_store(sport, data):
         'zIndex': str(Z_INDEX['filters'])
     })
     
-    # Spacer for filters
     filter_spacer = html.Div(style={'height': f"{LAYOUT['filter_height']}px"})
-    
-    # Space between market buttons and banner
     banner_top_spacer = html.Div(style={'height': '20px'})
     
-    # TABLE WRAPPER
     table_wrapper = html.Div([
-        # COLUMN HEADER BANNER
         html.Div([
             html.Div('NAME', style={
                 'flex': '1',
@@ -1008,7 +1213,6 @@ def render_individual_evs_from_store(sport, data):
             'backgroundColor': COLORS['light_bg']
         }),
         
-        # TABLE CONTAINER - SCROLLABLE
         html.Div(
             id='evs-table-container',
             children=[create_evs_table(data)],
@@ -1082,7 +1286,6 @@ def create_evs_table(data):
 
 def render_parlays_from_store(sport, parlays_data):
     """Render correlation parlays from stored data"""
-    # Only MLB has correlation parlays for now
     if sport not in [SPORTS['MLB']]:
         return render_empty_state(f"{sport} correlation parlays coming soon!")
     
@@ -1108,7 +1311,6 @@ def render_parlays_from_store(sport, parlays_data):
 def render_parlay_card(parlay):
     """Render a single parlay card"""
     return html.Div([
-        # Parlay header
         html.Div([
             html.Span(f"{parlay['id']} • {parlay['leg_count']} Legs • Total EV: ", style={
                 'color': COLORS['secondary_text'],
@@ -1127,7 +1329,6 @@ def render_parlay_card(parlay):
             'fontFamily': 'Inter, sans-serif'
         }),
         
-        # Anchor (pitcher)
         html.Div([
             html.Div([
                 html.Span(parlay['anchor']['Player'], style={
@@ -1153,7 +1354,6 @@ def render_parlay_card(parlay):
             'fontFamily': 'Inter, sans-serif'
         }),
         
-        # Batters
         html.Div([
             html.Div([
                 html.Div(batter['Batter'], style={
@@ -1196,7 +1396,7 @@ def render_error_state(message):
             html.P("⚠️ Error", style={
                 'fontSize': '18px',
                 'fontWeight': '600',
-                'color': '#dc2626',
+                'color': COLORS['error'],
                 'marginBottom': '8px',
                 'fontFamily': 'Inter, sans-serif'
             }),
@@ -1204,20 +1404,7 @@ def render_error_state(message):
                 'fontSize': '14px',
                 'color': COLORS['secondary_text'],
                 'fontFamily': 'Inter, sans-serif'
-            }),
-            html.Button("Refresh Page", 
-                id='refresh-button',
-                style={
-                    'marginTop': '16px',
-                    'padding': '8px 16px',
-                    'backgroundColor': COLORS['primary_text'],
-                    'color': COLORS['background'],
-                    'border': 'none',
-                    'borderRadius': '4px',
-                    'cursor': 'pointer',
-                    'fontFamily': 'Inter, sans-serif'
-                }
-            )
+            })
         ], style={
             'textAlign': 'center',
             'padding': '60px 20px',

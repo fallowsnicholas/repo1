@@ -2,6 +2,21 @@
 name: Multi-Sport Pipeline
 
 on:
+  # Remote triggering via GitHub API (from Dash app)
+  repository_dispatch:
+    types: 
+      - full-pipeline
+      - steps-1-5-data-only
+      - steps-6-7-parlays-only
+      - step-1-matchups
+      - step-2-odds
+      - step-3-splash
+      - step-4-match-lines
+      - step-5-calculate-ev
+      - step-6-find-anchors
+      - step-7-build-parlays
+  
+  # Manual triggering via GitHub UI
   workflow_dispatch:
     inputs:
       sport:
@@ -43,8 +58,23 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        sport: ${{ github.event.inputs.sport == 'All Sports' && fromJSON('["MLB", "NFL", "WNBA"]') || fromJSON(format('["{0}"]', github.event.inputs.sport)) }}
+        # Determine sport based on trigger type
+        sport: ${{ 
+          github.event_name == 'repository_dispatch' 
+            && fromJSON(format('["{0}"]', github.event.client_payload.sport || 'MLB'))
+            || (github.event.inputs.sport == 'All Sports' 
+              && fromJSON('["MLB", "NFL", "WNBA"]') 
+              || fromJSON(format('["{0}"]', github.event.inputs.sport)))
+        }}
       fail-fast: false
+    
+    env:
+      # Set pipeline step based on trigger type
+      PIPELINE_STEP: ${{ 
+        github.event_name == 'repository_dispatch' 
+          && github.event.action 
+          || github.event.inputs.step 
+      }}
     
     steps:
     - name: Checkout code
@@ -59,31 +89,37 @@ jobs:
       run: |
         pip install -r requirements.txt
     
-    - name: Display Current Sport
+    - name: Display Trigger Info
       run: |
         echo "🏈 Running pipeline for: ${{ matrix.sport }}"
+        echo "🎯 Pipeline step: ${{ env.PIPELINE_STEP }}"
+        echo "📡 Triggered by: ${{ github.event_name }}"
+        if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+          echo "🤖 Remote trigger from: ${{ github.event.client_payload.triggered_by }}"
+          echo "⏰ Timestamp: ${{ github.event.client_payload.timestamp }}"
+        fi
     
     # STEP 1: Fetch Matchups
     - name: "Step 1: Fetch Matchups"
       if: |
-        github.event.inputs.step == 'full-pipeline' || 
-        github.event.inputs.step == 'step-1-matchups' ||
-        github.event.inputs.step == 'steps-1-5-data-only'
+        env.PIPELINE_STEP == 'full-pipeline' || 
+        env.PIPELINE_STEP == 'step-1-matchups' ||
+        env.PIPELINE_STEP == 'steps-1-5-data-only'
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
-        DAYS_OFFSET: ${{ github.event.inputs.days_offset }}
+        DAYS_OFFSET: ${{ github.event.inputs.days_offset || '0' }}
       run: |
         echo "🎯 Step 1: Fetching ${{ matrix.sport }} Matchups"
-        echo "📅 Days offset: ${{ github.event.inputs.days_offset }}"
+        echo "📅 Days offset: ${{ github.event.inputs.days_offset || '0' }}"
         python fetch_matchups.py --sport ${{ matrix.sport }}
         echo "✅ Step 1 complete"
     
     # STEP 2: Fetch Odds
     - name: "Step 2: Fetch Odds API Data"
       if: |
-        github.event.inputs.step == 'full-pipeline' || 
-        github.event.inputs.step == 'step-2-odds' ||
-        github.event.inputs.step == 'steps-1-5-data-only'
+        env.PIPELINE_STEP == 'full-pipeline' || 
+        env.PIPELINE_STEP == 'step-2-odds' ||
+        env.PIPELINE_STEP == 'steps-1-5-data-only'
       env:
         ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
@@ -92,12 +128,12 @@ jobs:
         python fetch_odds_data.py --sport ${{ matrix.sport }}
         echo "✅ Step 2 complete"
     
-    # STEP 3: Fetch and Process Splash Sports Data (Combined)
+    # STEP 3: Fetch and Process Splash Sports Data
     - name: "Step 3: Fetch and Process Splash Sports Data"
       if: |
-        github.event.inputs.step == 'full-pipeline' || 
-        github.event.inputs.step == 'step-3-splash' ||
-        github.event.inputs.step == 'steps-1-5-data-only'
+        env.PIPELINE_STEP == 'full-pipeline' || 
+        env.PIPELINE_STEP == 'step-3-splash' ||
+        env.PIPELINE_STEP == 'steps-1-5-data-only'
       env:
         SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
         SCRAPFLY_KEY: ${{ secrets.SCRAPFLY_KEY }}
@@ -114,9 +150,9 @@ jobs:
     # STEP 4: Match Lines
     - name: "Step 4: Match Splash to Odds Lines"
       if: |
-        github.event.inputs.step == 'full-pipeline' || 
-        github.event.inputs.step == 'step-4-match-lines' ||
-        github.event.inputs.step == 'steps-1-5-data-only'
+        env.PIPELINE_STEP == 'full-pipeline' || 
+        env.PIPELINE_STEP == 'step-4-match-lines' ||
+        env.PIPELINE_STEP == 'steps-1-5-data-only'
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
@@ -127,9 +163,9 @@ jobs:
     # STEP 5: Calculate EV
     - name: "Step 5: Calculate Expected Values"
       if: |
-        github.event.inputs.step == 'full-pipeline' || 
-        github.event.inputs.step == 'step-5-calculate-ev' ||
-        github.event.inputs.step == 'steps-1-5-data-only'
+        env.PIPELINE_STEP == 'full-pipeline' || 
+        env.PIPELINE_STEP == 'step-5-calculate-ev' ||
+        env.PIPELINE_STEP == 'steps-1-5-data-only'
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
@@ -140,9 +176,9 @@ jobs:
     # STEP 6: Find Anchors (MLB only for now)
     - name: "Step 6: Find Anchors"
       if: |
-        (github.event.inputs.step == 'full-pipeline' || 
-         github.event.inputs.step == 'step-6-find-anchors' ||
-         github.event.inputs.step == 'steps-6-7-parlays-only') &&
+        (env.PIPELINE_STEP == 'full-pipeline' || 
+         env.PIPELINE_STEP == 'step-6-find-anchors' ||
+         env.PIPELINE_STEP == 'steps-6-7-parlays-only') &&
         matrix.sport == 'MLB'
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
@@ -154,9 +190,9 @@ jobs:
     # STEP 7: Build Parlays (MLB only for now)
     - name: "Step 7: Build Correlation Parlays"
       if: |
-        (github.event.inputs.step == 'full-pipeline' || 
-         github.event.inputs.step == 'step-7-build-parlays' ||
-         github.event.inputs.step == 'steps-6-7-parlays-only') &&
+        (env.PIPELINE_STEP == 'full-pipeline' || 
+         env.PIPELINE_STEP == 'step-7-build-parlays' ||
+         env.PIPELINE_STEP == 'steps-6-7-parlays-only') &&
         matrix.sport == 'MLB'
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
@@ -183,16 +219,17 @@ jobs:
       run: |
         echo "🎉 PIPELINE RUN COMPLETE FOR ${{ matrix.sport }}!"
         echo "Sport: ${{ matrix.sport }}"
-        echo "Step: ${{ github.event.inputs.step }}"
+        echo "Step: ${{ env.PIPELINE_STEP }}"
+        echo "Triggered by: ${{ github.event_name }}"
         echo ""
         echo "📊 Check Google Sheets for results:"
         echo "   Spreadsheet: ${{ matrix.sport }}_Splash_Data"
         echo ""
-        if [ "${{ github.event.inputs.step }}" = "full-pipeline" ]; then
+        if [ "${{ env.PIPELINE_STEP }}" = "full-pipeline" ]; then
           echo "✅ Full pipeline executed"
-        elif [ "${{ github.event.inputs.step }}" = "steps-1-5-data-only" ]; then
+        elif [ "${{ env.PIPELINE_STEP }}" = "steps-1-5-data-only" ]; then
           echo "✅ Data collection steps (1-5) executed"
-        elif [ "${{ github.event.inputs.step }}" = "steps-6-7-parlays-only" ]; then
+        elif [ "${{ env.PIPELINE_STEP }}" = "steps-6-7-parlays-only" ]; then
           echo "✅ Parlay building steps (6-7) executed"
         else
           echo "✅ Individual step executed"

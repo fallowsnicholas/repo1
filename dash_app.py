@@ -1037,6 +1037,7 @@ def handle_refresh(n_clicks, sport, current_style):
     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
 # Update runtime text
+# Update runtime text
 @app.callback(
     Output('refresh-status-text', 'children'),
     [Input('refresh-timer', 'n_intervals'),
@@ -1046,6 +1047,51 @@ def update_runtime_display(n_intervals, status):
     """Update the runtime display text below the refresh button"""
     if not status:
         return ""
+    
+    if status.get('error'):
+        return "Failed to start refresh"
+    
+    if status.get('refreshing') and status.get('start_time'):
+        # Calculate elapsed time
+        start = datetime.fromisoformat(status['start_time'])
+        elapsed = datetime.now() - start
+        minutes = int(elapsed.total_seconds() // 60)
+        seconds = int(elapsed.total_seconds() % 60)
+        
+        return f"Run time: {minutes}:{seconds:02d}"
+    
+    elif status.get('completed'):
+        # Show completion with actual runtime
+        runtime = status.get('runtime', 0)
+        if runtime > 0:
+            minutes = int(runtime // 60)
+            seconds = int(runtime % 60)
+            completion_time = datetime.fromisoformat(status['timestamp'])
+            time_str = completion_time.strftime("%-I:%M %p")
+            return f"Completed in {minutes}:{seconds:02d} at {time_str}"
+        elif status.get('timestamp'):
+            completion_time = datetime.fromisoformat(status['timestamp'])
+            # Only show if completed within last hour
+            if datetime.now() - completion_time < timedelta(hours=1):
+                time_str = completion_time.strftime("%-I:%M %p")
+                return f"Run Complete as of: {time_str}"
+    
+    elif status.get('timeout'):
+        # Show timeout message
+        runtime = status.get('runtime', 120)
+        minutes = int(runtime // 60)
+        seconds = int(runtime % 60)
+        return f"Refresh timeout after {minutes}:{seconds:02d}"
+    
+    elif status.get('timestamp') and not status.get('refreshing'):
+        # Show completion time if we have a recent completion
+        completion_time = datetime.fromisoformat(status['timestamp'])
+        # Only show if completed within last hour
+        if datetime.now() - completion_time < timedelta(hours=1):
+            time_str = completion_time.strftime("%-I:%M %p")
+            return f"Run Complete as of: {time_str}"
+    
+    return ""
     
     if status.get('error'):
         return "Failed to start refresh"

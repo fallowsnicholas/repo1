@@ -408,6 +408,182 @@ def invalidate_cache(sport='MLB'):
             logger.info(f"🗑️ Deleted cache time: {key}")
     logger.info(f"✅ Cache cleared for {sport}")
 
+# Add these functions after the trigger_github_pipeline function
+
+def check_running_workflows(sport='MLB'):
+    """
+    Check if there's already a running workflow for this sport
+    
+    Returns:
+        tuple: (is_running: bool, workflow_run: dict or None)
+    """
+    try:
+        github_token = os.environ.get('GITHUB_TOKEN')
+        repo_owner = os.environ.get('GITHUB_REPO_OWNER')
+        repo_name = os.environ.get('GITHUB_REPO_NAME')
+        
+        if not all([github_token, repo_owner, repo_name]):
+            logger.error("Missing GitHub credentials for workflow check")
+            return False, None
+        
+        # Check GitHub for running workflows
+        headers = {
+            'Authorization': f'token {github_token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        
+        # Get recent workflow runs - both queued and in_progress
+        url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/actions/runs"
+        params = {
+            'per_page': 20  # Get more runs to check
+        }
+        
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            runs = response.json().get('workflow_runs', [])
+            
+            # Check if any match our sport's workflow and are running
+            for run in runs:
+                # Check if this run is for our sport and is still active
+                if run.get('status') in ['queued', 'in_progress']:
+                    # Check the workflow name or the event payload
+                    workflow_name = run.get('name', '')
+                    
+                    # Try to match by workflow name patterns
+                    sport_patterns = {
+                        'MLB': ['MLB', 'mlb', 'full-pipeline'],
+                        'NFL': ['NFL', 'nfl'],
+                        'WNBA': ['WNBA', 'wnba']
+                    }
+                    
+                    patterns = sport_patterns.get(sport, [])
+                    for pattern in patterns:
+                        if pattern in workflow_name or pattern in run.get('display_title', ''):
+                            logger.info(f"🔍 Found running {sport} workflow: {workflow_name} (ID: {run['id']})")
+                            return True, run
+                    
+                    # Also check the triggering event if it's a repository_dispatch
+                    if run.get('event') == 'repository_dispatch':
+                        # The run was triggered by our dispatch, check if it's recent (within last 10 minutes)
+                        created_at = datetime.fromisoformat(run['created_at'].replace('Z', '+00:00'))
+                        if datetime.now(created_at.tzinfo) - created_at < timedelta(minutes=10):
+                            logger.info(f"🔍 Found recent repository_dispatch workflow (ID: {run['id']})")
+                            # Assume it's ours if it's a recent dispatch
+                            return True, run
+            
+            logger.info(f"✅ No running workflows found for {sport}")
+            return False, None
+        else:
+            logger.error(f"GitHub API error checking workflows: {response.status_code}")
+            return False, None
+            
+    except Exception as e:
+        logger.error(f"Error checking running workflows: {e}")
+        return False, None
+
+def check_workflow_status(run_id):
+    """
+    Check the actual status of a workflow run
+    
+    Args:
+        run_id: The GitHub workflow run ID
+    
+    Returns:
+        dict: Status information or None if error
+    """
+    try:
+        github_token = os.environ.get('GITHUB_TOKEN')
+        repo_owner = os.environ.get('GITHUB_REPO_OWNER')
+        repo_name = os.environ.get('GITHUB_REPO_NAME')
+        
+        if not all([github_token, repo_owner, repo_name]):
+            return None
+        
+        url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/actions/runs/{run_id}"
+        headers = {
+            'Authorization': f'token {github_token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            run = response.json()
+            return {
+                'status': run['status'],  # 'queued', 'in_progress', 'completed'
+                'conclusion': run.get('conclusion'),  # 'success', 'failure', 'cancelled', None
+                'started_at': run.get('run_started_at'),
+                'updated_at': run['updated_at'],
+                'html_url': run.get('html_url'),  # Link to the workflow run
+                'name': run.get('name', 'Unknown Workflow')
+            }
+        else:
+            logger.error(f"Failed to get workflow status: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error checking workflow status: {e}")
+        return None
+
+def get_latest_workflow_for_sport(sport='MLB'):
+    """
+    Get the most recent workflow run for a sport to check its status
+    and potentially resume monitoring it
+    
+    Returns:
+        dict or None: The most recent workflow run if found
+    """
+    try:
+        is_running, run = check_running_workflows(sport)
+        if is_running:
+            return run
+        
+        # If no running workflow, check for recently completed ones (within last 5 minutes)
+        github_token = os.environ.get('GITHUB_TOKEN')
+        repo_owner = os.environ.get('GITHUB_REPO_OWNER')
+        repo_name = os.environ.get('GITHUB_REPO_NAME')
+        
+        if not all([github_token, repo_owner, repo_name]):
+            return None
+        
+        headers = {
+            'Authorization': f'token {github_token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+        
+        url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/actions/runs"
+        params = {'per_page': 10}
+        
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            runs = response.json().get('workflow_runs', [])
+            
+            for run in runs:
+                # Check if completed recently
+                if run.get('status') == 'completed':
+                    updated_at = datetime.fromisoformat(run['updated_at'].replace('Z', '+00:00'))
+                    if datetime.now(updated_at.tzinfo) - updated_at < timedelta(minutes=5):
+                        # Check if it matches our sport
+                        workflow_name = run.get('name', '')
+                        sport_patterns = {
+                            'MLB': ['MLB', 'mlb', 'full-pipeline'],
+                            'NFL': ['NFL', 'nfl'],
+                            'WNBA': ['WNBA', 'wnba']
+                        }
+                        
+                        patterns = sport_patterns.get(sport, [])
+                        for pattern in patterns:
+                            if pattern in workflow_name or pattern in run.get('display_title', ''):
+                                logger.info(f"📋 Found recently completed {sport} workflow")
+                                return run
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting latest workflow: {e}")
+        return None
 # ============================================================================
 # GOOGLE SHEETS FUNCTIONS WITH RETRY LOGIC
 # ============================================================================
@@ -761,8 +937,16 @@ try:
         dcc.Store(id='current-view', data='individual'),
         dcc.Store(id='evs-data', data=[]),
         dcc.Store(id='parlays-data', data=[]),
-        dcc.Store(id='refresh-status', data={'refreshing': False, 'message': '', 'timestamp': '', 'start_time': ''}),
-        dcc.Interval(id='refresh-timer', interval=1000, disabled=True),  # Update every second
+        dcc.Store(id='refresh-status', data={
+            'refreshing': False, 
+            'message': '', 
+            'timestamp': '', 
+            'start_time': '',
+            'run_id': None,  # GitHub workflow run ID
+            'external': False,  # Whether this was triggered externally
+            'sport': None
+        }),
+                dcc.Interval(id='refresh-timer', interval=1000, disabled=True),  # Update every second
         
         # 1. TITLE - STICKY with Refresh Button
         html.Div([
@@ -921,6 +1105,94 @@ def update_sport(mlb_clicks, nfl_clicks, wnba_clicks):
     else:
         return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
 
+# Check for existing workflows when sport changes or page loads
+@app.callback(
+    [Output('refresh-status', 'data', allow_duplicate=True),
+     Output('refresh-button', 'children', allow_duplicate=True),
+     Output('refresh-button', 'disabled', allow_duplicate=True),
+     Output('refresh-button', 'style', allow_duplicate=True),
+     Output('refresh-timer', 'disabled', allow_duplicate=True)],
+    [Input('current-sport', 'data')],
+    prevent_initial_call=False
+)
+def check_existing_workflows_on_sport_change(sport):
+    """Check if workflows are already running when sport changes or page loads"""
+    
+    logger.info(f"🔍 Checking for existing {sport} workflows...")
+    
+    # Check for running workflows
+    is_running, workflow_run = check_running_workflows(sport)
+    
+    if is_running:
+        # Calculate how long it's been running
+        start_time = workflow_run.get('run_started_at') or workflow_run.get('created_at')
+        
+        logger.info(f"⚡ Found running {sport} workflow (ID: {workflow_run['id']})")
+        
+        loading_style = {
+            'padding': '10px 20px',
+            'backgroundColor': COLORS['black'],
+            'color': 'white',
+            'border': 'none',
+            'borderRadius': '8px',
+            'fontSize': '14px',
+            'fontWeight': '600',
+            'cursor': 'wait',
+            'fontFamily': 'Inter, sans-serif',
+            'opacity': '0.7',
+            'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+        }
+        
+        return (
+            {
+                'refreshing': True,
+                'message': f'Found running {sport} workflow',
+                'timestamp': datetime.now().isoformat(),
+                'start_time': start_time.replace('Z', '+00:00') if start_time else datetime.now().isoformat(),
+                'sport': sport,
+                'external': True,  # Flag that this was externally triggered
+                'run_id': workflow_run['id']
+            },
+            "Refreshing...",
+            True,  # Disable button
+            loading_style,
+            False  # Enable timer to monitor
+        )
+    
+    # Check for recently completed workflows
+    latest_run = get_latest_workflow_for_sport(sport)
+    if latest_run and latest_run.get('status') == 'completed':
+        completion_time = latest_run.get('updated_at')
+        if completion_time:
+            completed_at = datetime.fromisoformat(completion_time.replace('Z', '+00:00'))
+            if datetime.now(completed_at.tzinfo) - completed_at < timedelta(minutes=5):
+                logger.info(f"📋 Found recently completed {sport} workflow")
+                
+                # Trigger a data refresh since it just completed
+                invalidate_cache(sport)
+    
+    # No running workflow found, return normal state
+    normal_style = {
+        'padding': '10px 20px',
+        'backgroundColor': COLORS['black'],
+        'color': 'white',
+        'border': 'none',
+        'borderRadius': '8px',
+        'fontSize': '14px',
+        'fontWeight': '600',
+        'cursor': 'pointer',
+        'fontFamily': 'Inter, sans-serif',
+        'transition': 'all 0.2s ease',
+        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+    }
+    
+    return (
+        {'refreshing': False, 'message': '', 'timestamp': '', 'sport': sport},
+        "Refresh Data",
+        False,  # Enable button
+        normal_style,
+        True  # Disable timer
+    )
 # View selection callback
 @app.callback(
     [Output('current-view', 'data'),
@@ -967,6 +1239,8 @@ def load_data_to_store(sport, view):
     return evs_data, parlays_data
 
 # Refresh button callback with runtime tracking
+# Replace the handle_refresh callback (around line 1240)
+
 @app.callback(
     [Output('refresh-status', 'data'),
      Output('refresh-button', 'children'),
@@ -979,33 +1253,69 @@ def load_data_to_store(sport, view):
     prevent_initial_call=True
 )
 def handle_refresh(n_clicks, sport, current_style):
-    """Handle refresh button click"""
+    """Handle refresh button click with duplicate prevention"""
     if n_clicks > 0:
-        logger.info(f"🔄 Refresh triggered for {sport} (click #{n_clicks})")
+        logger.info(f"🔄 Refresh requested for {sport} (click #{n_clicks})")
         
-        # Update button to show loading (keep black, just change opacity)
+        # First check if workflow is already running
+        is_running, existing_run = check_running_workflows(sport)
+        
         loading_style = current_style.copy()
         loading_style['backgroundColor'] = COLORS['black']
         loading_style['opacity'] = '0.7'
         loading_style['cursor'] = 'wait'
         
-        # Trigger GitHub Actions - pipeline auto-selected based on sport
+        if is_running:
+            # Don't trigger new one, just start monitoring the existing one
+            logger.warning(f"⚠️ {sport} workflow already running (ID: {existing_run['id']})")
+            
+            start_time = existing_run.get('run_started_at') or existing_run.get('created_at')
+            
+            return (
+                {
+                    'refreshing': True,
+                    'message': f'{sport} workflow already running',
+                    'timestamp': datetime.now().isoformat(),
+                    'start_time': start_time.replace('Z', '+00:00') if start_time else datetime.now().isoformat(),
+                    'sport': sport,
+                    'external': True,
+                    'run_id': existing_run['id']
+                },
+                "Already Running...",
+                True,  # Keep disabled
+                loading_style,
+                False  # Enable timer to monitor
+            )
+        
+        # No existing workflow, proceed with triggering
         success = trigger_github_pipeline(sport=sport)
         
         if success:
             # Clear cache so next load gets fresh data
             invalidate_cache(sport)
             
+            # Try to get the run ID of the workflow we just triggered
+            # Wait a moment for GitHub to register it
+            time.sleep(2)
+            is_running, new_run = check_running_workflows(sport)
+            run_id = new_run['id'] if new_run else None
+            
+            if run_id:
+                logger.info(f"🎯 Started new workflow with ID: {run_id}")
+            
             refresh_data = {
                 'refreshing': True,
-                'message': '',  # No banner message
+                'message': '',
                 'timestamp': datetime.now().isoformat(),
                 'start_time': datetime.now().isoformat(),
-                'sport': sport
+                'sport': sport,
+                'run_id': run_id,
+                'external': False
             }
             
             success_style = current_style.copy()
             success_style['backgroundColor'] = COLORS['black']
+            success_style['opacity'] = '0.7'
             
             return (
                 refresh_data,
@@ -1035,9 +1345,9 @@ def handle_refresh(n_clicks, sport, current_style):
             )
     
     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    
+# update_runtime_display callback (around line 1290)
 
-# Update runtime text
-# Update runtime text
 @app.callback(
     Output('refresh-status-text', 'children'),
     [Input('refresh-timer', 'n_intervals'),
@@ -1058,30 +1368,44 @@ def update_runtime_display(n_intervals, status):
         minutes = int(elapsed.total_seconds() // 60)
         seconds = int(elapsed.total_seconds() % 60)
         
-        return f"Run time: {minutes}:{seconds:02d}"
+        # Add external indicator if this was triggered elsewhere
+        if status.get('external'):
+            return f"Run time: {minutes}:{seconds:02d} (external)"
+        else:
+            return f"Run time: {minutes}:{seconds:02d}"
     
     elif status.get('completed'):
-        # Show completion with actual runtime
+        # Show completion with actual runtime and conclusion
         runtime = status.get('runtime', 0)
+        conclusion = status.get('conclusion', 'success')
+        
         if runtime > 0:
             minutes = int(runtime // 60)
             seconds = int(runtime % 60)
             completion_time = datetime.fromisoformat(status['timestamp'])
             time_str = completion_time.strftime("%-I:%M %p")
-            return f"Completed in {minutes}:{seconds:02d} at {time_str}"
+            
+            if conclusion == 'success':
+                return f"✅ Completed in {minutes}:{seconds:02d} at {time_str}"
+            elif conclusion == 'failure':
+                return f"❌ Failed after {minutes}:{seconds:02d}"
+            elif conclusion == 'cancelled':
+                return f"⚠️ Cancelled after {minutes}:{seconds:02d}"
+            else:
+                return f"Completed in {minutes}:{seconds:02d} at {time_str}"
         elif status.get('timestamp'):
             completion_time = datetime.fromisoformat(status['timestamp'])
             # Only show if completed within last hour
             if datetime.now() - completion_time < timedelta(hours=1):
                 time_str = completion_time.strftime("%-I:%M %p")
-                return f"Last refreshed: {time_str}"
+                return f"Run Complete as of: {time_str}"
     
     elif status.get('timeout'):
         # Show timeout message
-        runtime = status.get('runtime', 120)
+        runtime = status.get('runtime', 90)
         minutes = int(runtime // 60)
         seconds = int(runtime % 60)
-        return f"Refresh timeout after {minutes}:{seconds:02d}"
+        return f"⏱️ Timeout after {minutes}:{seconds:02d}"
     
     elif status.get('timestamp') and not status.get('refreshing'):
         # Show completion time if we have a recent completion
@@ -1089,42 +1413,12 @@ def update_runtime_display(n_intervals, status):
         # Only show if completed within last hour
         if datetime.now() - completion_time < timedelta(hours=1):
             time_str = completion_time.strftime("%-I:%M %p")
-            return f"Last refreshed: {time_str}"
-    
-    return ""
-    
-    if status.get('error'):
-        return "Failed to start refresh"
-    
-    if status.get('refreshing') and status.get('start_time'):
-        # Calculate elapsed time
-        start = datetime.fromisoformat(status['start_time'])
-        elapsed = datetime.now() - start
-        minutes = int(elapsed.total_seconds() // 60)
-        seconds = int(elapsed.total_seconds() % 60)
-        
-        return f"Run time: {minutes}:{seconds:02d}"
-    
-    elif status.get('completed') or status.get('timeout'):
-        # Show completion time
-        if status.get('timestamp'):
-            completion_time = datetime.fromisoformat(status['timestamp'])
-            # Only show if completed within last hour
-            if datetime.now() - completion_time < timedelta(hours=1):
-                time_str = completion_time.strftime("%-I:%M %p")
-                return f"Last refreshed: {time_str}"
-    
-    elif status.get('timestamp') and not status.get('refreshing'):
-        # Show completion time if we have a recent completion
-        completion_time = datetime.fromisoformat(status['timestamp'])
-        # Only show if completed within last hour
-        if datetime.now() - completion_time < timedelta(hours=1):
-            time_str = completion_time.strftime("%-I:%M %p")
-            return f"Last refreshed: {time_str}"
+            return f"Run Complete as of: {time_str}"
     
     return ""
 
-# Check for completion and reset button
+#check_refresh_completion callback 
+
 @app.callback(
     [Output('refresh-status', 'data', allow_duplicate=True),
      Output('refresh-button', 'children', allow_duplicate=True),
@@ -1141,72 +1435,112 @@ def update_runtime_display(n_intervals, status):
     prevent_initial_call=True
 )
 def check_refresh_completion(n_intervals, status, sport, current_style, view):
-    """Check if refresh is complete and reload data when done"""
+    """Check if refresh is complete using GitHub API status"""
     if not status or not status.get('refreshing'):
         return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     
+    run_id = status.get('run_id')
+    
+    # If we have a run_id, check GitHub for actual status
+    if run_id:
+        workflow_status = check_workflow_status(run_id)
+        
+        if workflow_status:
+            github_status = workflow_status['status']
+            conclusion = workflow_status.get('conclusion')
+            
+            logger.info(f"📊 Workflow {run_id} status: {github_status}, conclusion: {conclusion}")
+            
+            # Check if workflow is complete
+            if github_status == 'completed':
+                # Calculate actual runtime
+                start_time = status.get('start_time')
+                if start_time:
+                    start = datetime.fromisoformat(start_time)
+                    runtime = (datetime.now() - start).total_seconds()
+                else:
+                    runtime = 0
+                
+                logger.info(f"✅ Workflow completed with conclusion: {conclusion} (runtime: {runtime:.0f}s)")
+                
+                # Clear cache and reload data
+                invalidate_cache(sport)
+                
+                # Load fresh data
+                try:
+                    fresh_evs = read_ev_results(sport) if view == 'individual' else []
+                    fresh_parlays = read_correlation_parlays(sport) if view == 'parlays' and sport == 'MLB' else []
+                except Exception as e:
+                    logger.error(f"Error loading fresh data: {e}")
+                    fresh_evs = []
+                    fresh_parlays = []
+                
+                # Prepare completion status
+                updated_status = {
+                    'refreshing': False,
+                    'message': '',
+                    'timestamp': datetime.now().isoformat(),
+                    'sport': sport,
+                    'completed': True,
+                    'runtime': runtime,
+                    'conclusion': conclusion,
+                    'workflow_url': workflow_status.get('html_url')
+                }
+                
+                # Reset button style
+                reset_style = current_style.copy()
+                reset_style['backgroundColor'] = COLORS['black']
+                reset_style['opacity'] = '1'
+                reset_style['cursor'] = 'pointer'
+                
+                # Button text based on conclusion
+                button_text = "Refresh Data"
+                if conclusion == 'failure':
+                    button_text = "Refresh Failed - Retry?"
+                elif conclusion == 'cancelled':
+                    button_text = "Cancelled - Retry?"
+                
+                return (
+                    updated_status,
+                    button_text,
+                    False,  # Re-enable button
+                    reset_style,
+                    True,  # Disable timer
+                    fresh_evs if fresh_evs else dash.no_update,
+                    fresh_parlays if fresh_parlays else dash.no_update
+                )
+            
+            # Still running, continue monitoring
+            return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    
+    # Fallback: if no run_id or API fails, use time-based approach
     if status.get('start_time'):
         start = datetime.fromisoformat(status['start_time'])
         elapsed = datetime.now() - start
         
-        # Check every 10 seconds after 2 minutes
-        if elapsed.total_seconds() >= 120 and n_intervals % 10 == 0:
-            # Try to reload data to check if new data is available
-            try:
-                # Clear cache to force fresh data check
-                invalidate_cache(sport)
-                
-                # Try to load fresh data
-                fresh_evs = read_ev_results(sport) if view == 'individual' else []
-                fresh_parlays = read_correlation_parlays(sport) if view == 'parlays' and sport == 'MLB' else []
-                
-                # Check if we got new data (compare timestamps or data counts)
-                data_updated = False
-                
-                # Simple check: if we have data and it wasn't empty before, assume update
-                if fresh_evs or fresh_parlays:
-                    logger.info(f"Fresh data detected: {len(fresh_evs)} EVs, {len(fresh_parlays)} parlays")
-                    data_updated = True
-                
-                # Also check maximum expected time
-                max_time = 300 if sport == 'MLB' else 240  # 5 min for MLB, 4 min for others
-                
-                if data_updated or elapsed.total_seconds() >= max_time:
-                    # Mark as complete
-                    updated_status = {
-                        'refreshing': False,
-                        'message': '',
-                        'timestamp': datetime.now().isoformat(),
-                        'sport': sport,
-                        'completed': True
-                    }
-                    
-                    reset_style = current_style.copy()
-                    reset_style['backgroundColor'] = COLORS['black']
-                    reset_style['opacity'] = '1'
-                    reset_style['cursor'] = 'pointer'
-                    
-                    return (
-                        updated_status,
-                        "Refresh Data",
-                        False,  # Re-enable button
-                        reset_style,
-                        True,  # Disable timer
-                        fresh_evs if fresh_evs else dash.no_update,
-                        fresh_parlays if fresh_parlays else dash.no_update
-                    )
-                    
-            except Exception as e:
-                logger.error(f"Error checking for completion: {e}")
+        # Without run_id, fall back to reasonable timeout
+        max_time = 90  # 1.5 minutes
         
-        # Absolute maximum timeout - force completion
-        if elapsed.total_seconds() >= 360:  # 6 minutes absolute max
+        if elapsed.total_seconds() >= max_time:
+            logger.warning(f"⏱️ Timeout reached after {elapsed.total_seconds():.0f}s (no run_id available)")
+            
+            # Try to reload data anyway
+            invalidate_cache(sport)
+            
+            try:
+                fresh_evs = read_ev_results_cached(sport) if view == 'individual' else []
+                fresh_parlays = read_correlation_parlays_cached(sport) if view == 'parlays' and sport == 'MLB' else []
+            except:
+                fresh_evs = []
+                fresh_parlays = []
+            
             updated_status = {
                 'refreshing': False,
                 'message': '',
                 'timestamp': datetime.now().isoformat(),
                 'sport': sport,
-                'timeout': True
+                'timeout': True,
+                'runtime': elapsed.total_seconds()
             }
             
             reset_style = current_style.copy()
@@ -1214,23 +1548,14 @@ def check_refresh_completion(n_intervals, status, sport, current_style, view):
             reset_style['opacity'] = '1'
             reset_style['cursor'] = 'pointer'
             
-            # Try one final data reload
-            try:
-                invalidate_cache(sport)
-                fresh_evs = read_ev_results_cached(sport) if view == 'individual' else []
-                fresh_parlays = read_correlation_parlays_cached(sport) if view == 'parlays' and sport == 'MLB' else []
-            except:
-                fresh_evs = dash.no_update
-                fresh_parlays = dash.no_update
-            
             return (
                 updated_status,
                 "Refresh Data",
                 False,
                 reset_style,
                 True,
-                fresh_evs,
-                fresh_parlays
+                fresh_evs if fresh_evs else dash.no_update,
+                fresh_parlays if fresh_parlays else dash.no_update
             )
     
     return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update

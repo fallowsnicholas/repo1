@@ -327,18 +327,29 @@ def get_unique_markets(data):
 # GITHUB ACTIONS TRIGGER FUNCTIONS
 # ============================================================================
 
-def trigger_github_pipeline(sport='MLB', pipeline='steps-1-5-data-only'):
+def trigger_github_pipeline(sport='MLB', pipeline=None):
     """
     Trigger GitHub Actions workflow remotely
     
     Args:
         sport: 'MLB', 'NFL', or 'WNBA'
-        pipeline: 'full-pipeline', 'steps-1-5-data-only', etc.
+        pipeline: 'full-pipeline', 'steps-1-5-data-only', etc. (if None, auto-determines based on sport)
     
     Returns:
         bool: True if successful, False otherwise
     """
     try:
+        # Auto-determine pipeline based on sport if not specified
+        if pipeline is None:
+            if sport == 'MLB':
+                # MLB gets full pipeline including parlays (steps 1-7)
+                pipeline = 'full-pipeline'
+                logger.info(f"🎯 MLB selected - using full pipeline with parlays")
+            else:
+                # NFL and WNBA only get data steps (1-5) for now
+                pipeline = 'steps-1-5-data-only'
+                logger.info(f"⚡ {sport} selected - using data-only pipeline (parlays not yet implemented)")
+        
         github_token = os.environ.get('GITHUB_TOKEN')
         repo_owner = os.environ.get('GITHUB_REPO_OWNER')
         repo_name = os.environ.get('GITHUB_REPO_NAME')
@@ -960,16 +971,22 @@ def handle_refresh(n_clicks, sport, current_style):
         loading_style['opacity'] = '0.7'
         loading_style['cursor'] = 'wait'
         
-        # Trigger GitHub Actions
-        success = trigger_github_pipeline(sport=sport, pipeline='steps-1-5-data-only')
+        # Trigger GitHub Actions - pipeline auto-selected based on sport
+        success = trigger_github_pipeline(sport=sport)  # Removed pipeline parameter
         
         if success:
             # Clear cache so next load gets fresh data
             invalidate_cache(sport)
             
+            # Customize message based on sport
+            if sport == 'MLB':
+                message = f'✅ Full pipeline started for {sport}! Data and parlays will update in 3-4 minutes.'
+            else:
+                message = f'✅ Data pipeline started for {sport}! EV data will update in 2-3 minutes.'
+            
             refresh_data = {
                 'refreshing': True,
-                'message': f'✅ Pipeline started for {sport}! Data will update in 2-3 minutes.',
+                'message': message,
                 'timestamp': datetime.now().isoformat()
             }
             

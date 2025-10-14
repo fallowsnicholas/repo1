@@ -45,7 +45,7 @@ except Exception as e:
 # Layout dimensions
 LAYOUT = {
     'header_height': 64,
-    'league_ribbon_height': 48,
+    'league_ribbon_height': 56,  # Increased from 48 to give more padding
     'view_ribbon_height': 48,
     'filter_height': 56,
     'header_banner_height': 30,
@@ -80,7 +80,8 @@ COLORS = {
     'border': '#e5e7eb',
     'light_bg': '#f3f4f6',
     'hover_bg': '#f9fafb',
-    'background': '#ffffff'
+    'background': '#ffffff',
+    'black': '#000000'  # Added black color for refresh button
 }
 
 # Google Sheets configuration
@@ -101,7 +102,7 @@ COLUMNS = {
 CACHE_DURATION = timedelta(minutes=5)
 MAX_RETRIES = 3
 
-# Button style templates
+# Button style templates with adjusted padding
 BUTTON_STYLES = {
     'active': {
         'background': 'none',
@@ -109,7 +110,7 @@ BUTTON_STYLES = {
         'color': COLORS['primary_text'],
         'fontSize': '14px',
         'fontWeight': '600',
-        'padding': '12px 20px',
+        'padding': '16px 20px',  # Increased vertical padding
         'cursor': 'pointer',
         'fontFamily': 'Inter, sans-serif'
     },
@@ -119,7 +120,7 @@ BUTTON_STYLES = {
         'color': COLORS['inactive_text'],
         'fontSize': '14px',
         'fontWeight': '400',
-        'padding': '12px 20px',
+        'padding': '16px 20px',  # Increased vertical padding
         'cursor': 'pointer',
         'fontFamily': 'Inter, sans-serif'
     }
@@ -766,11 +767,11 @@ try:
                     'letterSpacing': '-0.5px'
                 }),
                 html.Button([
-                    "🔄 Refresh Data"
+                    "Refresh Data"  # Changed from "🔄 Refresh Data"
                 ], id='refresh-button', n_clicks=0, style={
                     'marginLeft': 'auto',
                     'padding': '10px 20px',
-                    'backgroundColor': COLORS['success'],
+                    'backgroundColor': COLORS['black'],  # Changed to black
                     'color': 'white',
                     'border': 'none',
                     'borderRadius': '8px',
@@ -800,13 +801,13 @@ try:
         # Spacer for title
         html.Div(style={'height': f"{LAYOUT['header_height']}px"}),
         
-        # 2. LEAGUE RIBBON - STICKY
+        # 2. LEAGUE RIBBON - STICKY with adjusted padding
         html.Div([
             html.Button(SPORTS['MLB'], id="league-mlb", n_clicks=0, style=BUTTON_STYLES['active']),
             html.Button(SPORTS['NFL'], id="league-nfl", n_clicks=0, style=BUTTON_STYLES['inactive']),
             html.Button(SPORTS['WNBA'], id="league-wnba", n_clicks=0, style=BUTTON_STYLES['inactive'])
         ], style={
-            'padding': '0 40px',
+            'padding': '4px 40px',  # Increased top/bottom padding
             'backgroundColor': COLORS['background'],
             'borderBottom': f"1px solid {COLORS['border']}",
             'display': 'flex',
@@ -937,7 +938,7 @@ def load_data_to_store(sport, view):
     
     return evs_data, parlays_data
 
-# Refresh button callback
+# Refresh button callback - updated to keep black on all states
 @app.callback(
     [Output('refresh-status', 'data'),
      Output('refresh-button', 'children'),
@@ -953,9 +954,10 @@ def handle_refresh(n_clicks, sport, current_style):
     if n_clicks > 0:
         logger.info(f"🔄 Refresh triggered for {sport}")
         
-        # Update button to show loading
+        # Update button to show loading (keep black, just change opacity)
         loading_style = current_style.copy()
-        loading_style['backgroundColor'] = COLORS['warning']
+        loading_style['backgroundColor'] = COLORS['black']
+        loading_style['opacity'] = '0.7'
         loading_style['cursor'] = 'wait'
         
         # Trigger GitHub Actions
@@ -972,7 +974,7 @@ def handle_refresh(n_clicks, sport, current_style):
             }
             
             success_style = current_style.copy()
-            success_style['backgroundColor'] = COLORS['success']
+            success_style['backgroundColor'] = COLORS['black']  # Keep black
             
             return (
                 refresh_data,

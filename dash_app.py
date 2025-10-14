@@ -796,14 +796,16 @@ try:
                         'color': COLORS['secondary_text'],
                         'marginTop': '6px',
                         'fontFamily': 'Inter, sans-serif',
-                        'textAlign': 'center',
-                        'minHeight': '14px'  # Prevents layout shift
+                        'fontStyle': 'italic',  # Added italic style
+                        'textAlign': 'center',  # Center the text
+                        'minHeight': '14px',  # Prevents layout shift
+                        'width': '100%'  # Full width to properly center
                     })
                 ], style={
                     'marginLeft': 'auto',
                     'display': 'flex',
                     'flexDirection': 'column',
-                    'alignItems': 'flex-end'
+                    'alignItems': 'center'  # Changed from 'flex-end' to 'center'
                 })
             ], style={
                 'display': 'flex',

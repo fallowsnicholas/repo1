@@ -1089,7 +1089,7 @@ def update_runtime_display(n_intervals, status):
         # Only show if completed within last hour
         if datetime.now() - completion_time < timedelta(hours=1):
             time_str = completion_time.strftime("%-I:%M %p")
-            return f"Run Complete as of: {time_str}"
+            return f"Last refreshed: {time_str}"
     
     return ""
     
@@ -1112,7 +1112,7 @@ def update_runtime_display(n_intervals, status):
             # Only show if completed within last hour
             if datetime.now() - completion_time < timedelta(hours=1):
                 time_str = completion_time.strftime("%-I:%M %p")
-                return f"Run Complete as of: {time_str}"
+                return f"Last refreshed: {time_str}"
     
     elif status.get('timestamp') and not status.get('refreshing'):
         # Show completion time if we have a recent completion
@@ -1120,7 +1120,7 @@ def update_runtime_display(n_intervals, status):
         # Only show if completed within last hour
         if datetime.now() - completion_time < timedelta(hours=1):
             time_str = completion_time.strftime("%-I:%M %p")
-            return f"Run Complete as of: {time_str}"
+            return f"Last refreshed: {time_str}"
     
     return ""
 

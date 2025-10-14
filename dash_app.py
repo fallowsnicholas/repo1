@@ -44,7 +44,7 @@ except Exception as e:
 
 # Layout dimensions
 LAYOUT = {
-    'header_height': 64,
+    'header_height': 72,  # Increased to accommodate refresh button with text
     'league_ribbon_height': 56,  # Increased from 48 to give more padding
     'view_ribbon_height': 48,
     'filter_height': 56,
@@ -811,14 +811,15 @@ try:
                 'justifyContent': 'space-between'
             })
         ], style={
-            'padding': '20px 40px',
+            'padding': '16px 40px',  # Reduced padding to make room
             'backgroundColor': COLORS['background'],
             'borderBottom': f"1px solid {COLORS['border']}",
             'position': 'fixed',
             'top': '0',
             'left': '0',
             'right': '0',
-            'zIndex': str(Z_INDEX['header'])
+            'zIndex': str(Z_INDEX['header']),
+            'height': f'{LAYOUT["header_height"]}px'
         }),
         
         # Spacer for title
@@ -839,7 +840,9 @@ try:
             'top': f"{LAYOUT['header_height']}px",
             'left': '0',
             'right': '0',
-            'zIndex': str(Z_INDEX['league'])
+            'zIndex': str(Z_INDEX['league']),
+            'height': f'{LAYOUT["league_ribbon_height"]}px',
+            'alignItems': 'center'  # Center buttons vertically
         }),
         
         # Spacer for league ribbon

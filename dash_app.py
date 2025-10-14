@@ -761,10 +761,8 @@ try:
         dcc.Store(id='current-view', data='individual'),
         dcc.Store(id='evs-data', data=[]),
         dcc.Store(id='parlays-data', data=[]),
-        dcc.Store(id='refresh-status', data={'refreshing': False, 'message': '', 'timestamp': ''}),
-        
-        # Refresh notification
-        html.Div(id='refresh-notification', className='notification-enter', style={'display': 'none'}),
+        dcc.Store(id='refresh-status', data={'refreshing': False, 'message': '', 'timestamp': '', 'start_time': ''}),
+        dcc.Interval(id='refresh-timer', interval=1000, disabled=True),  # Update every second
         
         # 1. TITLE - STICKY with Refresh Button
         html.Div([
@@ -777,21 +775,35 @@ try:
                     'fontFamily': 'Inter, sans-serif',
                     'letterSpacing': '-0.5px'
                 }),
-                html.Button([
-                    "Refresh Data"  # Changed from "🔄 Refresh Data"
-                ], id='refresh-button', n_clicks=0, style={
+                html.Div([
+                    html.Button([
+                        "Refresh Data"
+                    ], id='refresh-button', n_clicks=0, style={
+                        'padding': '10px 20px',
+                        'backgroundColor': COLORS['black'],
+                        'color': 'white',
+                        'border': 'none',
+                        'borderRadius': '8px',
+                        'fontSize': '14px',
+                        'fontWeight': '600',
+                        'cursor': 'pointer',
+                        'fontFamily': 'Inter, sans-serif',
+                        'transition': 'all 0.2s ease',
+                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                    }),
+                    html.Div(id='refresh-status-text', style={
+                        'fontSize': '11px',
+                        'color': COLORS['secondary_text'],
+                        'marginTop': '6px',
+                        'fontFamily': 'Inter, sans-serif',
+                        'textAlign': 'center',
+                        'minHeight': '14px'  # Prevents layout shift
+                    })
+                ], style={
                     'marginLeft': 'auto',
-                    'padding': '10px 20px',
-                    'backgroundColor': COLORS['black'],  # Changed to black
-                    'color': 'white',
-                    'border': 'none',
-                    'borderRadius': '8px',
-                    'fontSize': '14px',
-                    'fontWeight': '600',
-                    'cursor': 'pointer',
-                    'fontFamily': 'Inter, sans-serif',
-                    'transition': 'all 0.2s ease',
-                    'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                    'display': 'flex',
+                    'flexDirection': 'column',
+                    'alignItems': 'flex-end'
                 })
             ], style={
                 'display': 'flex',
@@ -949,12 +961,13 @@ def load_data_to_store(sport, view):
     
     return evs_data, parlays_data
 
-# Refresh button callback - updated to keep black on all states
+# Refresh button callback with runtime tracking
 @app.callback(
     [Output('refresh-status', 'data'),
      Output('refresh-button', 'children'),
      Output('refresh-button', 'disabled'),
-     Output('refresh-button', 'style')],
+     Output('refresh-button', 'style'),
+     Output('refresh-timer', 'disabled')],
     [Input('refresh-button', 'n_clicks')],
     [State('current-sport', 'data'),
      State('refresh-button', 'style')],
@@ -963,7 +976,7 @@ def load_data_to_store(sport, view):
 def handle_refresh(n_clicks, sport, current_style):
     """Handle refresh button click"""
     if n_clicks > 0:
-        logger.info(f"🔄 Refresh triggered for {sport}")
+        logger.info(f"🔄 Refresh triggered for {sport} (click #{n_clicks})")
         
         # Update button to show loading (keep black, just change opacity)
         loading_style = current_style.copy()
@@ -972,38 +985,37 @@ def handle_refresh(n_clicks, sport, current_style):
         loading_style['cursor'] = 'wait'
         
         # Trigger GitHub Actions - pipeline auto-selected based on sport
-        success = trigger_github_pipeline(sport=sport)  # Removed pipeline parameter
+        success = trigger_github_pipeline(sport=sport)
         
         if success:
             # Clear cache so next load gets fresh data
             invalidate_cache(sport)
             
-            # Customize message based on sport
-            if sport == 'MLB':
-                message = f'✅ Full pipeline started for {sport}! Data and parlays will update in 3-4 minutes.'
-            else:
-                message = f'✅ Data pipeline started for {sport}! EV data will update in 2-3 minutes.'
-            
             refresh_data = {
                 'refreshing': True,
-                'message': message,
-                'timestamp': datetime.now().isoformat()
+                'message': '',  # No banner message
+                'timestamp': datetime.now().isoformat(),
+                'start_time': datetime.now().isoformat(),
+                'sport': sport
             }
             
             success_style = current_style.copy()
-            success_style['backgroundColor'] = COLORS['black']  # Keep black
+            success_style['backgroundColor'] = COLORS['black']
             
             return (
                 refresh_data,
-                "✅ Pipeline Started",
-                True,
-                success_style
+                "Refreshing...",
+                True,  # Disable button
+                success_style,
+                False  # Enable timer
             )
         else:
             error_data = {
                 'refreshing': False,
-                'message': '❌ Failed to trigger refresh. Check that GitHub credentials are set correctly.',
-                'timestamp': datetime.now().isoformat()
+                'message': '',
+                'timestamp': datetime.now().isoformat(),
+                'sport': sport,
+                'error': True
             }
             
             error_style = current_style.copy()
@@ -1011,63 +1023,94 @@ def handle_refresh(n_clicks, sport, current_style):
             
             return (
                 error_data,
-                "❌ Refresh Failed",
+                "Refresh Failed",
                 False,
-                error_style
+                error_style,
+                True  # Keep timer disabled
             )
     
-    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
-# Auto re-enable button after delay
+# Update runtime text
 @app.callback(
-    [Output('refresh-button', 'children', allow_duplicate=True),
+    Output('refresh-status-text', 'children'),
+    [Input('refresh-timer', 'n_intervals'),
+     Input('refresh-status', 'data')]
+)
+def update_runtime_display(n_intervals, status):
+    """Update the runtime display text below the refresh button"""
+    if not status:
+        return ""
+    
+    if status.get('error'):
+        return "Failed to start refresh"
+    
+    if status.get('refreshing') and status.get('start_time'):
+        # Calculate elapsed time
+        start = datetime.fromisoformat(status['start_time'])
+        elapsed = datetime.now() - start
+        minutes = int(elapsed.total_seconds() // 60)
+        seconds = int(elapsed.total_seconds() % 60)
+        
+        return f"Run time: {minutes}:{seconds:02d}"
+    
+    elif status.get('timestamp') and not status.get('refreshing'):
+        # Show completion time if we have a recent completion
+        completion_time = datetime.fromisoformat(status['timestamp'])
+        # Only show if completed within last hour
+        if datetime.now() - completion_time < timedelta(hours=1):
+            time_str = completion_time.strftime("%-I:%M %p")
+            return f"Run Complete as of: {time_str}"
+    
+    return ""
+
+# Check for completion and reset button
+@app.callback(
+    [Output('refresh-status', 'data', allow_duplicate=True),
+     Output('refresh-button', 'children', allow_duplicate=True),
      Output('refresh-button', 'disabled', allow_duplicate=True),
-     Output('refresh-button', 'style', allow_duplicate=True)],
-    [Input('refresh-status', 'data')],
+     Output('refresh-button', 'style', allow_duplicate=True),
+     Output('refresh-timer', 'disabled', allow_duplicate=True)],
+    [Input('refresh-timer', 'n_intervals')],
+    [State('refresh-status', 'data'),
+     State('current-sport', 'data'),
+     State('refresh-button', 'style')],
     prevent_initial_call=True
 )
-def reset_refresh_button(status):
-    """Reset refresh button after a delay"""
-    if status.get('refreshing'):
-        # Use a client-side callback for better UX in production
-        # For now, just reset immediately in next interaction
-        pass
-    return dash.no_update, dash.no_update, dash.no_update
-
-# Notification display callback
-@app.callback(
-    [Output('refresh-notification', 'children'),
-     Output('refresh-notification', 'style')],
-    [Input('refresh-status', 'data')]
-)
-def show_refresh_notification(status):
-    """Show notification when refresh is triggered"""
-    if status.get('message'):
-        is_success = '✅' in status['message']
-        is_error = '❌' in status['message']
-        
-        bg_color = COLORS['success'] if is_success else (COLORS['error'] if is_error else COLORS['warning'])
-        
-        style = {
-            'position': 'fixed',
-            'top': '80px',
-            'right': '20px',
-            'padding': '16px 24px',
-            'backgroundColor': bg_color,
-            'color': 'white',
-            'borderRadius': '8px',
-            'fontSize': '14px',
-            'fontWeight': '500',
-            'boxShadow': '0 4px 12px rgba(0,0,0,0.15)',
-            'zIndex': str(Z_INDEX['notification']),
-            'display': 'block',
-            'minWidth': '300px',
-            'maxWidth': '500px'
-        }
-        
-        return status['message'], style
+def check_refresh_completion(n_intervals, status, sport, current_style):
+    """Check if refresh is complete after a reasonable time"""
+    if not status or not status.get('refreshing'):
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     
-    return "", {'display': 'none'}
+    if status.get('start_time'):
+        start = datetime.fromisoformat(status['start_time'])
+        elapsed = datetime.now() - start
+        
+        # Auto-complete after expected time
+        expected_time = 240 if sport == 'MLB' else 180  # 4 min for MLB, 3 min for others
+        
+        if elapsed.total_seconds() >= expected_time:
+            # Mark as complete
+            updated_status = {
+                'refreshing': False,
+                'message': '',
+                'timestamp': datetime.now().isoformat(),
+                'sport': sport
+            }
+            
+            reset_style = current_style.copy()
+            reset_style['backgroundColor'] = COLORS['black']
+            reset_style['opacity'] = '1'
+            
+            return (
+                updated_status,
+                "Refresh Data",
+                False,  # Re-enable button
+                reset_style,
+                True  # Disable timer
+            )
+    
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
 # Main content callback - uses stored data
 @app.callback(

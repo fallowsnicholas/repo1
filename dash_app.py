@@ -1057,6 +1057,15 @@ def update_runtime_display(n_intervals, status):
         
         return f"Run time: {minutes}:{seconds:02d}"
     
+    elif status.get('completed') or status.get('timeout'):
+        # Show completion time
+        if status.get('timestamp'):
+            completion_time = datetime.fromisoformat(status['timestamp'])
+            # Only show if completed within last hour
+            if datetime.now() - completion_time < timedelta(hours=1):
+                time_str = completion_time.strftime("%-I:%M %p")
+                return f"Run Complete as of: {time_str}"
+    
     elif status.get('timestamp') and not status.get('refreshing'):
         # Show completion time if we have a recent completion
         completion_time = datetime.fromisoformat(status['timestamp'])
@@ -1073,47 +1082,110 @@ def update_runtime_display(n_intervals, status):
      Output('refresh-button', 'children', allow_duplicate=True),
      Output('refresh-button', 'disabled', allow_duplicate=True),
      Output('refresh-button', 'style', allow_duplicate=True),
-     Output('refresh-timer', 'disabled', allow_duplicate=True)],
+     Output('refresh-timer', 'disabled', allow_duplicate=True),
+     Output('evs-data', 'data', allow_duplicate=True),
+     Output('parlays-data', 'data', allow_duplicate=True)],
     [Input('refresh-timer', 'n_intervals')],
     [State('refresh-status', 'data'),
      State('current-sport', 'data'),
-     State('refresh-button', 'style')],
+     State('refresh-button', 'style'),
+     State('current-view', 'data')],
     prevent_initial_call=True
 )
-def check_refresh_completion(n_intervals, status, sport, current_style):
-    """Check if refresh is complete after a reasonable time"""
+def check_refresh_completion(n_intervals, status, sport, current_style, view):
+    """Check if refresh is complete and reload data when done"""
     if not status or not status.get('refreshing'):
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     
     if status.get('start_time'):
         start = datetime.fromisoformat(status['start_time'])
         elapsed = datetime.now() - start
         
-        # Auto-complete after expected time
-        expected_time = 240 if sport == 'MLB' else 180  # 4 min for MLB, 3 min for others
+        # Check every 10 seconds after 2 minutes
+        if elapsed.total_seconds() >= 120 and n_intervals % 10 == 0:
+            # Try to reload data to check if new data is available
+            try:
+                # Clear cache to force fresh data check
+                invalidate_cache(sport)
+                
+                # Try to load fresh data
+                fresh_evs = read_ev_results(sport) if view == 'individual' else []
+                fresh_parlays = read_correlation_parlays(sport) if view == 'parlays' and sport == 'MLB' else []
+                
+                # Check if we got new data (compare timestamps or data counts)
+                data_updated = False
+                
+                # Simple check: if we have data and it wasn't empty before, assume update
+                if fresh_evs or fresh_parlays:
+                    logger.info(f"Fresh data detected: {len(fresh_evs)} EVs, {len(fresh_parlays)} parlays")
+                    data_updated = True
+                
+                # Also check maximum expected time
+                max_time = 300 if sport == 'MLB' else 240  # 5 min for MLB, 4 min for others
+                
+                if data_updated or elapsed.total_seconds() >= max_time:
+                    # Mark as complete
+                    updated_status = {
+                        'refreshing': False,
+                        'message': '',
+                        'timestamp': datetime.now().isoformat(),
+                        'sport': sport,
+                        'completed': True
+                    }
+                    
+                    reset_style = current_style.copy()
+                    reset_style['backgroundColor'] = COLORS['black']
+                    reset_style['opacity'] = '1'
+                    reset_style['cursor'] = 'pointer'
+                    
+                    return (
+                        updated_status,
+                        "Refresh Data",
+                        False,  # Re-enable button
+                        reset_style,
+                        True,  # Disable timer
+                        fresh_evs if fresh_evs else dash.no_update,
+                        fresh_parlays if fresh_parlays else dash.no_update
+                    )
+                    
+            except Exception as e:
+                logger.error(f"Error checking for completion: {e}")
         
-        if elapsed.total_seconds() >= expected_time:
-            # Mark as complete
+        # Absolute maximum timeout - force completion
+        if elapsed.total_seconds() >= 360:  # 6 minutes absolute max
             updated_status = {
                 'refreshing': False,
                 'message': '',
                 'timestamp': datetime.now().isoformat(),
-                'sport': sport
+                'sport': sport,
+                'timeout': True
             }
             
             reset_style = current_style.copy()
             reset_style['backgroundColor'] = COLORS['black']
             reset_style['opacity'] = '1'
+            reset_style['cursor'] = 'pointer'
+            
+            # Try one final data reload
+            try:
+                invalidate_cache(sport)
+                fresh_evs = read_ev_results_cached(sport) if view == 'individual' else []
+                fresh_parlays = read_correlation_parlays_cached(sport) if view == 'parlays' and sport == 'MLB' else []
+            except:
+                fresh_evs = dash.no_update
+                fresh_parlays = dash.no_update
             
             return (
                 updated_status,
                 "Refresh Data",
-                False,  # Re-enable button
+                False,
                 reset_style,
-                True  # Disable timer
+                True,
+                fresh_evs,
+                fresh_parlays
             )
     
-    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
 
 # Main content callback - uses stored data
 @app.callback(

@@ -2,6 +2,10 @@
 import sys
 import traceback
 
+# Load environment variables from .env file (for local development)
+from dotenv import load_dotenv
+load_dotenv()
+
 print("=" * 60)
 print("STARTING DASH APP")
 print("=" * 60)
@@ -156,6 +160,10 @@ FILTER_BUTTON_STYLES = {
 _cache = {}
 _cache_time = {}
 
+# Server-side workflow state tracking to prevent duplicate triggers
+# This persists across page refreshes on the server side
+_active_workflows = {}  # Format: {sport: {'run_id': id, 'started_at': timestamp}}
+
 # ============================================================================
 # CUSTOM CSS
 # ============================================================================
@@ -241,21 +249,28 @@ app.index_string = '''
 # UTILITY FUNCTIONS
 # ============================================================================
 
+def format_time_cross_platform(dt):
+    """Format time as 'H:MM AM/PM' in a cross-platform way (Windows compatible)"""
+    hour = dt.strftime("%I").lstrip('0') or '12'
+    minute = dt.strftime("%M")
+    ampm = dt.strftime("%p")
+    return f"{hour}:{minute} {ampm}"
+
 def clean_market_name(market):
     """Clean market name by removing prefixes and formatting"""
     if not market:
         return market
-    
+
     cleaned = market
     prefixes = ['pitcher_', 'batter_', 'player_', 'player_pass_', 'player_rush_', 'player_reception_']
     for prefix in prefixes:
         if cleaned.lower().startswith(prefix):
             cleaned = cleaned[len(prefix):]
             break
-    
+
     cleaned = cleaned.replace('_', ' ')
     cleaned = ' '.join(word.capitalize() for word in cleaned.split())
-    
+
     return cleaned
 
 def validate_ev_data(data):
@@ -1113,7 +1128,7 @@ def update_sport(mlb_clicks, nfl_clicks, wnba_clicks):
      Output('refresh-button', 'style', allow_duplicate=True),
      Output('refresh-timer', 'disabled', allow_duplicate=True)],
     [Input('current-sport', 'data')],
-    prevent_initial_call=False
+    prevent_initial_call='initial_duplicate'
 )
 def check_existing_workflows_on_sport_change(sport):
     """Check if workflows are already running when sport changes or page loads"""
@@ -1143,12 +1158,20 @@ def check_existing_workflows_on_sport_change(sport):
             'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
         }
         
+        # Safely handle start_time timezone conversion
+        if start_time and 'Z' in start_time:
+            formatted_start_time = start_time.replace('Z', '+00:00')
+        elif start_time:
+            formatted_start_time = start_time
+        else:
+            formatted_start_time = datetime.now().isoformat()
+
         return (
             {
                 'refreshing': True,
                 'message': f'Found running {sport} workflow',
                 'timestamp': datetime.now().isoformat(),
-                'start_time': start_time.replace('Z', '+00:00') if start_time else datetime.now().isoformat(),
+                'start_time': formatted_start_time,
                 'sport': sport,
                 'external': True,  # Flag that this was externally triggered
                 'run_id': workflow_run['id']
@@ -1164,10 +1187,12 @@ def check_existing_workflows_on_sport_change(sport):
     if latest_run and latest_run.get('status') == 'completed':
         completion_time = latest_run.get('updated_at')
         if completion_time:
+            from datetime import timezone
             completed_at = datetime.fromisoformat(completion_time.replace('Z', '+00:00'))
-            if datetime.now(completed_at.tzinfo) - completed_at < timedelta(minutes=5):
+            now_utc = datetime.now(timezone.utc)
+            if now_utc - completed_at < timedelta(minutes=5):
                 logger.info(f"📋 Found recently completed {sport} workflow")
-                
+
                 # Trigger a data refresh since it just completed
                 invalidate_cache(sport)
     
@@ -1256,8 +1281,20 @@ def handle_refresh(n_clicks, sport, current_style):
     """Handle refresh button click with duplicate prevention"""
     if n_clicks > 0:
         logger.info(f"🔄 Refresh requested for {sport} (click #{n_clicks})")
-        
-        # First check if workflow is already running
+
+        # FIRST: Check server-side state (immediate protection)
+        if sport in _active_workflows:
+            last_trigger = _active_workflows[sport].get('triggered_at')
+            if last_trigger and (datetime.now() - last_trigger).total_seconds() < 5:
+                logger.warning(f"⚠️ Ignoring duplicate click for {sport} (triggered {(datetime.now() - last_trigger).total_seconds():.1f}s ago)")
+                # Return current state without change
+                loading_style = current_style.copy()
+                loading_style['backgroundColor'] = COLORS['black']
+                loading_style['opacity'] = '0.7'
+                loading_style['cursor'] = 'wait'
+                return dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+
+        # SECOND: Check if workflow is already running on GitHub
         is_running, existing_run = check_running_workflows(sport)
         
         loading_style = current_style.copy()
@@ -1288,8 +1325,14 @@ def handle_refresh(n_clicks, sport, current_style):
             )
         
         # No existing workflow, proceed with triggering
+        # Mark this sport as actively being triggered (prevents duplicate clicks)
+        _active_workflows[sport] = {
+            'triggered_at': datetime.now(),
+            'run_id': None
+        }
+
         success = trigger_github_pipeline(sport=sport)
-        
+
         if success:
             # Clear cache so next load gets fresh data
             invalidate_cache(sport)
@@ -1299,9 +1342,11 @@ def handle_refresh(n_clicks, sport, current_style):
             time.sleep(2)
             is_running, new_run = check_running_workflows(sport)
             run_id = new_run['id'] if new_run else None
-            
+
             if run_id:
                 logger.info(f"🎯 Started new workflow with ID: {run_id}")
+                # Update the active workflow state with the run ID
+                _active_workflows[sport]['run_id'] = run_id
             
             refresh_data = {
                 'refreshing': True,
@@ -1383,7 +1428,7 @@ def update_runtime_display(n_intervals, status):
             minutes = int(runtime // 60)
             seconds = int(runtime % 60)
             completion_time = datetime.fromisoformat(status['timestamp'])
-            time_str = completion_time.strftime("%-I:%M %p")
+            time_str = format_time_cross_platform(completion_time)
             
             if conclusion == 'success':
                 return f"✅ Completed in {minutes}:{seconds:02d} at {time_str}"
@@ -1397,7 +1442,7 @@ def update_runtime_display(n_intervals, status):
             completion_time = datetime.fromisoformat(status['timestamp'])
             # Only show if completed within last hour
             if datetime.now() - completion_time < timedelta(hours=1):
-                time_str = completion_time.strftime("%-I:%M %p")
+                time_str = format_time_cross_platform(completion_time)
                 return f"Run Complete as of: {time_str}"
     
     elif status.get('timeout'):
@@ -1412,7 +1457,7 @@ def update_runtime_display(n_intervals, status):
         completion_time = datetime.fromisoformat(status['timestamp'])
         # Only show if completed within last hour
         if datetime.now() - completion_time < timedelta(hours=1):
-            time_str = completion_time.strftime("%-I:%M %p")
+            time_str = format_time_cross_platform(completion_time)
             return f"Run Complete as of: {time_str}"
     
     return ""
@@ -1462,7 +1507,12 @@ def check_refresh_completion(n_intervals, status, sport, current_style, view):
                     runtime = 0
                 
                 logger.info(f"✅ Workflow completed with conclusion: {conclusion} (runtime: {runtime:.0f}s)")
-                
+
+                # Clear the active workflow state
+                if sport in _active_workflows:
+                    del _active_workflows[sport]
+                    logger.info(f"🗑️ Cleared active workflow state for {sport}")
+
                 # Clear cache and reload data
                 invalidate_cache(sport)
                 

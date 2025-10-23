@@ -237,21 +237,42 @@ class SplashMatchupExtractorOptimized:
                 ['']  # Empty row
             ]
 
-            # Create headers
-            headers = ['Game_ID', 'Away_Team', 'Home_Team', 'Commence_Time', 'Matchup_Display', 'Source']
+            # Create headers matching what fetch_odds_data.py expects
+            headers = [
+                'Game_ID', 'Date', 'Game_Time',
+                'Away_Team', 'Away_Abbr', 'Away_Team_ID',
+                'Home_Team', 'Home_Abbr', 'Home_Team_ID',
+                'Venue', 'Status', 'Matchup_Display', 'Fetched_At'
+            ]
 
             # Flatten matchups data
             flattened = []
             for matchup in matchups:
                 matchup_display = f"{matchup['away_team']} @ {matchup['home_team']}"
 
+                # Format commence_time for display
+                game_time = ""
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(matchup['commence_time'].replace('Z', '+00:00'))
+                    game_time = dt.strftime('%I:%M %p ET')
+                except:
+                    game_time = matchup['commence_time']
+
                 flattened.append([
                     matchup['game_id'],
-                    matchup['away_team'],
-                    matchup['home_team'],
-                    matchup['commence_time'],
+                    matchup['commence_time'],  # Date
+                    game_time,  # Game_Time
+                    matchup['away_team'],  # Away_Team
+                    matchup['away_team'][:3].upper() if matchup['away_team'] else '',  # Away_Abbr (first 3 letters)
+                    '',  # Away_Team_ID (not needed from Odds API)
+                    matchup['home_team'],  # Home_Team
+                    matchup['home_team'][:3].upper() if matchup['home_team'] else '',  # Home_Abbr (first 3 letters)
+                    '',  # Home_Team_ID (not needed)
+                    '',  # Venue (not available from Odds API)
+                    'Scheduled',  # Status
                     matchup_display,
-                    'Odds API (filtered by Splash)'
+                    datetime.now().isoformat()  # Fetched_At
                 ])
 
             # Combine all data

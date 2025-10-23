@@ -128,7 +128,7 @@ jobs:
         python fetch_odds_data.py --sport ${{ steps.config.outputs.sport }}
         echo "✅ Step 3 complete"
     
-    # STEP 4: Match Lines
+    # STEP 4: Match Splash to Odds Lines (unchanged)
     - name: "Step 4: Match Splash to Odds Lines"
       if: |
         steps.config.outputs.pipeline == 'full-pipeline' || 
@@ -140,7 +140,7 @@ jobs:
         python match_lines.py --sport ${{ steps.config.outputs.sport }}
         echo "✅ Step 4 complete"
     
-    # STEP 5: Calculate EV
+    # STEP 5: Calculate EV (unchanged)
     - name: "Step 5: Calculate Expected Values"
       if: |
         steps.config.outputs.pipeline == 'full-pipeline' || 

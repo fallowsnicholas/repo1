@@ -83,39 +83,10 @@ jobs:
         echo "🎯 Pipeline: ${{ steps.config.outputs.pipeline }}"
         echo "📡 Triggered via: ${{ github.event_name }}"
     
-    # STEP 1: Fetch Matchups (for next 7 days to capture all Splash props)
-    - name: "Step 1: Fetch Matchups for Next 7 Days"
+    # STEP 1: Fetch Splash Props FIRST (Splash-First Approach)
+    - name: "Step 1: Fetch Splash Sports Data"
       if: |
         steps.config.outputs.pipeline == 'full-pipeline' ||
-        steps.config.outputs.pipeline == 'steps-1-5-data-only'
-      env:
-        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
-        DAYS_OFFSET: ${{ github.event.inputs.days_offset || '0' }}
-        FETCH_DAYS_RANGE: '7'
-      run: |
-        echo "🎯 Step 1: Fetching ${{ steps.config.outputs.sport }} Matchups (next 7 days)"
-        echo "💡 Fetching multiple days to capture all props in Splash"
-        # Loop through next 7 days to collect all upcoming matchups
-        python fetch_matchups_multi_day.py --sport ${{ steps.config.outputs.sport }} --days 7
-        echo "✅ Step 1 complete"
-    
-    # STEP 2: Fetch Odds
-    - name: "Step 2: Fetch Odds API Data"
-      if: |
-        steps.config.outputs.pipeline == 'full-pipeline' || 
-        steps.config.outputs.pipeline == 'steps-1-5-data-only'
-      env:
-        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
-        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
-      run: |
-        echo "🎯 Step 2: Fetching ${{ steps.config.outputs.sport }} Odds"
-        python fetch_odds_data.py --sport ${{ steps.config.outputs.sport }}
-        echo "✅ Step 2 complete"
-    
-    # STEP 3: Fetch and Process Splash Sports Data
-    - name: "Step 3: Fetch and Process Splash Sports Data"
-      if: |
-        steps.config.outputs.pipeline == 'full-pipeline' || 
         steps.config.outputs.pipeline == 'steps-1-5-data-only'
       env:
         SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
@@ -123,9 +94,38 @@ jobs:
         ZENROWS_KEY: ${{ secrets.ZENROWS_KEY }}
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
       run: |
-        echo "🎯 Step 3: Fetching Splash Sports Data for ${{ steps.config.outputs.sport }}"
+        echo "🎯 Step 1: Fetching Splash Sports Data for ${{ steps.config.outputs.sport }}"
+        echo "💡 NEW: Fetching Splash FIRST to determine which games need odds"
         python fetch_splash_json.py --sport ${{ steps.config.outputs.sport }}
         python process_splash_data.py --sport ${{ steps.config.outputs.sport }}
+        echo "✅ Step 1 complete"
+
+    # STEP 2: Extract Matchups from Splash Props
+    - name: "Step 2: Extract Matchups from Splash"
+      if: |
+        steps.config.outputs.pipeline == 'full-pipeline' ||
+        steps.config.outputs.pipeline == 'steps-1-5-data-only'
+      env:
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      run: |
+        echo "🎯 Step 2: Extracting matchups from Splash props"
+        echo "💡 Determines which games actually need odds data"
+        python extract_splash_matchups_optimized.py --sport ${{ steps.config.outputs.sport }}
+        echo "✅ Step 2 complete"
+
+    # STEP 3: Fetch Odds (ONLY for Splash-derived matchups)
+    - name: "Step 3: Fetch Odds for Splash Matchups Only"
+      if: |
+        steps.config.outputs.pipeline == 'full-pipeline' ||
+        steps.config.outputs.pipeline == 'steps-1-5-data-only'
+      env:
+        ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
+      run: |
+        echo "🎯 Step 3: Fetching Odds ONLY for games with Splash props"
+        echo "💡 Optimized: Reduced API calls by ~70%"
+        python fetch_odds_data.py --sport ${{ steps.config.outputs.sport }}
         echo "✅ Step 3 complete"
     
     # STEP 4: Match Lines

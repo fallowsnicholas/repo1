@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONIOENCODING=utf-8 python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd local development support and duplicate workflow prevention\n\n- Add environment variable loading via python-dotenv for local testing\n- Fix Dash callback configuration: use prevent_initial_call=''initial_duplicate''\n- Implement server-side state tracking to prevent duplicate workflow triggers\n- Add 5-second cooldown between refresh button clicks for the same sport\n- Fix Windows compatibility: replace strftime(''%-I'') with cross-platform time formatting\n- Add .gitignore to protect sensitive .env file from being committed\n- Clean up workflow state when runs complete\n\nThese changes enable safe local development while preventing race conditions\nwhen users click refresh multiple times rapidly.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(timeout 30 bash:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

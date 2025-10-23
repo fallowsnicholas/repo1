@@ -83,17 +83,20 @@ jobs:
         echo "🎯 Pipeline: ${{ steps.config.outputs.pipeline }}"
         echo "📡 Triggered via: ${{ github.event_name }}"
     
-    # STEP 1: Fetch Matchups
-    - name: "Step 1: Fetch Matchups"
+    # STEP 1: Fetch Matchups (for next 7 days to capture all Splash props)
+    - name: "Step 1: Fetch Matchups for Next 7 Days"
       if: |
-        steps.config.outputs.pipeline == 'full-pipeline' || 
+        steps.config.outputs.pipeline == 'full-pipeline' ||
         steps.config.outputs.pipeline == 'steps-1-5-data-only'
       env:
         GOOGLE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS }}
         DAYS_OFFSET: ${{ github.event.inputs.days_offset || '0' }}
+        FETCH_DAYS_RANGE: '7'
       run: |
-        echo "🎯 Step 1: Fetching ${{ steps.config.outputs.sport }} Matchups"
-        python fetch_matchups.py --sport ${{ steps.config.outputs.sport }}
+        echo "🎯 Step 1: Fetching ${{ steps.config.outputs.sport }} Matchups (next 7 days)"
+        echo "💡 Fetching multiple days to capture all props in Splash"
+        # Loop through next 7 days to collect all upcoming matchups
+        python fetch_matchups_multi_day.py --sport ${{ steps.config.outputs.sport }} --days 7
         echo "✅ Step 1 complete"
     
     # STEP 2: Fetch Odds

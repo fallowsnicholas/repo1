@@ -70,7 +70,9 @@ Z_INDEX = {
 SPORTS = {
     'MLB': 'MLB',
     'NFL': 'NFL',
-    'WNBA': 'WNBA'
+    'WNBA': 'WNBA',
+    'NHL': 'NHL',
+    'NBA': 'NBA'
 }
 
 # Colors
@@ -345,11 +347,11 @@ def get_unique_markets(data):
 def trigger_github_pipeline(sport='MLB', pipeline=None):
     """
     Trigger GitHub Actions workflow remotely
-    
+
     Args:
-        sport: 'MLB', 'NFL', or 'WNBA'
+        sport: 'MLB', 'NFL', 'WNBA', 'NHL', or 'NBA'
         pipeline: 'full-pipeline', 'steps-1-5-data-only', etc. (if None, auto-determines based on sport)
-    
+
     Returns:
         bool: True if successful, False otherwise
     """
@@ -361,7 +363,7 @@ def trigger_github_pipeline(sport='MLB', pipeline=None):
                 pipeline = 'full-pipeline'
                 logger.info(f"🎯 MLB selected - using full pipeline with parlays")
             else:
-                # NFL and WNBA only get data steps (1-5) for now
+                # NFL, WNBA, NHL, NBA only get data steps (1-5) for now
                 pipeline = 'steps-1-5-data-only'
                 logger.info(f"⚡ {sport} selected - using data-only pipeline (parlays not yet implemented)")
         
@@ -469,7 +471,9 @@ def check_running_workflows(sport='MLB'):
                     sport_patterns = {
                         'MLB': ['MLB', 'mlb', 'full-pipeline'],
                         'NFL': ['NFL', 'nfl'],
-                        'WNBA': ['WNBA', 'wnba']
+                        'WNBA': ['WNBA', 'wnba'],
+                        'NHL': ['NHL', 'nhl'],
+                        'NBA': ['NBA', 'nba']
                     }
                     
                     patterns = sport_patterns.get(sport, [])
@@ -585,7 +589,9 @@ def get_latest_workflow_for_sport(sport='MLB'):
                         sport_patterns = {
                             'MLB': ['MLB', 'mlb', 'full-pipeline'],
                             'NFL': ['NFL', 'nfl'],
-                            'WNBA': ['WNBA', 'wnba']
+                            'WNBA': ['WNBA', 'wnba'],
+                            'NHL': ['NHL', 'nhl'],
+                            'NBA': ['NBA', 'nba']
                         }
                         
                         patterns = sport_patterns.get(sport, [])
@@ -1030,7 +1036,9 @@ try:
         html.Div([
             html.Button(SPORTS['MLB'], id="league-mlb", n_clicks=0, style=BUTTON_STYLES['active']),
             html.Button(SPORTS['NFL'], id="league-nfl", n_clicks=0, style=BUTTON_STYLES['inactive']),
-            html.Button(SPORTS['WNBA'], id="league-wnba", n_clicks=0, style=BUTTON_STYLES['inactive'])
+            html.Button(SPORTS['WNBA'], id="league-wnba", n_clicks=0, style=BUTTON_STYLES['inactive']),
+            html.Button(SPORTS['NHL'], id="league-nhl", n_clicks=0, style=BUTTON_STYLES['inactive']),
+            html.Button(SPORTS['NBA'], id="league-nba", n_clicks=0, style=BUTTON_STYLES['inactive'])
         ], style={
             'padding': '4px 40px',  # Increased top/bottom padding
             'backgroundColor': COLORS['background'],
@@ -1100,25 +1108,33 @@ print("Step 4: Registering callbacks...")
     [Output('current-sport', 'data'),
      Output('league-mlb', 'style'),
      Output('league-nfl', 'style'),
-     Output('league-wnba', 'style')],
+     Output('league-wnba', 'style'),
+     Output('league-nhl', 'style'),
+     Output('league-nba', 'style')],
     [Input('league-mlb', 'n_clicks'),
      Input('league-nfl', 'n_clicks'),
-     Input('league-wnba', 'n_clicks')]
+     Input('league-wnba', 'n_clicks'),
+     Input('league-nhl', 'n_clicks'),
+     Input('league-nba', 'n_clicks')]
 )
-def update_sport(mlb_clicks, nfl_clicks, wnba_clicks):
+def update_sport(mlb_clicks, nfl_clicks, wnba_clicks, nhl_clicks, nba_clicks):
     ctx = dash.callback_context
-    
+
     if not ctx.triggered:
-        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
-    
+        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
+
     button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
+
     if button_id == 'league-nfl':
-        return SPORTS['NFL'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive']
+        return SPORTS['NFL'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
     elif button_id == 'league-wnba':
-        return SPORTS['WNBA'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active']
+        return SPORTS['WNBA'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
+    elif button_id == 'league-nhl':
+        return SPORTS['NHL'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive']
+    elif button_id == 'league-nba':
+        return SPORTS['NBA'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['active']
     else:
-        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
+        return SPORTS['MLB'], BUTTON_STYLES['active'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive'], BUTTON_STYLES['inactive']
 
 # Check for existing workflows when sport changes or page loads
 @app.callback(

@@ -186,13 +186,13 @@ SPORTS_CONFIG = {
             'espn_sport': 'basketball',
             'espn_league': 'wnba',
             'splash_league': 'wnba',
-            
+
             # Active season months (May=5 through October=10)
             'season_active': [5, 6, 7, 8, 9, 10],
-            
+
             # Days of week that games typically occur
             'game_days': [0, 1, 2, 3, 4, 5, 6],  # WNBA plays throughout the week
-            
+
             # Market mappings (Splash Sports name -> Odds API name)
             'market_mappings': {
                 'points': 'player_points',
@@ -206,7 +206,7 @@ SPORTS_CONFIG = {
                 'points_assists': 'player_points_assists',
                 'rebounds_assists': 'player_rebounds_assists'
             },
-            
+
             # Markets to fetch from Odds API
             'odds_markets': [
                 'player_points',
@@ -220,10 +220,10 @@ SPORTS_CONFIG = {
                 'player_points_assists',
                 'player_rebounds_assists'
             ],
-            
+
             # No correlations defined yet for WNBA (can add later)
             'correlations': {},
-            
+
             # EV calculation parameters
             'ev_params': {
                 'min_books': 3,
@@ -233,15 +233,131 @@ SPORTS_CONFIG = {
                 'min_batter_ev': 0.005,  # Not used for WNBA but keeping for consistency
                 'max_parlays': 10
             },
-            
+
             # Sportsbooks to include
             'sportsbooks': [
                 'fanduel', 'draftkings', 'betmgm', 'caesars', 'pointsbetus',
                 'betrivers', 'unibet', 'bovada', 'mybookieag', 'betus',
                 'williamhill_us', 'wynnbet', 'betway', 'foxbet', 'barstool'
             ]
-        }
+        },
+
+    'NHL': {
+        # Data source configurations
+        'spreadsheet_name': 'NHL_Splash_Data',
+        'odds_api_sport': 'icehockey_nhl',
+        'espn_sport': 'hockey',
+        'espn_league': 'nhl',
+        'splash_league': 'nhl',
+
+        # Active season months (October=10 through June=6)
+        'season_active': [10, 11, 12, 1, 2, 3, 4, 5, 6],
+
+        # Days of week that games typically occur
+        'game_days': [0, 1, 2, 3, 4, 5, 6],  # NHL plays throughout the week
+
+        # Market mappings (Splash Sports name -> Odds API name)
+        'market_mappings': {
+            'shots_on_goal': 'player_shots_on_goal',
+            'assists': 'player_assists',
+            'points': 'player_points'
+        },
+
+        # Markets to fetch from Odds API
+        'odds_markets': [
+            'player_shots_on_goal',
+            'player_assists',
+            'player_points'
+        ],
+
+        # No correlations defined yet for NHL (can add later)
+        'correlations': {},
+
+        # EV calculation parameters
+        'ev_params': {
+            'min_books': 3,
+            'min_true_prob': 0.45,
+            'ev_threshold': 0.01,
+            'min_anchor_ev': 0.01,
+            'min_batter_ev': 0.005,
+            'max_parlays': 10
+        },
+
+        # Sportsbooks to include
+        'sportsbooks': [
+            'fanduel', 'draftkings', 'betmgm', 'caesars', 'pointsbetus',
+            'betrivers', 'unibet', 'bovada', 'mybookieag', 'betus',
+            'williamhill_us', 'wynnbet', 'betway', 'foxbet', 'barstool'
+        ]
+    },
+
+    'NBA': {
+        # Data source configurations
+        'spreadsheet_name': 'NBA_Splash_Data',
+        'odds_api_sport': 'basketball_nba',
+        'espn_sport': 'basketball',
+        'espn_league': 'nba',
+        'splash_league': 'nba',
+
+        # Active season months (October=10 through June=6)
+        'season_active': [10, 11, 12, 1, 2, 3, 4, 5, 6],
+
+        # Days of week that games typically occur
+        'game_days': [0, 1, 2, 3, 4, 5, 6],  # NBA plays throughout the week
+
+        # Market mappings (Splash Sports name -> Odds API name)
+        'market_mappings': {
+            'points': 'player_points',
+            'rebounds': 'player_rebounds',
+            'assists': 'player_assists',
+            'points_rebounds_assists': 'player_points_rebounds_assists',
+            'points_rebounds': 'player_points_rebounds',
+            'points_assists': 'player_points_assists',
+            'assists_rebounds': 'player_rebounds_assists',
+            'turnovers': 'player_turnovers',
+            'threes': 'player_threes',
+            'steals': 'player_steals',
+            'blocks': 'player_blocks',
+            'steals_blocks': 'player_steals_blocks'
+        },
+
+        # Markets to fetch from Odds API
+        'odds_markets': [
+            'player_points',
+            'player_rebounds',
+            'player_assists',
+            'player_points_rebounds_assists',
+            'player_points_rebounds',
+            'player_points_assists',
+            'player_rebounds_assists',
+            'player_turnovers',
+            'player_threes',
+            'player_steals',
+            'player_blocks',
+            'player_steals_blocks'
+        ],
+
+        # No correlations defined yet for NBA (can add later)
+        'correlations': {},
+
+        # EV calculation parameters
+        'ev_params': {
+            'min_books': 3,
+            'min_true_prob': 0.45,
+            'ev_threshold': 0.01,
+            'min_anchor_ev': 0.01,
+            'min_batter_ev': 0.005,
+            'max_parlays': 10
+        },
+
+        # Sportsbooks to include
+        'sportsbooks': [
+            'fanduel', 'draftkings', 'betmgm', 'caesars', 'pointsbetus',
+            'betrivers', 'unibet', 'bovada', 'mybookieag', 'betus',
+            'williamhill_us', 'wynnbet', 'betway', 'foxbet', 'barstool'
+        ]
     }
+}
 def get_sport_config(sport):
     """
     Get configuration for a specific sport.

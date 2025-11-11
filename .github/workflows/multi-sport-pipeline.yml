@@ -21,6 +21,8 @@ on:
           - MLB
           - NFL
           - WNBA
+          - NHL
+          - NBA
       
       step:
         description: 'Which step(s) to run'

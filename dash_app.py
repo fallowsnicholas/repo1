@@ -1409,7 +1409,10 @@ def update_runtime_display(n_intervals, status):
     if status.get('refreshing') and status.get('start_time'):
         # Calculate elapsed time
         start = datetime.fromisoformat(status['start_time'])
-        elapsed = datetime.now() - start
+        # Make datetime.now() timezone-aware to match start
+        from datetime import timezone
+        now = datetime.now(timezone.utc) if start.tzinfo else datetime.now()
+        elapsed = now - start
         minutes = int(elapsed.total_seconds() // 60)
         seconds = int(elapsed.total_seconds() % 60)
         
@@ -1441,22 +1444,26 @@ def update_runtime_display(n_intervals, status):
         elif status.get('timestamp'):
             completion_time = datetime.fromisoformat(status['timestamp'])
             # Only show if completed within last hour
-            if datetime.now() - completion_time < timedelta(hours=1):
+            from datetime import timezone
+            now = datetime.now(timezone.utc) if completion_time.tzinfo else datetime.now()
+            if now - completion_time < timedelta(hours=1):
                 time_str = format_time_cross_platform(completion_time)
                 return f"Run Complete as of: {time_str}"
-    
+
     elif status.get('timeout'):
         # Show timeout message
         runtime = status.get('runtime', 90)
         minutes = int(runtime // 60)
         seconds = int(runtime % 60)
         return f"⏱️ Timeout after {minutes}:{seconds:02d}"
-    
+
     elif status.get('timestamp') and not status.get('refreshing'):
         # Show completion time if we have a recent completion
         completion_time = datetime.fromisoformat(status['timestamp'])
         # Only show if completed within last hour
-        if datetime.now() - completion_time < timedelta(hours=1):
+        from datetime import timezone
+        now = datetime.now(timezone.utc) if completion_time.tzinfo else datetime.now()
+        if now - completion_time < timedelta(hours=1):
             time_str = format_time_cross_platform(completion_time)
             return f"Run Complete as of: {time_str}"
     
@@ -1502,7 +1509,10 @@ def check_refresh_completion(n_intervals, status, sport, current_style, view):
                 start_time = status.get('start_time')
                 if start_time:
                     start = datetime.fromisoformat(start_time)
-                    runtime = (datetime.now() - start).total_seconds()
+                    # Make datetime.now() timezone-aware to match start
+                    from datetime import timezone
+                    now = datetime.now(timezone.utc) if start.tzinfo else datetime.now()
+                    runtime = (now - start).total_seconds()
                 else:
                     runtime = 0
                 
@@ -1566,8 +1576,11 @@ def check_refresh_completion(n_intervals, status, sport, current_style, view):
     # Fallback: if no run_id or API fails, use time-based approach
     if status.get('start_time'):
         start = datetime.fromisoformat(status['start_time'])
-        elapsed = datetime.now() - start
-        
+        # Make datetime.now() timezone-aware to match start
+        from datetime import timezone
+        now = datetime.now(timezone.utc) if start.tzinfo else datetime.now()
+        elapsed = now - start
+
         # Without run_id, fall back to reasonable timeout
         max_time = 90  # 1.5 minutes
         

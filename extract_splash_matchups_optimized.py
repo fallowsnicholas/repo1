@@ -206,12 +206,20 @@ class SplashMatchupExtractorOptimized:
         return matchups
 
     def clear_results_sheets(self, client):
-        """Clear EV_RESULTS and CORRELATION_PARLAYS sheets (for off-season)"""
+        """Clear all data sheets (for off-season when no props available)"""
         try:
-            print(f"\n🧹 Clearing results sheets (off-season - no props available)...")
+            print(f"\n🧹 Clearing all data sheets (off-season - no props available)...")
 
             spreadsheet = client.open(self.spreadsheet_name)
-            sheets_to_clear = ['EV_RESULTS', 'CORRELATION_PARLAYS']
+
+            # Clear all pipeline sheets to prevent stale data in UI
+            sheets_to_clear = [
+                'ODDS_API',           # Step 3 - odds data
+                'MATCHED_LINES',       # Step 4 - matched props
+                'EV_RESULTS',          # Step 5 - EV calculations
+                'PITCHER_ANCHORS',     # Step 6 - anchors (MLB only)
+                'CORRELATION_PARLAYS'  # Step 7 - parlays (MLB only)
+            ]
 
             for sheet_name in sheets_to_clear:
                 try:
@@ -231,7 +239,7 @@ class SplashMatchupExtractorOptimized:
                 except gspread.exceptions.WorksheetNotFound:
                     print(f"   ⚠️  {sheet_name} not found (will be created when data is available)")
 
-            print(f"✅ Results sheets cleared successfully")
+            print(f"✅ All data sheets cleared successfully")
             return True
 
         except Exception as e:

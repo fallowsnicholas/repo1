@@ -246,8 +246,29 @@ class SplashJSONFetcher:
     def _save_raw_responses(self, all_raw_responses):
         """Save collected raw API responses to JSON file"""
         if not all_raw_responses:
-            print("❌ No responses collected to save")
-            return False
+            print("⚠️  No props available (off-season)")
+            print("   This is normal when no games are scheduled")
+            # Save an empty but valid response file
+            output_data = {
+                'fetch_metadata': {
+                    'sport': self.sport,
+                    'league': self.splash_league,
+                    'fetch_timestamp': datetime.now().isoformat(),
+                    'total_requests_made': 0,
+                    'services_used': {},
+                    'fetch_success': True,
+                    'note': 'No props available (off-season)'
+                },
+                'raw_api_responses': []
+            }
+            try:
+                with open(self.output_file, 'w', encoding='utf-8') as f:
+                    json.dump(output_data, f, indent=2, ensure_ascii=False)
+                print(f"✅ Saved empty response file (off-season is normal)")
+                return True
+            except Exception as e:
+                print(f"❌ Failed to save empty response: {e}")
+                return False
         
         # Calculate basic totals WITHOUT analyzing content
         total_requests = len(all_raw_responses)

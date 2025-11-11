@@ -311,9 +311,11 @@ def main():
         splash_df = extractor.read_splash_data(client)
 
         if splash_df.empty:
-            print(f"\n❌ No Splash data found")
-            print(f"   Make sure Step 1 (fetch_splash_json + process_splash_data) completed")
-            exit(1)
+            print(f"\n⚠️  No Splash data found for {args.sport}")
+            print(f"   This is normal during off-season when no props are available")
+            print(f"   Skipping remaining steps - no data to process")
+            print(f"\n✅ Graceful exit - no error (off-season)")
+            exit(0)  # Exit successfully, not an error
 
         splash_player_count = splash_df['Name'].nunique() if 'Name' in splash_df.columns else len(splash_df)
 
@@ -321,16 +323,20 @@ def main():
         odds_games = extractor.get_all_odds_api_games()
 
         if not odds_games:
-            print(f"\n❌ No Odds API games found")
-            print(f"   This might indicate an API issue")
-            exit(1)
+            print(f"\n⚠️  No Odds API games found for {args.sport}")
+            print(f"   This is normal during off-season when no games are scheduled")
+            print(f"   Skipping remaining steps - no games to process")
+            print(f"\n✅ Graceful exit - no error (off-season)")
+            exit(0)  # Exit successfully, not an error
 
         # Match Splash to games
         matchups = extractor.match_splash_to_games(splash_df, odds_games)
 
         if not matchups:
-            print("❌ No matchups could be created")
-            exit(1)
+            print("\n⚠️  No matchups could be created")
+            print("   This is normal during off-season or when no games match Splash props")
+            print("\n✅ Graceful exit - no error (off-season)")
+            exit(0)  # Exit successfully, not an error
 
         # Save matchups
         success = extractor.save_matchups_to_sheets(matchups, splash_player_count, client)

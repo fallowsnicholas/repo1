@@ -214,6 +214,8 @@ class SplashMatchupExtractorOptimized:
 
             # Clear all pipeline sheets to prevent stale data in UI
             sheets_to_clear = [
+                self.splash_worksheet_name,  # Step 1 - Splash props (SPLASH_MLB/NFL/WNBA)
+                'MATCHUPS',           # Step 2 - matchups
                 'ODDS_API',           # Step 3 - odds data
                 'MATCHED_LINES',       # Step 4 - matched props
                 'EV_RESULTS',          # Step 5 - EV calculations

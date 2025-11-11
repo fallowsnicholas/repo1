@@ -205,6 +205,40 @@ class SplashMatchupExtractorOptimized:
 
         return matchups
 
+    def clear_results_sheets(self, client):
+        """Clear EV_RESULTS and CORRELATION_PARLAYS sheets (for off-season)"""
+        try:
+            print(f"\n🧹 Clearing results sheets (off-season - no props available)...")
+
+            spreadsheet = client.open(self.spreadsheet_name)
+            sheets_to_clear = ['EV_RESULTS', 'CORRELATION_PARLAYS']
+
+            for sheet_name in sheets_to_clear:
+                try:
+                    worksheet = spreadsheet.worksheet(sheet_name)
+                    worksheet.clear()
+
+                    # Add a note indicating off-season
+                    metadata = [
+                        [f'{self.sport} - No Props Available (Off-Season)', ''],
+                        ['Status', 'No games or props available'],
+                        ['Last Checked', datetime.now().isoformat()],
+                        ['Note', 'This sheet will update when games are available'],
+                        ['']
+                    ]
+                    worksheet.update(range_name='A1', values=metadata)
+                    print(f"   ✅ Cleared {sheet_name}")
+                except gspread.exceptions.WorksheetNotFound:
+                    print(f"   ⚠️  {sheet_name} not found (will be created when data is available)")
+
+            print(f"✅ Results sheets cleared successfully")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error clearing results sheets: {e}")
+            print(f"❌ Failed to clear results sheets: {e}")
+            return False
+
     def save_matchups_to_sheets(self, matchups, splash_player_count, client):
         """Save matchups to MATCHUPS sheet"""
         try:
@@ -313,6 +347,11 @@ def main():
         if splash_df.empty:
             print(f"\n⚠️  No Splash data found for {args.sport}")
             print(f"   This is normal during off-season when no props are available")
+            print(f"   Clearing old data from Google Sheets...")
+
+            # Clear the results sheets so old data doesn't show in UI
+            extractor.clear_results_sheets(client)
+
             print(f"   Skipping remaining steps - no data to process")
             print(f"\n✅ Graceful exit - no error (off-season)")
             exit(0)  # Exit successfully, not an error
@@ -325,6 +364,11 @@ def main():
         if not odds_games:
             print(f"\n⚠️  No Odds API games found for {args.sport}")
             print(f"   This is normal during off-season when no games are scheduled")
+            print(f"   Clearing old data from Google Sheets...")
+
+            # Clear the results sheets so old data doesn't show in UI
+            extractor.clear_results_sheets(client)
+
             print(f"   Skipping remaining steps - no games to process")
             print(f"\n✅ Graceful exit - no error (off-season)")
             exit(0)  # Exit successfully, not an error
@@ -335,6 +379,11 @@ def main():
         if not matchups:
             print("\n⚠️  No matchups could be created")
             print("   This is normal during off-season or when no games match Splash props")
+            print(f"   Clearing old data from Google Sheets...")
+
+            # Clear the results sheets so old data doesn't show in UI
+            extractor.clear_results_sheets(client)
+
             print("\n✅ Graceful exit - no error (off-season)")
             exit(0)  # Exit successfully, not an error
 

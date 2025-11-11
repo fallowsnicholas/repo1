@@ -297,7 +297,6 @@ class SplashMatchupExtractorOptimized:
                 # Format commence_time for display
                 game_time = ""
                 try:
-                    from datetime import datetime
                     dt = datetime.fromisoformat(matchup['commence_time'].replace('Z', '+00:00'))
                     game_time = dt.strftime('%I:%M %p ET')
                 except:

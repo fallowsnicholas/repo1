@@ -1,4 +1,3 @@
-streamlit
 pandas
 requests
 numpy
@@ -10,3 +9,4 @@ gspread-dataframe
 plotly
 python-dotenv
 dash
+gunicorn
